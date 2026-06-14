@@ -57,14 +57,31 @@ const rows = await step.run("run-query", () => db.run(sql));
     eyebrow: "Optimize",
     description:
       "Saving the query becomes a product-behavior signal that can score the agent asynchronously.",
-    code: `// When the user SAVES the query, that is a signal the answer was good.
-// Score it asynchronously. This can land seconds or days later.
-await step.group.defer("score-on-save", async () => {
-  // Your agent loop or scoring logic goes here.
-  // group.defer -> score this query from real product behavior.
-});
+    code: `import { createDefer } from "inngest/experimental";
 
-// TODO(launch): swap today's scoring stub for the real primitive
-// as soon as group.defer ships.`,
+export const scoreSavedQuery = createDefer(
+  inngest,
+  {
+    id: "score-saved-query",
+    schema: z.object({
+      runId: z.string(),
+      signal: z.enum(["saved", "discarded"]),
+    }),
+  },
+  async ({ event, step }) => {
+    const score = await step.run("score-from-behavior", () =>
+      evaluator.score(event.data)
+    );
+
+    await step.run("persist-score", () => scores.record(score));
+  }
+);
+
+// When the user SAVES the query, that is a product-behavior signal.
+// The scorer runs after the foreground agent responds.
+defer("score-on-save", {
+  function: scoreSavedQuery,
+  data: { runId: event.data.runId, signal: "saved" },
+});`,
   },
 ];

@@ -1,7 +1,7 @@
 import type { HighlightedCodeSnippet } from "@/lib/highlight";
 import type { MockUser } from "@/content/seed-data";
 
-export type DemoTab = "result" | "trace" | "code" | "scores";
+export type DemoTab = "result" | "trace" | "scores" | "code";
 
 export type RunPhase =
   | "idle"

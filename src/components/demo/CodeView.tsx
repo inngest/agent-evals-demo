@@ -17,8 +17,8 @@ export function CodeView({
   const canZoomIn = codeFontSize < 20;
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[96px_minmax(0,1fr)] overflow-hidden bg-white">
-      <div className="grid h-[96px] gap-3 border-b border-[var(--rule-soft)] p-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-white">
+      <div className="grid gap-3 border-b border-[var(--rule-soft)] p-4 lg:grid-cols-[220px_minmax(0,1fr)]">
         <div>
           <div className="mono flex items-center gap-2 text-[11px] uppercase text-[var(--muted-copy)]">
             <Code2 className="size-3.5" />
@@ -28,11 +28,11 @@ export function CodeView({
             {active.eyebrow}
           </div>
         </div>
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-6">
+        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <p className="max-w-2xl text-sm leading-6 text-[var(--muted-copy)]">
             {active.description}
           </p>
-          <div className="flex shrink-0 items-start gap-4">
+          <div className="flex shrink-0 flex-wrap items-start gap-3">
             <div className="grid grid-cols-[36px_56px_36px] gap-2">
               <button
                 type="button"
@@ -62,14 +62,14 @@ export function CodeView({
                 <Plus className="size-4" />
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="flex flex-wrap gap-2">
               {snippets.map((snippet) => (
                 <button
                   key={snippet.id}
                   type="button"
                   onClick={() => setActiveId(snippet.id)}
                   data-active={activeId === snippet.id}
-                  className="demo-segment-button mono h-9 w-[88px] px-3 text-center text-[11px] uppercase"
+                  className="demo-segment-button mono h-9 min-w-20 px-3 text-center text-[11px] uppercase"
                 >
                   {snippet.label}
                 </button>

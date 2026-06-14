@@ -1,4 +1,9 @@
-import { inngest, queryRequested, querySaved } from "@/inngest/client";
+import {
+  inngest,
+  queryRequested,
+  querySaved,
+  queryScored,
+} from "@/inngest/client";
 import { generateSQL } from "@/lib/mock-llm";
 import { runMockQuery } from "@/lib/mock-query";
 import { normalizeDemoFlags } from "@/lib/demo-flags";
@@ -38,7 +43,24 @@ export const scoreQuerySignal = inngest.createFunction(
   },
   async ({ event, step }) => {
     const score = await step.run("score-saved-query", () =>
-      scoreSavedQuery(event.data.runId, event.data.signal)
+      scoreSavedQuery(event.data.runId, event.data.signal, {
+        scoredAt: event.data.savedAt,
+        source: "inngest",
+      })
+    );
+
+    await step.sendEvent(
+      "emit-query-scored",
+      queryScored.create(
+        {
+          runId: event.data.runId,
+          signal: event.data.signal,
+          score: score.score,
+          scoredAt: score.scoredAt,
+          source: "booth-demo",
+        },
+        { id: `scored:${event.data.runId}:${score.scoredAt}` }
+      )
     );
 
     return score;

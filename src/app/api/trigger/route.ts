@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { inngest, queryRequested } from "@/inngest/client";
 import { defaultDemoFlags, normalizeDemoFlags } from "@/lib/demo-flags";
 import { canonicalPrompt } from "@/content/seed-data";
+import { getInngestRunsUrl } from "@/lib/inngest-dashboard";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -11,8 +12,7 @@ export async function POST(request: Request) {
     typeof body.prompt === "string" && body.prompt.trim().length > 0
       ? body.prompt.trim()
       : canonicalPrompt;
-  const dashboardUrl =
-    process.env.NEXT_PUBLIC_INNGEST_DASHBOARD_URL ?? "http://localhost:8288";
+  const dashboardUrl = getInngestRunsUrl();
 
   try {
     const result = await inngest.send(

@@ -8,7 +8,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "inngest:dev": "inngest-cli dev -u http://localhost:3000/api/inngest"
+    "demo:preflight": "node scripts/preflight-demo.mjs",
+    "demo:doctor": "node scripts/demo-doctor.mjs",
+    "demo:local-ready": "node scripts/local-ready.mjs",
+    "demo:seed": "node scripts/seed-demo.mjs",
+    "demo:smoke": "node scripts/smoke-demo.mjs",
+    "demo:viewport": "node scripts/viewport-qa.mjs",
+    "demo:insights-check": "node scripts/insights-score-check.mjs",
+    "demo:cloud-handoff": "node scripts/cloud-handoff.mjs",
+    "demo:cloud-ready": "node scripts/cloud-ready.mjs",
+    "inngest:dev": "inngest-cli dev -u ${APP_URL:-http://localhost:3000}/api/inngest"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
@@ -32,6 +41,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "inngest-cli": "^1.24.0",
+    "playwright": "^1.60.0",
     "shadcn": "^4.5.0",
     "tailwindcss": "^4",
     "typescript": "^5"

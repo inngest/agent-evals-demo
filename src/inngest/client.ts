@@ -17,12 +17,24 @@ export type QuerySavedData = {
   source: "booth-demo";
 };
 
+export type QueryScoredData = {
+  runId: string;
+  signal: "saved" | "discarded";
+  score: number;
+  scoredAt: string;
+  source: "booth-demo";
+};
+
 export const queryRequested = eventType("app/query.requested", {
   schema: staticSchema<QueryRequestedData>(),
 });
 
 export const querySaved = eventType("app/query.saved", {
   schema: staticSchema<QuerySavedData>(),
+});
+
+export const queryScored = eventType("app/query.scored", {
+  schema: staticSchema<QueryScoredData>(),
 });
 
 const middleware = process.env.INNGEST_ENCRYPTION_KEY

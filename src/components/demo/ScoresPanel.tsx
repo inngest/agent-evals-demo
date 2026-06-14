@@ -2,16 +2,36 @@
 
 import * as React from "react";
 import { Check, Trophy } from "lucide-react";
+import { seededScoreTrend } from "@/content/seed-data";
+import type { ScoreHistory } from "@/lib/scoring";
 
 export function ScoresPanel({
-  trend,
+  history,
   saved,
 }: {
-  trend: number[];
+  history: ScoreHistory | null;
   saved: boolean;
 }) {
   const [tab, setTab] = React.useState<"score" | "experiment">("score");
+  const trend = history?.trend.length ? history.trend : seededScoreTrend;
   const current = trend[trend.length - 1] ?? 0.92;
+  const sourceLabel =
+    history?.source === "inngest-insights"
+      ? "Inngest Insights"
+      : history?.source === "memory"
+        ? "live demo signals"
+        : "seeded demo baseline";
+  const signalCount = (count: number) => {
+    if (history?.source === "inngest-insights") {
+      return `${count} from Insights`;
+    }
+
+    if (history?.source === "memory") {
+      return `${count} observed`;
+    }
+
+    return `${count} seeded`;
+  };
 
   return (
     <div className="grid h-full min-h-0 gap-0 overflow-hidden bg-white lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -25,6 +45,9 @@ export function ScoresPanel({
             <div className="display mt-1 text-xl font-medium">
               Current query score
             </div>
+            <p className="mono mt-1 text-[10px] uppercase text-[var(--muted-copy)]">
+              {sourceLabel}
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -74,9 +97,12 @@ export function ScoresPanel({
           <div className="display text-lg font-medium">Behavior signals</div>
           <div className="mt-4 grid gap-3">
             {[
-              ["saved_to_dashboard", saved ? "observed" : "waiting"],
-              ["query_rerun", "seeded"],
-              ["rows_exported", "seeded"],
+              [
+                "saved_to_dashboard",
+                saved ? "observed" : signalCount(history?.savedCount ?? 0),
+              ],
+              ["discarded_query", signalCount(history?.discardedCount ?? 0)],
+              ["score_source", sourceLabel],
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -93,8 +119,9 @@ export function ScoresPanel({
             Launch seam
           </div>
           <p className="mt-2 text-sm leading-6">
-            Today this is a deterministic mock score. The swap is isolated in
-            <span className="mono"> lib/scoring.ts</span>.
+            The panel reloads from the score-history API. It uses seeded demo
+            signals by default and can read Inngest Insights when
+            <span className="mono"> INNGEST_INSIGHTS_SCORE_QUERY</span> is set.
           </p>
         </div>
       </aside>

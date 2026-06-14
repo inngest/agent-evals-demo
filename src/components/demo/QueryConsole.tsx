@@ -5,12 +5,14 @@ import {
   Bot,
   Check,
   Database,
+  ExternalLink,
+  History,
   PanelRight,
   Play,
   Save,
   Sparkles,
 } from "lucide-react";
-import { canonicalPrompt, canonicalSql, seededScoreTrend } from "@/content/seed-data";
+import { canonicalPrompt, canonicalSql } from "@/content/seed-data";
 import { Button } from "@/components/ui/button";
 import { DemoControls } from "@/components/demo/DemoControls";
 import { ResultsTable } from "@/components/demo/ResultsTable";
@@ -27,13 +29,44 @@ import {
 } from "@/components/demo/types";
 import { defaultDemoFlags, wait, type DemoFlags } from "@/lib/demo-flags";
 import type { MockUser } from "@/content/seed-data";
+import type { ScoreHistory } from "@/lib/scoring";
 
 const tabs: Array<{ id: DemoTab; label: string }> = [
   { id: "result", label: "Result" },
   { id: "trace", label: "Trace" },
-  { id: "code", label: "Code" },
   { id: "scores", label: "Scores" },
+  { id: "code", label: "Code" },
 ];
+const canSeedFromBrowser = process.env.NODE_ENV !== "production";
+const defaultDashboardUrl =
+  process.env.NEXT_PUBLIC_INNGEST_RUNS_URL ??
+  process.env.NEXT_PUBLIC_INNGEST_DASHBOARD_URL ??
+  "http://localhost:8288";
+
+type SeedHistoryResponse = {
+  ok: boolean;
+  runs: number;
+  scoreSignals: number;
+  durableScoreEvents: number;
+  retryDemoRuns: number;
+  happyPathRuns: number;
+  savedScoreSignals: number;
+  discardedScoreSignals: number;
+  eventsSent: number;
+  dashboardUrl: string;
+  appUrl: string;
+  registered: boolean;
+  devServerUrls: string[];
+};
+
+type ScoreResponse = {
+  score: { trend: number[]; score: number; label: string };
+  history: ScoreHistory;
+};
+
+type ScoreHistoryResponse = {
+  history: ScoreHistory;
+};
 
 export function QueryConsole({ snippets }: QueryConsoleProps) {
   const [prompt, setPrompt] = React.useState(canonicalPrompt);
@@ -42,15 +75,63 @@ export function QueryConsole({ snippets }: QueryConsoleProps) {
   const [activeTab, setActiveTab] = React.useState<DemoTab>("result");
   const [flags, setFlags] = React.useState<DemoFlags>(defaultDemoFlags);
   const [phase, setPhase] = React.useState<RunPhase>("idle");
-  const [trace, setTrace] = React.useState<TraceStep[]>(initialTrace);
   const [trigger, setTrigger] = React.useState<TriggerResponse | null>(null);
   const [toast, setToast] = React.useState("");
-  const [trend, setTrend] = React.useState(seededScoreTrend);
   const [saved, setSaved] = React.useState(false);
+  const [seeding, setSeeding] = React.useState(false);
+  const [seededRuns, setSeededRuns] = React.useState(0);
+  const [scoreHistory, setScoreHistory] = React.useState<ScoreHistory | null>(
+    null
+  );
+  const [historyMessage, setHistoryMessage] = React.useState(
+    canSeedFromBrowser
+      ? "Creates real Inngest runs for the dashboard list."
+      : "Cloud history uses the protected seed command."
+  );
 
   const isRunning = ["sending", "generating", "retrying", "querying"].includes(
     phase
   );
+  const dashboardUrl = trigger?.dashboardUrl ?? defaultDashboardUrl;
+  const trace = React.useMemo(
+    () => buildTraceSteps(phase, flags, sql.length > 0, rows.length > 0, saved),
+    [flags, phase, rows.length, saved, sql.length]
+  );
+
+  const loadScoreHistory = React.useCallback(async () => {
+    const response = await fetch("/api/score", { cache: "no-store" }).catch(
+      () => null
+    );
+
+    if (!response?.ok) {
+      return null;
+    }
+
+    const body = (await response.json()) as ScoreHistoryResponse;
+    return body.history;
+  }, []);
+
+  const refreshScoreHistory = React.useCallback(async () => {
+    const history = await loadScoreHistory();
+
+    if (history) {
+      setScoreHistory(history);
+    }
+  }, [loadScoreHistory]);
+
+  React.useEffect(() => {
+    let ignore = false;
+
+    void loadScoreHistory().then((history) => {
+      if (!ignore && history) {
+        setScoreHistory(history);
+      }
+    });
+
+    return () => {
+      ignore = true;
+    };
+  }, [loadScoreHistory]);
 
   async function runAgent() {
     setRows([]);
@@ -59,133 +140,32 @@ export function QueryConsole({ snippets }: QueryConsoleProps) {
     setToast("");
     setActiveTab("result");
     setPhase("sending");
-    setTrace([
-      {
-        id: "event",
-        label: "app/query.requested",
-        detail: "Event accepted by the demo trigger route.",
-        status: "running",
-      },
-      {
-        id: "generate",
-        label: "generate-sql",
-        detail: "Waiting on the mocked model.",
-        status: "queued",
-      },
-      {
-        id: "run",
-        label: "run-query",
-        detail: "Static rows are ready once SQL exists.",
-        status: "queued",
-      },
-    ]);
 
     const triggerResponse = await postJson<TriggerResponse>("/api/trigger", {
       prompt,
       flags,
     });
     setTrigger(triggerResponse);
-    setTrace((current) =>
-      current.map((step) =>
-        step.id === "event"
-          ? {
-              ...step,
-              detail: triggerResponse.sent
-                ? "Event sent to Inngest. The dashboard has the real run."
-                : "Foreground demo continues. Inngest dev server is not connected.",
-              status: "complete",
-              duration: "0.04s",
-            }
-          : step
-      )
-    );
 
     setPhase("generating");
-    setTrace((current) =>
-      current.map((step) =>
-        step.id === "generate"
-          ? { ...step, detail: "Mock LLM is generating SQL.", status: "running" }
-          : step
-      )
-    );
 
     await wait(600 + flags.latencyMs);
 
     if (flags.llmOffline && flags.failureCount > 0) {
       for (let attempt = 0; attempt < flags.failureCount; attempt += 1) {
         setPhase("retrying");
-        setTrace((current) =>
-          current.map((step) =>
-            step.id === "generate"
-              ? {
-                  ...step,
-                  detail: `Opus unavailable: 503. Retry ${attempt + 1} of ${
-                    flags.failureCount
-                  } is visible in Inngest.`,
-                  status: "failed",
-                  duration: `${((attempt + 1) * 0.75).toFixed(2)}s`,
-                }
-              : step
-          )
-        );
         await wait(750);
-        setTrace((current) =>
-          current.map((step) =>
-            step.id === "generate"
-              ? {
-                  ...step,
-                  detail: "Retry scheduled. The function resumes from the same event.",
-                  status: "running",
-                }
-              : step
-          )
-        );
       }
     }
 
     setSql(canonicalSql);
-    setTrace((current) =>
-      current.map((step) =>
-        step.id === "generate"
-          ? {
-              ...step,
-              detail: "Canonical SQL returned by the mock LLM.",
-              status: "complete",
-              duration: `${((700 + flags.latencyMs) / 1000).toFixed(2)}s`,
-            }
-          : step
-      )
-    );
 
     setPhase("querying");
-    setTrace((current) =>
-      current.map((step) =>
-        step.id === "run"
-          ? {
-              ...step,
-              detail: "Mock endpoint is returning deterministic SaaS users.",
-              status: "running",
-            }
-          : step
-      )
-    );
 
     const queryResponse = await postJson<RunQueryResponse>("/api/run-query", {
       sql: canonicalSql,
     });
     setRows(queryResponse.rows);
-    setTrace((current) =>
-      current.map((step) =>
-        step.id === "run"
-          ? {
-              ...step,
-              detail: `${queryResponse.rows.length} users returned.`,
-              status: "complete",
-              duration: "0.10s",
-            }
-          : step
-      )
-    );
     setPhase("complete");
   }
 
@@ -203,17 +183,66 @@ export function QueryConsole({ snippets }: QueryConsoleProps) {
 
   async function saveQuery() {
     const runId = trigger?.clientRunId ?? crypto.randomUUID();
-    const response = await postJson<{
-      score: { trend: number[]; score: number; label: string };
-    }>("/api/score", {
+    const response = await postJson<ScoreResponse>("/api/score", {
       runId,
       signal: "saved",
     });
-    setTrend(response.score.trend);
     setSaved(true);
-    setToast(`scored ${response.score.score.toFixed(2)} ✓`);
+    setScoreHistory(response.history);
     setActiveTab("scores");
+    setToast(`scored ${response.score.score.toFixed(2)} ✓`);
     window.setTimeout(() => setToast(""), 2200);
+  }
+
+  async function seedHistory() {
+    setSeeding(true);
+    setToast("");
+    try {
+      const response = await postJson<SeedHistoryResponse>("/api/demo/seed", {
+        count: 14,
+      });
+      await refreshScoreHistory();
+      setSeededRuns((current) => current + response.runs);
+      if (response.registered) {
+        setHistoryMessage(
+          `${response.runs} runs: ${response.happyPathRuns} happy path, ${response.retryDemoRuns} retry demos, ${response.savedScoreSignals} saved, ${response.discardedScoreSignals} discarded.`
+        );
+        setToast(
+          `${response.eventsSent + response.durableScoreEvents} dashboard events queued`
+        );
+      } else {
+        const registeredPorts = response.devServerUrls
+          .map((url) => new URL(url).port)
+          .filter(Boolean)
+          .join(", ");
+        setHistoryMessage(
+          `Events sent, but this dev server is polling ${
+            registeredPorts || "another app"
+          }. Start Inngest with ${response.appUrl}.`
+        );
+        setToast("events sent, dashboard app mismatch");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+
+      if (
+        message.includes("DEMO_SEED_TOKEN") ||
+        message.includes("x-demo-seed-token")
+      ) {
+        setHistoryMessage(
+          "Production seeding is locked. Use the runbook seed command with DEMO_SEED_TOKEN."
+        );
+        setToast("seed locked: runbook command");
+      } else {
+        setHistoryMessage(
+          "Start the Inngest dev server with this app endpoint."
+        );
+        setToast("seed failed: start Inngest dev server");
+      }
+    } finally {
+      setSeeding(false);
+      window.setTimeout(() => setToast(""), 2600);
+    }
   }
 
   async function resetDemo() {
@@ -223,24 +252,28 @@ export function QueryConsole({ snippets }: QueryConsoleProps) {
     setRows([]);
     setActiveTab("result");
     setPhase("idle");
-    setTrace(initialTrace);
     setTrigger(null);
     setToast("");
-    setTrend(seededScoreTrend);
     setSaved(false);
     setFlags(defaultDemoFlags);
+    await refreshScoreHistory();
+    setHistoryMessage(
+      canSeedFromBrowser
+        ? "Creates real Inngest runs for the dashboard list."
+        : "Cloud history uses the protected seed command."
+    );
   }
 
   return (
     <main className="min-h-screen bg-[var(--background)] p-3 text-[var(--ink)] md:p-5">
-      <div className="mx-auto grid min-h-[calc(100vh-40px)] max-w-[1560px] grid-rows-[auto_1fr] border border-[var(--ink)] bg-white shadow-[8px_8px_0_#1a161c]">
+      <div className="mx-auto grid min-h-[calc(100vh-40px)] max-w-[1480px] grid-rows-[auto_1fr] border border-[var(--ink)] bg-white shadow-[8px_8px_0_#1a161c]">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--ink)] bg-[var(--bone)] px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center bg-[var(--ink)] text-white">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid size-9 shrink-0 place-items-center bg-[var(--ink)] text-white">
               <Sparkles className="size-4" />
             </div>
-            <div>
-              <div className="display text-xl font-semibold">
+            <div className="min-w-0">
+              <div className="display truncate text-xl font-semibold">
                 Agent Evals Booth Demo
               </div>
               <div className="mono mt-0.5 flex flex-wrap items-center gap-2 text-[11px] uppercase text-[var(--muted-copy)]">
@@ -252,6 +285,15 @@ export function QueryConsole({ snippets }: QueryConsoleProps) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill phase={phase} sent={trigger?.sent} />
+            <a
+              href={dashboardUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="demo-segment-button mono inline-flex h-8 items-center justify-center gap-1.5 border border-[var(--ink)] bg-white px-3 text-[11px] uppercase"
+            >
+              <ExternalLink className="size-3.5" />
+              Inngest
+            </a>
             <DemoControls
               flags={flags}
               onFlagsChange={setFlags}
@@ -260,8 +302,8 @@ export function QueryConsole({ snippets }: QueryConsoleProps) {
           </div>
         </header>
 
-        <div className="grid min-h-0 grid-rows-[auto_1fr] overflow-hidden xl:grid-cols-[minmax(0,1fr)_380px] xl:grid-rows-1">
-          <section className="grid min-h-0 grid-rows-[auto_188px_minmax(0,1fr)]">
+        <div className="grid min-h-0 overflow-hidden xl:grid-cols-[minmax(0,1fr)_320px]">
+          <section className="grid min-h-0 grid-rows-[auto_176px_auto_minmax(0,1fr)]">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--rule-soft)] px-4 py-3">
               <div className="flex items-center gap-2">
                 <Database className="size-4 text-[var(--coral)]" />
@@ -321,6 +363,24 @@ export function QueryConsole({ snippets }: QueryConsoleProps) {
               ) : null}
             </div>
 
+            <div className="border-t border-[var(--ink)] bg-[var(--bone)] p-3 xl:hidden">
+              <AgentCard
+                compact
+                dashboardUrl={dashboardUrl}
+                isRunning={isRunning}
+                onPromptChange={setPrompt}
+                onRunAgent={runAgent}
+                onSeedHistory={seedHistory}
+                phase={phase}
+                prompt={prompt}
+                saved={saved}
+                historyMessage={historyMessage}
+                canSeedFromBrowser={canSeedFromBrowser}
+                seededRuns={seededRuns}
+                seeding={seeding}
+              />
+            </div>
+
             <div className="grid min-h-0 grid-rows-[52px_minmax(0,1fr)] overflow-hidden border-t border-[var(--ink)]">
               <div className="grid h-[52px] grid-cols-[minmax(0,1fr)_auto] items-end gap-3 bg-[var(--cloud)] px-4">
                 <div className="grid w-fit grid-cols-4 gap-3">
@@ -347,86 +407,55 @@ export function QueryConsole({ snippets }: QueryConsoleProps) {
               {activeTab === "trace" ? (
                 <TracePanel trace={trace} trigger={trigger} />
               ) : null}
-              {activeTab === "code" ? <CodeView snippets={snippets} /> : null}
               {activeTab === "scores" ? (
-                <ScoresPanel trend={trend} saved={saved} />
+                <ScoresPanel history={scoreHistory} saved={saved} />
               ) : null}
+              {activeTab === "code" ? <CodeView snippets={snippets} /> : null}
             </div>
           </section>
 
-          <aside className="grid border-t border-[var(--ink)] bg-[var(--bone)] xl:border-l xl:border-t-0">
-            <div className="grid grid-rows-[auto_1fr_auto]">
-              <div className="border-b border-[var(--ink)] p-4">
-                <div className="flex items-center gap-2">
-                  <Bot className="size-5 text-[var(--coral)]" />
-                  <div>
-                    <div className="display text-xl font-semibold">
-                      Insights AI
-                    </div>
-                    <div className="mono text-[11px] uppercase text-[var(--muted-copy)]">
-                      agent surface
-                    </div>
+          <aside className="hidden min-h-0 border-l border-[var(--ink)] bg-[var(--bone)] xl:grid xl:grid-rows-[auto_1fr_auto]">
+            <div className="border-b border-[var(--ink)] p-4">
+              <div className="flex items-center gap-2">
+                <Bot className="size-5 text-[var(--coral)]" />
+                <div>
+                  <div className="display text-xl font-semibold">
+                    Insights AI
+                  </div>
+                  <div className="mono text-[11px] uppercase text-[var(--muted-copy)]">
+                    agent surface
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="grid content-start gap-4 p-4">
-                <div className="border border-[var(--ink)] bg-white p-3">
-                  <div className="mono mb-2 text-[11px] uppercase text-[var(--muted-copy)]">
-                    Ask
-                  </div>
-                  <textarea
-                    value={prompt}
-                    onChange={(event) => setPrompt(event.target.value)}
-                    className="min-h-32 w-full resize-none border border-[var(--rule-soft)] bg-[var(--background)] p-3 text-sm leading-6 outline-none focus:border-[var(--coral)]"
-                  />
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className="demo-action-button"
-                      onClick={runAgent}
-                      disabled={isRunning}
-                    >
-                      <Sparkles className="demo-action-icon size-4" />
-                      Ask agent
-                    </button>
-                    <button
-                      type="button"
-                      className="demo-action-button"
-                      onClick={() => setPrompt(canonicalPrompt)}
-                      disabled={isRunning}
-                    >
-                      Use sample query
-                    </button>
-                  </div>
-                </div>
+            <div className="min-h-0 overflow-auto p-4">
+              <AgentCard
+                dashboardUrl={dashboardUrl}
+                isRunning={isRunning}
+                onPromptChange={setPrompt}
+                onRunAgent={runAgent}
+                onSeedHistory={seedHistory}
+                phase={phase}
+                prompt={prompt}
+                saved={saved}
+                historyMessage={historyMessage}
+                canSeedFromBrowser={canSeedFromBrowser}
+                seededRuns={seededRuns}
+                seeding={seeding}
+              />
+            </div>
 
-                <div className="grid gap-2">
-                  {[
-                    ["generate-sql", phaseLabel(phase, "generate")],
-                    ["run-query", phaseLabel(phase, "query")],
-                    ["score-on-save", saved ? "scored" : "waiting"],
-                  ].map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="mono flex items-center justify-between border-b border-[var(--rule-soft)] py-2 text-[11px] uppercase"
-                    >
-                      <span>{label}</span>
-                      <span className="text-[var(--muted-copy)]">{value}</span>
-                    </div>
-                  ))}
-                </div>
+            <div className="border-t border-[var(--ink)] bg-white p-4">
+              <div className="mono flex items-center gap-2 text-[11px] uppercase text-[var(--muted-copy)]">
+                <span className="live-dot" />
+                Split-screen path
               </div>
-
-              <div className="border-t border-[var(--ink)] bg-white p-4">
-                <div className="mono flex items-center gap-2 text-[11px] uppercase text-[var(--muted-copy)]">
-                  <span className="live-dot" />
-                  Booth path
-                </div>
-                <p className="mt-2 text-sm leading-6">
-                  Durable run, visible trace, save signal, score panel.
-                </p>
-              </div>
+              <p className="mt-2 text-sm leading-6">
+                Keep this app on the left and the real Inngest dashboard on the
+                right. Use seeded history before the walk-through when the runs
+                list needs a crowd.
+              </p>
             </div>
           </aside>
         </div>
@@ -442,26 +471,120 @@ export function QueryConsole({ snippets }: QueryConsoleProps) {
   );
 }
 
-const initialTrace: TraceStep[] = [
-  {
-    id: "event",
-    label: "app/query.requested",
-    detail: "No event sent yet.",
-    status: "queued",
-  },
-  {
-    id: "generate",
-    label: "generate-sql",
-    detail: "Mock LLM returns one canonical SQL query.",
-    status: "queued",
-  },
-  {
-    id: "run",
-    label: "run-query",
-    detail: "Mock endpoint returns static users.",
-    status: "queued",
-  },
-];
+function AgentCard({
+  compact,
+  dashboardUrl,
+  isRunning,
+  onPromptChange,
+  onRunAgent,
+  onSeedHistory,
+  phase,
+  prompt,
+  saved,
+  historyMessage,
+  canSeedFromBrowser,
+  seededRuns,
+  seeding,
+}: {
+  compact?: boolean;
+  dashboardUrl: string;
+  isRunning: boolean;
+  onPromptChange: (prompt: string) => void;
+  onRunAgent: () => void;
+  onSeedHistory: () => void;
+  phase: RunPhase;
+  prompt: string;
+  saved: boolean;
+  historyMessage: string;
+  canSeedFromBrowser: boolean;
+  seededRuns: number;
+  seeding: boolean;
+}) {
+  return (
+    <div className="grid gap-4">
+      <div className="border border-[var(--ink)] bg-white p-3">
+        <div className="mono mb-2 text-[11px] uppercase text-[var(--muted-copy)]">
+          Ask
+        </div>
+        <textarea
+          value={prompt}
+          onChange={(event) => onPromptChange(event.target.value)}
+          className={`w-full resize-none border border-[var(--rule-soft)] bg-[var(--background)] p-3 text-sm leading-6 outline-none focus:border-[var(--coral)] ${
+            compact ? "min-h-20" : "min-h-32"
+          }`}
+        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="demo-action-button"
+            onClick={onRunAgent}
+            disabled={isRunning}
+          >
+            <Sparkles className="demo-action-icon size-4" />
+            {phase === "complete" ? "Run again" : "Ask agent"}
+          </button>
+          <button
+            type="button"
+            className="demo-action-button"
+            onClick={() => onPromptChange(canonicalPrompt)}
+            disabled={isRunning}
+          >
+            Use sample query
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-2">
+        {[
+          ["generate-sql", phaseLabel(phase, "generate")],
+          ["run-query", phaseLabel(phase, "query")],
+          ["score-on-save", saved ? "sent" : "waiting"],
+        ].map(([label, value]) => (
+          <div
+            key={label}
+            className="mono flex items-center justify-between border-b border-[var(--rule-soft)] py-2 text-[11px] uppercase"
+          >
+            <span>{label}</span>
+            <span className="text-[var(--muted-copy)]">{value}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="border border-[var(--ink)] bg-white p-3">
+        <div className="mono mb-3 flex items-center gap-2 text-[11px] uppercase text-[var(--muted-copy)]">
+          <History className="size-3.5" />
+          Dashboard history
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canSeedFromBrowser ? (
+            <button
+              type="button"
+              className="demo-action-button"
+              onClick={onSeedHistory}
+              disabled={seeding || isRunning}
+            >
+              <History className="demo-action-icon size-4" />
+              {seeding ? "Seeding" : "Seed 14 runs"}
+            </button>
+          ) : null}
+          <a
+            href={dashboardUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="demo-action-button"
+          >
+            <ExternalLink className="demo-action-icon size-4" />
+            Open Inngest
+          </a>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-[var(--muted-copy)]">
+          {historyMessage}
+          {seededRuns > 0 ? ` ${seededRuns} demo runs sent this session.` : ""}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
@@ -471,7 +594,15 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    const body = (await response.json().catch(() => ({}))) as {
+      error?: unknown;
+    };
+    const message =
+      typeof body.error === "string"
+        ? body.error
+        : `Request failed: ${response.status}`;
+
+    throw new Error(message);
   }
 
   return response.json() as Promise<T>;
@@ -513,4 +644,90 @@ function phaseLabel(phase: RunPhase, step: "generate" | "query") {
   if (phase === "querying") return "running";
   if (phase === "complete") return "done";
   return "waiting";
+}
+
+function buildTraceSteps(
+  phase: RunPhase,
+  flags: DemoFlags,
+  hasSql: boolean,
+  hasRows: boolean,
+  saved: boolean
+): TraceStep[] {
+  const steps: TraceStep[] = [
+    {
+      id: "generate-sql",
+      label: "generate-sql",
+      detail: "Mock LLM call wrapped in step.run so failures are retried by Inngest.",
+      status: traceStatus({
+        queued: ["idle", "sending"],
+        running: ["generating", "retrying"],
+        complete: hasSql,
+        phase,
+      }),
+      duration: hasSql ? "600ms" : undefined,
+    },
+  ];
+
+  if (flags.llmOffline && flags.failureCount > 0) {
+    steps.push({
+      id: "retry-recovery",
+      label: "retry recovery",
+      detail: `${flags.failureCount} Opus unavailable attempt${
+        flags.failureCount === 1 ? "" : "s"
+      } before the durable run recovers.`,
+      status:
+        phase === "retrying" ? "failed" : hasSql || hasRows ? "complete" : "queued",
+      duration: hasSql || hasRows ? "retried" : undefined,
+    });
+  }
+
+  steps.push(
+    {
+      id: "run-query",
+      label: "run-query",
+      detail: "Static SaaS data lookup runs as a second durable step.",
+      status: traceStatus({
+        queued: ["idle", "sending", "generating", "retrying"],
+        running: ["querying"],
+        complete: hasRows,
+        phase,
+      }),
+      duration: hasRows ? "100ms" : undefined,
+    },
+    {
+      id: "score-query-signal",
+      label: "score-query-signal",
+      detail: "Saving the answer emits product behavior that becomes a score event.",
+      status: saved ? "complete" : "queued",
+      duration: saved ? "0.92" : undefined,
+    }
+  );
+
+  return steps;
+}
+
+function traceStatus({
+  queued,
+  running,
+  complete,
+  phase,
+}: {
+  queued: RunPhase[];
+  running: RunPhase[];
+  complete: boolean;
+  phase: RunPhase;
+}): TraceStep["status"] {
+  if (complete) {
+    return "complete";
+  }
+
+  if (running.includes(phase)) {
+    return "running";
+  }
+
+  if (queued.includes(phase)) {
+    return "queued";
+  }
+
+  return "queued";
 }
