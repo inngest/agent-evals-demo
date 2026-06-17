@@ -1,19 +1,36 @@
-import { seededScoreTrend } from "@/content/seed-data";
+/**
+ * Localization scoring for the incident-triage demo.
+ *
+ * The "outcome score" grades the RCA's cited files against the incident's
+ * ground-truth fix files using Jaccard overlap:
+ *
+ *   score = |cited ∩ truth| / |cited ∪ truth|   (clamped 0..1)
+ *
+ * This is the deferred score: in production it would be the value returned by
+ * a real createDefer/defer scorer attached to the run. Here it is computed
+ * synchronously inside score-incident.ts and recorded into a small history
+ * store so the Scores panel can show a trend.
+ *
+ * TODO(launch): swap the recordOutcomeScore() seam below for the real
+ * createDefer + defer() primitive when shipped — the scorer body (compute
+ * localizationScore) stays identical; only the recording/attachment seam
+ * changes from "write to local history store" to "defer().resolve(score)".
+ */
 
 export type ScoreSignal = "saved" | "discarded";
 
-export type MockScore = {
-  runId: string;
-  signal: ScoreSignal;
-  score: number;
-  label: string;
-  trend: number[];
+export type OutcomeScore = {
+  incidentId: string;
+  clientRunId: string;
+  citedFiles: string[];
+  groundTruthFixFiles: string[];
+  score: number; // 0..1
   scoredAt: string;
 };
 
 export type ScoreHistoryPoint = {
-  runId: string;
-  signal: ScoreSignal;
+  incidentId: string;
+  clientRunId: string;
   score: number;
   scoredAt: string;
   source: "seeded" | "live" | "inngest";
@@ -23,116 +40,172 @@ export type ScoreHistory = {
   points: ScoreHistoryPoint[];
   trend: number[];
   currentScore: number;
-  savedCount: number;
-  discardedCount: number;
-  source: "seeded" | "memory" | "inngest-insights";
+  count: number;
+  meanScore: number;
+  source: "seeded" | "memory";
   updatedAt: string;
 };
 
+/**
+ * Pure scorer. Jaccard overlap of cited vs ground-truth fix files, clamped to
+ * 0..1. Path comparison is normalized (trimmed, lowercased) so casing or stray
+ * whitespace in the corpus doesn't tank a match.
+ */
+export function localizationScore(
+  citedFiles: string[],
+  groundTruthFixFiles: string[]
+): number {
+  const cited = normalizeSet(citedFiles);
+  const truth = normalizeSet(groundTruthFixFiles);
+
+  if (cited.size === 0 && truth.size === 0) {
+    return 0;
+  }
+
+  let intersection = 0;
+  for (const file of cited) {
+    if (truth.has(file)) {
+      intersection += 1;
+    }
+  }
+
+  const union = new Set([...cited, ...truth]).size;
+  const score = union === 0 ? 0 : intersection / union;
+
+  return clamp01(score);
+}
+
+function normalizeSet(files: string[]): Set<string> {
+  return new Set(
+    (files ?? [])
+      .map((f) => String(f ?? "").trim().toLowerCase())
+      .filter((f) => f.length > 0)
+  );
+}
+
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, n));
+}
+
+// ── score-history store (mirrors the prior global-store + persistence) ──────
+
 type ScoreStoreState = {
-  mockScoreStore: Map<string, MockScore>;
-  scoreHistoryStore: Map<string, ScoreHistoryPoint>;
+  historyStore: Map<string, ScoreHistoryPoint>; // keyed by clientRunId
 };
 
 const globalScoreStore = globalThis as typeof globalThis & {
-  __agentEvalsScoreStore?: ScoreStoreState;
+  __incidentTriageScoreStore?: ScoreStoreState;
 };
 
 const scoreStore =
-  globalScoreStore.__agentEvalsScoreStore ??
-  (globalScoreStore.__agentEvalsScoreStore = {
-    mockScoreStore: new Map<string, MockScore>(),
-    scoreHistoryStore: new Map<string, ScoreHistoryPoint>(),
+  globalScoreStore.__incidentTriageScoreStore ??
+  (globalScoreStore.__incidentTriageScoreStore = {
+    historyStore: new Map<string, ScoreHistoryPoint>(),
   });
 
-const { mockScoreStore, scoreHistoryStore } = scoreStore;
-const shouldPersistScoreHistory =
-  process.env.NODE_ENV !== "production" || Boolean(process.env.DEMO_SCORE_HISTORY_FILE);
+const { historyStore } = scoreStore;
+
+const shouldPersist =
+  process.env.NODE_ENV !== "production" ||
+  Boolean(process.env.DEMO_SCORE_HISTORY_FILE);
 const scoreHistoryFile =
   process.env.DEMO_SCORE_HISTORY_FILE ??
-  "/tmp/agent-evals-booth-demo-score-history.json";
+  "/tmp/incident-triage-booth-demo-score-history.json";
 
-// TODO(launch): replace with createDefer + the real scoring primitive when shipped.
-export async function scoreSavedQuery(
-  runId: string,
-  signal: ScoreSignal,
+/**
+ * The deferred-scoring seam. Computes the localization score and records it.
+ *
+ * TODO(launch): replace the body below with the real createDefer/defer
+ * primitive. The shape is:
+ *
+ *   const deferred = createDefer<number>();
+ *   // ... attach to the run ...
+ *   deferred.resolve(localizationScore(citedFiles, groundTruthFixFiles));
+ *
+ * Until that ships, we compute synchronously and write to the local history
+ * store so the UI has a trend to render.
+ */
+export async function recordOutcomeScore(
+  incidentId: string,
+  clientRunId: string,
+  citedFiles: string[],
+  groundTruthFixFiles: string[],
   options: { scoredAt?: string; source?: ScoreHistoryPoint["source"] } = {}
-): Promise<MockScore> {
+): Promise<OutcomeScore> {
   await loadPersistedScoreHistory();
 
-  const score = signal === "saved" ? 0.92 : 0.34;
-  const label =
-    signal === "saved" ? "based on: saved to dashboard" : "based on: discarded";
-  const scored: MockScore = {
-    runId,
-    signal,
+  const score = localizationScore(citedFiles, groundTruthFixFiles);
+  const scoredAt = options.scoredAt ?? new Date().toISOString();
+
+  const outcome: OutcomeScore = {
+    incidentId,
+    clientRunId,
+    citedFiles,
+    groundTruthFixFiles,
     score,
-    label,
-    trend: [...seededScoreTrend, score],
-    scoredAt: options.scoredAt ?? new Date().toISOString(),
+    scoredAt,
   };
 
-  mockScoreStore.set(runId, scored);
-  scoreHistoryStore.set(runId, {
-    runId,
-    signal,
+  historyStore.set(clientRunId, {
+    incidentId,
+    clientRunId,
     score,
-    scoredAt: scored.scoredAt,
+    scoredAt,
     source: options.source ?? "live",
   });
   await persistScoreHistory();
 
-  return scored;
+  return outcome;
 }
 
-export function getMockScore(runId: string) {
-  return mockScoreStore.get(runId);
-}
-
-export async function resetScoreHistory() {
-  mockScoreStore.clear();
-  scoreHistoryStore.clear();
+export async function resetScoreHistory(): Promise<void> {
+  historyStore.clear();
   await persistScoreHistory();
 }
 
+/**
+ * Seed history points (used by the seed script / demo seed endpoint). Each
+ * entry supplies an explicit score so the seeded trend is deterministic.
+ */
 export async function seedScoreHistory(
-  scores: Array<{ runId: string; signal: ScoreSignal; scoredAt: string }>
-) {
-  for (const score of scores) {
-    await scoreSavedQuery(score.runId, score.signal, {
-      scoredAt: score.scoredAt,
+  scores: Array<{
+    incidentId: string;
+    clientRunId: string;
+    score: number;
+    scoredAt: string;
+  }>
+): Promise<void> {
+  await loadPersistedScoreHistory();
+  for (const s of scores) {
+    historyStore.set(s.clientRunId, {
+      incidentId: s.incidentId,
+      clientRunId: s.clientRunId,
+      score: clamp01(s.score),
+      scoredAt: s.scoredAt,
       source: "seeded",
     });
   }
+  await persistScoreHistory();
 }
 
 export async function getScoreHistory(): Promise<ScoreHistory> {
-  const insightsHistory = await getInngestInsightsScoreHistory();
-
-  if (insightsHistory) {
-    return insightsHistory;
-  }
-
   await loadPersistedScoreHistory();
 
-  const points = [...scoreHistoryStore.values()].sort(
-    (a, b) =>
-      new Date(a.scoredAt).getTime() - new Date(b.scoredAt).getTime()
+  const points = [...historyStore.values()].sort(
+    (a, b) => new Date(a.scoredAt).getTime() - new Date(b.scoredAt).getTime()
   );
 
   if (points.length === 0) {
-    return buildHistory(
-      seededScoreTrend.map((score, index) => ({
-        runId: `seeded-${index + 1}`,
-        signal: "saved",
-        score,
-        scoredAt: new Date(
-          Date.now() - (seededScoreTrend.length - index) * 24 * 60 * 60 * 1000
-        ).toISOString(),
-        source: "seeded",
-      })),
-      "seeded"
-    );
+    return {
+      points: [],
+      trend: [],
+      currentScore: 0,
+      count: 0,
+      meanScore: 0,
+      source: "seeded",
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   return buildHistory(points, "memory");
@@ -142,25 +215,22 @@ function buildHistory(
   points: ScoreHistoryPoint[],
   source: ScoreHistory["source"]
 ): ScoreHistory {
-  const trend = points.map((point) => point.score);
-  const savedCount = points.filter((point) => point.signal === "saved").length;
-  const discardedCount = points.filter(
-    (point) => point.signal === "discarded"
-  ).length;
+  const trend = points.map((p) => p.score);
+  const sum = trend.reduce((acc, n) => acc + n, 0);
 
   return {
     points,
     trend,
-    currentScore: trend[trend.length - 1] ?? 0.92,
-    savedCount,
-    discardedCount,
+    currentScore: trend[trend.length - 1] ?? 0,
+    count: points.length,
+    meanScore: trend.length === 0 ? 0 : sum / trend.length,
     source,
     updatedAt: new Date().toISOString(),
   };
 }
 
-async function loadPersistedScoreHistory() {
-  if (!shouldPersistScoreHistory) {
+async function loadPersistedScoreHistory(): Promise<void> {
+  if (!shouldPersist) {
     return;
   }
 
@@ -176,26 +246,25 @@ async function loadPersistedScoreHistory() {
       return;
     }
 
-    scoreHistoryStore.clear();
+    historyStore.clear();
 
     for (const item of parsed) {
-      const point = toPersistedScoreHistoryPoint(item);
-
+      const point = toPersistedPoint(item);
       if (point) {
-        scoreHistoryStore.set(point.runId, point);
+        historyStore.set(point.clientRunId, point);
       }
     }
   } catch {
-    // Missing or malformed local history should fall back to the seeded trend.
+    // Missing or malformed local history → empty store, falls back to seeded.
   }
 }
 
-async function persistScoreHistory() {
-  if (!shouldPersistScoreHistory) {
+async function persistScoreHistory(): Promise<void> {
+  if (!shouldPersist) {
     return;
   }
 
-  const points = [...scoreHistoryStore.values()];
+  const points = [...historyStore.values()];
   const directory = scoreHistoryFile.slice(0, scoreHistoryFile.lastIndexOf("/"));
   const { mkdir, writeFile } = await import("node:fs/promises");
 
@@ -209,13 +278,14 @@ async function persistScoreHistory() {
   );
 }
 
-function toPersistedScoreHistoryPoint(value: unknown): ScoreHistoryPoint | null {
+function toPersistedPoint(value: unknown): ScoreHistoryPoint | null {
   if (!value || typeof value !== "object") {
     return null;
   }
 
   const record = value as Record<string, unknown>;
-  const runId = stringValue(record.runId);
+  const clientRunId = stringValue(record.clientRunId);
+  const incidentId = stringValue(record.incidentId);
   const scoredAt = stringValue(record.scoredAt);
   const score = Number(record.score);
   const source =
@@ -225,94 +295,25 @@ function toPersistedScoreHistoryPoint(value: unknown): ScoreHistoryPoint | null 
       ? record.source
       : null;
 
-  if (!runId || !scoredAt || !Number.isFinite(score) || !source) {
+  if (
+    !clientRunId ||
+    !incidentId ||
+    !scoredAt ||
+    !Number.isFinite(score) ||
+    !source
+  ) {
     return null;
   }
 
   return {
-    runId,
-    signal: record.signal === "discarded" ? "discarded" : "saved",
-    score,
+    clientRunId,
+    incidentId,
+    score: clamp01(score),
     scoredAt,
     source,
   };
 }
 
-async function getInngestInsightsScoreHistory() {
-  const query = process.env.INNGEST_INSIGHTS_SCORE_QUERY;
-  const token = process.env.INNGEST_API_KEY ?? "";
-
-  if (!query || !token) {
-    return null;
-  }
-
-  const baseUrl = process.env.INNGEST_API_BASE_URL ?? "https://api.inngest.com";
-
-  try {
-    const response = await fetch(new URL("/v2/insights/query", baseUrl), {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...(process.env.INNGEST_ENV
-          ? { "X-Inngest-Env": process.env.INNGEST_ENV }
-          : {}),
-      },
-      body: JSON.stringify({ query }),
-      signal: AbortSignal.timeout(4000),
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const body = (await response.json()) as {
-      data?: unknown[];
-      rows?: unknown[];
-      result?: unknown[];
-    };
-    const rows = body.data ?? body.rows ?? body.result ?? [];
-    const points = rows
-      .map(toScoreHistoryPoint)
-      .filter((point): point is ScoreHistoryPoint => Boolean(point));
-
-    return points.length > 0 ? buildHistory(points, "inngest-insights") : null;
-  } catch {
-    return null;
-  }
-}
-
-function toScoreHistoryPoint(row: unknown): ScoreHistoryPoint | null {
-  if (!row || typeof row !== "object") {
-    return null;
-  }
-
-  const record = row as Record<string, unknown>;
-  const score = Number(record.score);
-  const scoredAt =
-    stringValue(record.scoredAt) ??
-    stringValue(record.scored_at) ??
-    stringValue(record.timestamp) ??
-    stringValue(record.ts);
-
-  if (!Number.isFinite(score) || !scoredAt) {
-    return null;
-  }
-
-  return {
-    runId:
-      stringValue(record.runId) ??
-      stringValue(record.run_id) ??
-      stringValue(record.id) ??
-      crypto.randomUUID(),
-    signal: record.signal === "discarded" ? "discarded" : "saved",
-    score,
-    scoredAt,
-    source: "inngest",
-  };
-}
-
-function stringValue(value: unknown) {
+function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }

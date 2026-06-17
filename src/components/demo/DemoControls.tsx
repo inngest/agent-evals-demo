@@ -45,7 +45,8 @@ export function DemoControls({
         <SheetHeader className="border-b border-[var(--rule-soft)]">
           <SheetTitle className="display text-xl">Demo Controls</SheetTitle>
           <SheetDescription>
-            Tune the recovery beat for the next agent run.
+            The default durability beat is the tool 503 on the crash file.
+            These flags tune the optional LLM-failure variant for the next run.
           </SheetDescription>
         </SheetHeader>
 
@@ -53,10 +54,11 @@ export function DemoControls({
           <label className="flex items-center justify-between gap-4 border border-[var(--rule-soft)] p-4">
             <span>
               <span className="display block text-base font-medium">
-                Opus offline
+                Force LLM offline
               </span>
               <span className="mt-1 block text-sm text-[var(--muted-copy)]">
-                Make generate-sql fail before it recovers.
+                Optional variant: make a think step fail before it recovers,
+                on top of the tool 503.
               </span>
             </span>
             <input

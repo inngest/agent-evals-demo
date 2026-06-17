@@ -6,11 +6,17 @@ import type { HighlightedCodeSnippet } from "@/lib/highlight";
 
 export function CodeView({
   snippets,
+  activeId: controlledId,
 }: {
   snippets: HighlightedCodeSnippet[];
+  // Optional: let the shell sync the visible snippet to the current act.
+  activeId?: HighlightedCodeSnippet["id"];
 }) {
-  const [activeId, setActiveId] =
-    React.useState<HighlightedCodeSnippet["id"]>("durable");
+  const [internalId, setInternalId] = React.useState<
+    HighlightedCodeSnippet["id"]
+  >(snippets[0]?.id);
+  const activeId = controlledId ?? internalId;
+  const setActiveId = setInternalId;
   const [codeFontSize, setCodeFontSize] = React.useState(15);
   const active = snippets.find((snippet) => snippet.id === activeId) ?? snippets[0];
   const canZoomOut = codeFontSize > 12;
