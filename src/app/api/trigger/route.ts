@@ -1,55 +1,109 @@
 import { NextResponse } from "next/server";
-import { inngest, queryRequested } from "@/inngest/client";
+import { inngest, incidentReceived } from "@/inngest/client";
 import { defaultDemoFlags, normalizeDemoFlags } from "@/lib/demo-flags";
-import { canonicalPrompt } from "@/content/seed-data";
-import { getInngestRunsUrl } from "@/lib/inngest-dashboard";
+import { getDeepLink } from "@/lib/inngest-dashboard";
+import { defaultIncidentId, getIncident } from "@/content/incidents";
+
+type StoredRun = {
+  incidentId: string;
+  clientRunId: string;
+  eventId: string;
+  requestedAt: string;
+  sent: boolean;
+  error?: string;
+};
+
+const globalRunStore = globalThis as typeof globalThis & {
+  __incidentTriageRuns?: Map<string, StoredRun>;
+};
+
+const runStore =
+  globalRunStore.__incidentTriageRuns ??
+  (globalRunStore.__incidentTriageRuns = new Map<string, StoredRun>());
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
-  const clientRunId = crypto.randomUUID();
+  const incidentId =
+    typeof body.incidentId === "string" && getIncident(body.incidentId)
+      ? body.incidentId
+      : defaultIncidentId;
+  const incident = getIncident(incidentId);
+
+  if (!incident) {
+    return NextResponse.json(
+      { ok: false, error: `Unknown incident: ${incidentId}` },
+      { status: 400 }
+    );
+  }
+
+  const clientRunId =
+    typeof body.clientRunId === "string" && body.clientRunId.length > 0
+      ? body.clientRunId
+      : crypto.randomUUID();
+  const requestedAt = new Date().toISOString();
+  const eventId = `incident:${clientRunId}`;
   const flags = normalizeDemoFlags(body.flags ?? defaultDemoFlags);
-  const prompt =
-    typeof body.prompt === "string" && body.prompt.trim().length > 0
-      ? body.prompt.trim()
-      : canonicalPrompt;
-  const dashboardUrl = getInngestRunsUrl();
+  const dashboardUrl = getDeepLink("envDashboard");
+  const traceUrl = getDeepLink("runTrace", { runId: clientRunId });
 
   try {
-    const result = await inngest.send(
-      queryRequested.create(
+    await inngest.send(
+      incidentReceived.create(
         {
-          prompt,
+          incidentId: incident.id,
+          title: incident.title,
+          body: incident.body,
           flags,
           clientRunId,
-          requestedAt: new Date().toISOString(),
+          requestedAt,
           source: "booth-demo",
         },
-        { id: `query:${clientRunId}` }
+        { id: eventId }
       )
     );
+
+    runStore.set(clientRunId, {
+      incidentId: incident.id,
+      clientRunId,
+      eventId,
+      requestedAt,
+      sent: true,
+    });
 
     return NextResponse.json({
       ok: true,
       sent: true,
+      incidentId: incident.id,
       clientRunId,
-      eventId: `query:${clientRunId}`,
+      eventId,
       dashboardUrl,
-      traceUrl: dashboardUrl,
-      result,
+      traceUrl,
+      runId: clientRunId,
     });
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Inngest dev server unavailable";
+
+    runStore.set(clientRunId, {
+      incidentId: incident.id,
+      clientRunId,
+      eventId,
+      requestedAt,
+      sent: false,
+      error: message,
+    });
+
     return NextResponse.json(
       {
         ok: true,
         sent: false,
+        incidentId: incident.id,
         clientRunId,
-        eventId: `query:${clientRunId}`,
+        eventId,
         dashboardUrl,
-        traceUrl: dashboardUrl,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Inngest dev server unavailable",
+        traceUrl,
+        runId: clientRunId,
+        error: message,
       },
       { status: 202 }
     );

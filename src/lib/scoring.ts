@@ -6,18 +6,17 @@
  *
  *   score = |cited ∩ truth| / |cited ∪ truth|   (clamped 0..1)
  *
- * This is the deferred score: in production it would be the value returned by
- * a real createDefer/defer scorer attached to the run. Here it is computed
- * synchronously inside score-incident.ts and recorded into a small history
+ * This is the deferred score. In CLOUD mode the real primitive ships in
+ * src/inngest/scorers/localization-scorer.ts (createScorer), deferred from
+ * score-incident.ts via the `defer` ctx arg — the scorer body is the same pure
+ * localizationScore() below. In LOCAL mode it's computed synchronously inside
+ * score-incident.ts via recordOutcomeScore() and written to a small history
  * store so the Scores panel can show a trend.
  *
- * TODO(launch): swap the recordOutcomeScore() seam below for the real
- * createDefer + defer() primitive when shipped — the scorer body (compute
- * localizationScore) stays identical; only the recording/attachment seam
- * changes from "write to local history store" to "defer().resolve(score)".
+ * recordOutcomeScore() below is the LOCAL-path implementation — do not delete
+ * it. The cloud attachment seam ("write to local history store" →
+ * "client.score(...) under the hood") lives in localization-scorer.ts.
  */
-
-export type ScoreSignal = "saved" | "discarded";
 
 export type OutcomeScore = {
   incidentId: string;
@@ -114,17 +113,13 @@ const scoreHistoryFile =
   "/tmp/incident-triage-booth-demo-score-history.json";
 
 /**
- * The deferred-scoring seam. Computes the localization score and records it.
+ * The LOCAL-path deferred-scoring seam. Computes the localization score and
+ * writes it to the local history store so the UI has a trend to render.
  *
- * TODO(launch): replace the body below with the real createDefer/defer
- * primitive. The shape is:
- *
- *   const deferred = createDefer<number>();
- *   // ... attach to the run ...
- *   deferred.resolve(localizationScore(citedFiles, groundTruthFixFiles));
- *
- * Until that ships, we compute synchronously and write to the local history
- * store so the UI has a trend to render.
+ * In CLOUD mode this is bypassed: score-incident.ts defers the real
+ * createScorer (src/inngest/scorers/localization-scorer.ts) instead, which
+ * forwards the ScorerResult to client.score(...) under the hood. Both compute
+ * the identical localizationScore() value.
  */
 export async function recordOutcomeScore(
   incidentId: string,
@@ -197,19 +192,32 @@ export async function getScoreHistory(): Promise<ScoreHistory> {
   );
 
   if (points.length === 0) {
-    return {
-      points: [],
-      trend: [],
-      currentScore: 0,
-      count: 0,
-      meanScore: 0,
-      source: "seeded",
-      updatedAt: new Date().toISOString(),
-    };
+    return buildHistory(fallbackSeedPoints, "seeded");
   }
 
   return buildHistory(points, "memory");
 }
+
+const fallbackSeedPoints: ScoreHistoryPoint[] = [
+  ["EXE-1737", 1],
+  ["EXE-1811", 1],
+  ["EXE-1842", 0.5],
+  ["EXE-1904", 1],
+  ["EXE-1938", 0.5],
+  ["EXE-2016", 1],
+  ["EXE-2069", 1],
+  ["EXE-2110", 0.5],
+  ["EXE-2185", 1],
+  ["EXE-2244", 0.5],
+  ["EXE-2301", 1],
+  ["EXE-2377", 1],
+].map(([incidentId, score], index) => ({
+  incidentId: String(incidentId),
+  clientRunId: `seed-score-${String(incidentId).toLowerCase()}`,
+  score: Number(score),
+  scoredAt: new Date(Date.UTC(2026, 5, 16, 13, index * 6)).toISOString(),
+  source: "seeded" as const,
+}));
 
 function buildHistory(
   points: ScoreHistoryPoint[],

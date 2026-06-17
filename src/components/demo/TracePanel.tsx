@@ -1,13 +1,15 @@
 "use client";
 
 import { Activity, AlertTriangle, ExternalLink, RotateCw } from "lucide-react";
+import { DashboardLink } from "@/components/demo/DashboardLink";
 import type { TraceStep, TriggerResponse } from "@/components/demo/types";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 
 /**
- * Renders the agent trace: think-N + tool-N steps (~12) including the
- * retry/recover beat. In Act 2 a fast-score chip + outcome-score chip attach
- * to the trace, mirroring scores landing on the run in the Inngest dashboard.
+ * Renders the agent trace: named model/tool steps including repo reads,
+ * mocked side effects, and the retry/recover beat. In Act 2 a fast-score chip
+ * + outcome-score chip attach to the trace, mirroring scores landing on the
+ * run in the Inngest dashboard.
  */
 export function TracePanel({
   trace,
@@ -39,30 +41,31 @@ export function TracePanel({
             </div>
             <div className="display mt-1 text-xl font-medium">triage-agent</div>
           </div>
-          <a
+          <DashboardLink
             href={traceUrl}
-            target="_blank"
-            rel="noreferrer"
             className="inline-flex h-7 items-center justify-center gap-1 rounded-[min(var(--radius-md),12px)] border border-[var(--ink)] bg-white px-2.5 text-[0.8rem] font-medium transition-all hover:bg-[var(--bone)]"
           >
             <ExternalLink className="size-4" />
             {showScores ? "Open scores on trace" : "Open in Inngest"}
-          </a>
+          </DashboardLink>
         </div>
 
         <div className="min-h-0 overflow-auto">
           {trace.length === 0 ? (
             <div className="grid h-full place-items-center p-6 text-center">
               <p className="max-w-xs text-sm leading-6 text-[var(--muted-copy)]">
-                Run an investigation to populate the trace. You will see the
-                think/tool loop, the simulated 503, and the durable recovery.
+                Run an investigation to populate the trace. You will see repo
+                reads, mocked Linear/Slack/PR steps, the simulated 503, and
+                the durable recovery.
               </p>
             </div>
           ) : (
             trace.map((step, index) => (
-              <div
+              <DashboardLink
                 key={step.id}
-                className="grid grid-cols-[42px_1fr_auto] items-start gap-3 border-b border-[var(--rule-soft)] p-4"
+                href={traceUrl}
+                aria-label={`Open Inngest trace for ${step.label}`}
+                className="grid grid-cols-[42px_1fr_auto] items-start gap-3 border-b border-[var(--rule-soft)] p-4 transition-colors hover:bg-[var(--bone)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--coral)]"
               >
                 <div
                   className={`mono flex size-7 items-center justify-center border text-[11px] tabnum ${
@@ -96,7 +99,7 @@ export function TracePanel({
                   {step.status === "failed" ? (
                     <p className="mono mt-1 flex items-center gap-1 text-[11px] uppercase text-[var(--coral)]">
                       <AlertTriangle className="size-3" />
-                      503 rate limited — Inngest will retry
+                      503 rate limited, Inngest will retry
                     </p>
                   ) : null}
                 </div>
@@ -104,7 +107,7 @@ export function TracePanel({
                   <div>{step.status}</div>
                   {step.duration ? <div>{step.duration}</div> : null}
                 </div>
-              </div>
+              </DashboardLink>
             ))
           )}
         </div>
@@ -112,11 +115,11 @@ export function TracePanel({
 
       <aside className="grid h-full min-h-0 content-start gap-6 overflow-auto bg-[var(--bone)] p-5">
         <div>
-          <div className="display text-lg font-medium">Run payload</div>
+          <div className="display text-lg font-medium">Agent payload</div>
           <dl className="mono mt-4 grid gap-3 text-[11px]">
             <Field label="Event" value="agent/incident.received" />
             <Field
-              label="Incident"
+              label="Bug"
               value={trigger?.incidentId ?? "not sent yet"}
             />
             <Field
@@ -176,7 +179,7 @@ export function TracePanel({
             </div>
             <p className="mt-3 text-xs leading-5 text-[var(--muted-copy)]">
               Both scores attach to the same run. The fast one is live; the
-              localization score defers until the incident is saved.
+              localization score defers until the analysis is saved.
             </p>
           </div>
         ) : trigger?.sent === false ? (

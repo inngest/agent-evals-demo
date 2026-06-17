@@ -5,6 +5,25 @@ conference environment.
 
 For the short human-facing credential ask, use `docs/cloud-auth-request.md`.
 
+## Real eval primitives: the `DEMO_TARGET` switch
+
+Cloud mode is gated by one env flag, `DEMO_TARGET`:
+
+- `local` (default/unset): faked/seeded scores, sessions, experiments. Offline-safe.
+- `cloud`: emits the **real** Inngest eval primitives (run-level `step.score`, the
+  `createScorer`/`defer` deferred outcome scorer, and `group.experiment`) so scores and
+  experiments land in the Cloud dashboard. Requires `DEMO_TARGET=cloud` in Vercel
+  production env (alongside the keys below) and `INNGEST_DEV` unset. The client derives
+  `isDev: !isCloud`, so do not set `INNGEST_DEV` in cloud mode.
+
+Real primitives require the SDK pin `inngest@pr-1521` (`4.4.1-pr-1521.15`); the default
+`^4.5.0` has none of them. **Sessions stay faked in both modes** — BLOCKED on the unified
+scoring + sessions SDK tag (pr-1547 / base 4.6.1, owner Jakob). See `README.md`
+"Cloud mode" and `INTEGRATION-PLAN.md` for the call sites.
+
+After deploy + sync, seed the Cloud corpus of real runs, scores, and experiments with
+`DEMO_TARGET=cloud npm run demo:seed-cloud` (idempotent; supports `--dry-run`).
+
 ## What Codex Can Do
 
 Once the secrets and IDs exist, Codex can run the Vercel CLI, Inngest CLI,

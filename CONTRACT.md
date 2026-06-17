@@ -20,7 +20,10 @@ are graded against the ground-truth fix files.
 **What is real vs mocked:**
 - **REAL:** the local Inngest dev server (`localhost:8288`) — runs, steps, retries, traces, memoization. The agent function genuinely executes through it.
 - **MOCKED:** the LLM (canned deterministic RCA per incident) and the tools (staged per-incident responses). No Anthropic key, no cloud keys.
-- **SEEDED/FAKED:** scores, sessions, experiments. Deep-links are config constants pointing at placeholder `localhost:8288` paths.
+- **SEEDED/FAKED (local mode):** scores, sessions, experiments. Deep-links are config constants pointing at placeholder `localhost:8288` paths.
+- **REAL in cloud mode (`DEMO_TARGET=cloud`):** scores and experiments are emitted as real Inngest eval primitives and land in the Inngest Cloud dashboard — run-level `step.score` (triage run), a `createScorer`/`defer` deferred outcome score (RCA saved), and a real `group.experiment` with per-variant `inngest.score`. **Sessions stay FAKED in both modes** (BLOCKED: the sessions primitive is not in the pinned `inngest@pr-1521` tag; it ships in pr-1547 / base 4.6.1. Owner: Jakob). See `INTEGRATION-PLAN.md` for the call sites and `README.md` "Cloud mode" for the operator flow.
+
+**Cloud swap point:** the local/cloud decision is a single env flag, `DEMO_TARGET`, read only in `src/lib/demo-target.ts` (exports `DEMO_TARGET`, `isCloud`). Every real-primitive call site is wrapped `if (isCloud) { ...real... } else { ...faked... }`; the faked branch is byte-for-byte the local build. The client derives `isDev: !isCloud` so cloud/dev cannot drift — do not set `INNGEST_DEV` in cloud mode.
 
 **The durability beat (Act 1):** on the first attempt, one tool call (`read_repo_file`
 on the incident's designated crash file) throws a simulated 503. Inngest retries the

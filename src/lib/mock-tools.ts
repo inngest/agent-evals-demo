@@ -1,15 +1,15 @@
 /**
- * Mock tool set for the durable incident-triage agent.
+ * Mock tool set for the durable code-triage agent.
  *
  * The LLM is mocked (see mock-llm.ts), so these tool definitions exist only
- * for trace/code display and to drive deterministic, per-incident staged
+ * for trace/code display and to drive deterministic, per-bug staged
  * responses. We deliberately do NOT import `@anthropic-ai/sdk`; the booth
  * demo runs with no Anthropic key. The shape mirrors the Anthropic tool
  * schema (name / description / inputSchema) so the ported agent reads as
  * "the same agent, mocked."
  *
  * Crash semantics (locked, ported from inngest-agents/demo/lib/tools.ts):
- * the FIRST `read_repo_file` whose `path` includes the active incident's
+ * the FIRST `read_repo_file` whose `path` includes the active bug report's
  * `crashFile` throws a simulated 503. A module-scoped flag survives the
  * Inngest function retry within the worker process, so on the retry the
  * step.run re-executes this tool, the flag is already set, and it returns the
@@ -20,11 +20,14 @@
 import { getIncident } from "@/content/incidents";
 
 export type ToolName =
-  | "get_run"
-  | "get_run_steps"
+  | "read_issue_context"
   | "search_code"
   | "read_repo_file"
-  | "get_recent_commits";
+  | "get_recent_commits"
+  | "create_linear_ticket"
+  | "send_slack_message"
+  | "suggest_code_change"
+  | "open_pull_request";
 
 export type ToolDef = {
   name: ToolName;
@@ -35,33 +38,22 @@ export type ToolDef = {
 
 export const TOOLS: ToolDef[] = [
   {
-    name: "get_run",
+    name: "read_issue_context",
     description:
-      "Fetch a failing Inngest run's metadata and status (function id, trigger event, attempt, error summary). This is the first investigative step: confirm what failed before reading code.",
+      "Load the bug report, customer impact, linked logs, repo, and owner hints before touching code. This is the first investigative step in the Gester-style code triage flow.",
     inputSchema: {
       type: "object",
       properties: {
-        runId: {
+        issueId: {
           type: "string",
-          description: "The Inngest run id of the failing run.",
+          description: "The incoming bug id, e.g. EXE-1737.",
+        },
+        repo: {
+          type: "string",
+          description: "Repo identifier, e.g. 'inngest'.",
         },
       },
-      required: ["runId"],
-    },
-  },
-  {
-    name: "get_run_steps",
-    description:
-      "List the steps of an Inngest run in execution order and identify which step errored, with the memoized inputs/outputs of prior steps. Use after get_run to localize the failure to a specific step.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        runId: {
-          type: "string",
-          description: "The Inngest run id whose steps to list.",
-        },
-      },
-      required: ["runId"],
+      required: ["issueId", "repo"],
     },
   },
   {
@@ -132,11 +124,82 @@ export const TOOLS: ToolDef[] = [
       required: ["repo"],
     },
   },
+  {
+    name: "create_linear_ticket",
+    description:
+      "Create or update the Linear bug ticket with owner, priority, repro summary, suspected files, and acceptance criteria. Mocked and idempotent for the booth.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        team: { type: "string", description: "Linear team key." },
+        title: { type: "string", description: "Ticket title." },
+        priority: { type: "string", description: "Priority label." },
+        summary: { type: "string", description: "Short issue summary." },
+        files: {
+          type: "array",
+          items: { type: "string" },
+          description: "Files the ticket should link to.",
+        },
+      },
+      required: ["team", "title", "priority", "summary"],
+    },
+  },
+  {
+    name: "send_slack_message",
+    description:
+      "Send the team a concise Slack update with impact, evidence, and the proposed next action. Mocked for the booth; no live Slack write happens.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channel: { type: "string", description: "Slack channel name." },
+        message: { type: "string", description: "Message body." },
+        threadKey: {
+          type: "string",
+          description: "Stable key so retries do not duplicate the update.",
+        },
+      },
+      required: ["channel", "message", "threadKey"],
+    },
+  },
+  {
+    name: "suggest_code_change",
+    description:
+      "Draft a focused code change with target files, rationale, and test plan. This is the mocked code suggestion Gester would hand to the engineer or PR tool.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repo: { type: "string", description: "Repo identifier." },
+        files: {
+          type: "array",
+          items: { type: "string" },
+          description: "Target files for the suggested patch.",
+        },
+        summary: { type: "string", description: "Patch summary." },
+        testPlan: { type: "string", description: "Suggested verification." },
+      },
+      required: ["repo", "files", "summary"],
+    },
+  },
+  {
+    name: "open_pull_request",
+    description:
+      "Open a pull request when the suggested change is small and high-confidence. Mocked for the booth with deterministic PR metadata.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repo: { type: "string", description: "Repo identifier." },
+        branch: { type: "string", description: "Branch name." },
+        title: { type: "string", description: "PR title." },
+        body: { type: "string", description: "PR body." },
+      },
+      required: ["repo", "branch", "title"],
+    },
+  },
 ];
 
-// First-attempt crash on the incident's crashFile read. Module-scoped flag
+// First-attempt crash on the active bug's crashFile read. Module-scoped flag
 // survives step.run retries (Inngest re-invokes the handler with prior steps
-// memoized — only the failed step re-executes), so the second attempt skips
+// memoized, so only the failed step re-executes. The second attempt skips
 // the throw and returns the staged response.
 let hasCrashed = false;
 
@@ -148,8 +211,9 @@ export function executeTool(
   incidentId: string,
   name: ToolName,
   input: Record<string, unknown>,
-  _ctx: { attempt: number }
+  ctx: { attempt: number }
 ): string {
+  void ctx;
   const incident = getIncident(incidentId);
 
   if (!incident) {
@@ -157,7 +221,7 @@ export function executeTool(
   }
 
   // The mid-investigation failure point. The first time the agent reads the
-  // incident's crashFile, simulate a transient 503 rate limit. The flag
+  // active bug's crashFile, simulate a transient 503 rate limit. The flag
   // persists across function retries in this worker process; on the retry,
   // the step.run re-executes this tool once more and the flag is now true →
   // it falls through to the staged response.
@@ -167,7 +231,7 @@ export function executeTool(
       hasCrashed = true;
       throw new Error(
         "Repo API: 503 rate limited. Cannot read repo file at this time. " +
-          "(Simulated for demo — imagine your investigation just hit the " +
+          "(Simulated for demo: imagine your investigation just hit the " +
           "abuse rate limiter mid-flight.)"
       );
     }
@@ -193,16 +257,22 @@ function genericNoResult(name: ToolName, input: Record<string, unknown>): string
     }
     case "read_repo_file": {
       const path = String(input.path ?? "");
-      return `${path}\n\n(file not available — content not in local clone)`;
+      return `${path}\n\n(file not available: content not in local clone)`;
     }
     case "get_recent_commits": {
       const path = input.path ? ` touching ${String(input.path)}` : "";
       return `No recent commits found${path}.`;
     }
-    case "get_run":
-      return `No run found for id ${String(input.runId ?? "")}.`;
-    case "get_run_steps":
-      return `No steps found for run ${String(input.runId ?? "")}.`;
+    case "read_issue_context":
+      return `No issue context found for ${String(input.issueId ?? "")}.`;
+    case "create_linear_ticket":
+      return `Linear ticket mock skipped for ${String(input.title ?? "untitled")}.`;
+    case "send_slack_message":
+      return `Slack mock skipped for ${String(input.channel ?? "unknown channel")}.`;
+    case "suggest_code_change":
+      return `No code suggestion generated for ${String(input.repo ?? "repo")}.`;
+    case "open_pull_request":
+      return `PR mock skipped for ${String(input.branch ?? "branch")}.`;
     default:
       return `Unknown tool: ${name}`;
   }

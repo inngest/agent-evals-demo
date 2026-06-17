@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
-import { canonicalPrompt } from "@/content/seed-data";
-import {
-  inngest,
-  queryRequested,
-  querySaved,
-} from "@/inngest/client";
+import { incidents } from "@/content/incidents";
+import { seededScores } from "@/content/seed-data";
+import { incidentReceived, incidentSaved, inngest } from "@/inngest/client";
 import { defaultDemoFlags, normalizeDemoFlags } from "@/lib/demo-flags";
 import { authorizeDemoOpsRequest } from "@/lib/demo-ops-auth";
-import { getInngestRunsUrl } from "@/lib/inngest-dashboard";
+import { getDeepLink } from "@/lib/inngest-dashboard";
 import { seedScoreHistory } from "@/lib/scoring";
 
-const DEFAULT_COUNT = 14;
-const MAX_COUNT = 30;
+const DEFAULT_COUNT = 12;
+const MAX_COUNT = 24;
 
 export async function POST(request: Request) {
   const authorizationError = authorizeDemoOpsRequest(request, "seed");
@@ -23,96 +20,103 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const count = clampCount(body.count);
   const now = Date.now();
-  const dashboardUrl = getInngestRunsUrl();
+  const selectedIncidents = Array.from({ length: count }, (_, index) => {
+    return incidents[index % incidents.length];
+  });
   const appUrl = `${new URL(request.url).origin}/api/inngest`;
+  const dashboardUrl = getDeepLink("envDashboard");
   const registration = await getDevServerRegistration(dashboardUrl, appUrl);
 
-  const seededRuns = Array.from({ length: count }, (_, index) => {
-    const clientRunId = crypto.randomUUID();
-    const offsetMs = (count - index) * 4 * 60 * 1000;
-    const ts = now - offsetMs;
-    const shouldRetry = index > 0 && (index % 4 === 1 || index % 7 === 0);
-    const flags = normalizeDemoFlags({
-      ...defaultDemoFlags,
-      llmOffline: shouldRetry,
-      failureCount: shouldRetry ? (index % 7 === 0 ? 2 : 1) : 0,
-      latencyMs: index % 3 === 0 ? 300 : 0,
-    });
-
-    return { clientRunId, flags, shouldRetry, ts };
-  });
-  const queryEvents = seededRuns.map((run) => {
-    return queryRequested.create(
-      {
-        prompt: canonicalPrompt,
-        flags: run.flags,
-        clientRunId: run.clientRunId,
-        requestedAt: new Date(run.ts).toISOString(),
-        source: "booth-demo",
-      },
-      {
-        id: `seed-query:${run.clientRunId}`,
-        ts: run.ts,
-      }
-    );
-  });
-
-  const scorePayloads = seededRuns.map((run, index) => {
-    const ts = now - (count - index) * 4 * 60 * 1000 + 90 * 1000;
-    const signal = index % 5 === 0 ? "discarded" : "saved";
+  const runPayloads = selectedIncidents.map((incident, index) => {
+    const ts = now - (selectedIncidents.length - index) * 5 * 60 * 1000;
+    const clientRunId = `seed-${incident.id.toLowerCase()}-${index}`;
+    const shouldRetry = index % 3 === 0;
 
     return {
-      runId: run.clientRunId,
+      incident,
+      clientRunId,
+      ts,
+      shouldRetry,
+      flags: normalizeDemoFlags({
+        ...defaultDemoFlags,
+        llmOffline: false,
+        failureCount: shouldRetry ? 1 : 0,
+        latencyMs: index % 4 === 0 ? 250 : 0,
+      }),
+    };
+  });
+
+  const incidentEvents = runPayloads.map((payload) =>
+    incidentReceived.create(
+      {
+        incidentId: payload.incident.id,
+        title: payload.incident.title,
+        body: payload.incident.body,
+        flags: payload.flags,
+        clientRunId: payload.clientRunId,
+        requestedAt: new Date(payload.ts).toISOString(),
+        source: "booth-demo",
+      },
+      { id: `seed-incident:${payload.clientRunId}`, ts: payload.ts }
+    )
+  );
+
+  const savedPayloads = runPayloads.map((payload, index) => {
+    const signal = index % 5 === 2 ? "discarded" : "saved";
+    const ts = payload.ts + 90 * 1000;
+    return {
+      incident: payload.incident,
+      clientRunId: payload.clientRunId,
       signal,
       ts,
       scoredAt: new Date(ts).toISOString(),
     } as const;
   });
-  const retryDemoRuns = seededRuns.filter((run) => run.shouldRetry).length;
-  const happyPathRuns = seededRuns.length - retryDemoRuns;
-  const savedScoreSignals = scorePayloads.filter(
-    (payload) => payload.signal === "saved"
-  ).length;
-  const discardedScoreSignals = scorePayloads.filter(
-    (payload) => payload.signal === "discarded"
-  ).length;
 
-  const scoreEvents = scorePayloads.map((payload) =>
-    querySaved.create(
+  const savedEvents = savedPayloads.map((payload) =>
+    incidentSaved.create(
       {
-        runId: payload.runId,
+        incidentId: payload.incident.id,
+        clientRunId: payload.clientRunId,
         signal: payload.signal,
         savedAt: payload.scoredAt,
         source: "booth-demo",
       },
-      {
-        id: `seed-score:${payload.runId}:${payload.ts}`,
-        ts: payload.ts,
-      }
+      { id: `seed-saved:${payload.clientRunId}:${payload.ts}`, ts: payload.ts }
     )
   );
 
   await seedScoreHistory(
-    scorePayloads.map((payload) => ({
-      runId: payload.runId,
-      signal: payload.signal,
-      scoredAt: payload.scoredAt,
+    seededScores.slice(0, Math.min(seededScores.length, count)).map((score) => ({
+      incidentId: score.incidentId,
+      clientRunId: score.runId,
+      score: score.outcomeScore,
+      scoredAt: score.scoredAt,
     }))
   );
 
+  const retryDemoRuns = runPayloads.filter((run) => run.shouldRetry).length;
+  const happyPathRuns = runPayloads.length - retryDemoRuns;
+  const savedScoreSignals = savedPayloads.filter(
+    (payload) => payload.signal === "saved"
+  ).length;
+  const discardedScoreSignals = savedPayloads.filter(
+    (payload) => payload.signal === "discarded"
+  ).length;
+
   try {
-    await inngest.send([...queryEvents, ...scoreEvents]);
+    await inngest.send([...incidentEvents, ...savedEvents]);
 
     return NextResponse.json({
       ok: true,
-      runs: queryEvents.length,
-      scoreSignals: scorePayloads.length,
-      durableScoreEvents: scorePayloads.length,
+      runs: incidentEvents.length,
+      scoreSignals: savedPayloads.length,
+      durableScoreEvents: savedPayloads.length,
       retryDemoRuns,
       happyPathRuns,
       savedScoreSignals,
       discardedScoreSignals,
-      eventsSent: queryEvents.length + scoreEvents.length,
+      eventsSent: incidentEvents.length + savedEvents.length,
       dashboardUrl,
       appUrl,
       registered: registration.registered,
@@ -124,8 +128,8 @@ export async function POST(request: Request) {
       {
         ok: false,
         runs: 0,
-        scoreSignals: scorePayloads.length,
-        durableScoreEvents: scorePayloads.length,
+        scoreSignals: savedPayloads.length,
+        durableScoreEvents: savedPayloads.length,
         retryDemoRuns,
         happyPathRuns,
         savedScoreSignals,

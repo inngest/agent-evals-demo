@@ -58,6 +58,77 @@ dev server at `http://localhost:8288` on the other. The app's **Seed 14 runs**
 button sends real `write-query` and score-signal events so the Runs list has
 history to show.
 
+## Cloud mode (`DEMO_TARGET`)
+
+The demo has two modes, controlled by a single env flag, `DEMO_TARGET`. It is read
+in exactly one place, `src/lib/demo-target.ts`, which exports `DEMO_TARGET` and
+`isCloud`. Nothing else reads `process.env.DEMO_TARGET` directly.
+
+| `DEMO_TARGET` | Behavior |
+|---------------|----------|
+| `local` (default, or unset) | Faked/seeded path. Scores, sessions, and experiments come from `src/content/seed-data.ts` and the local history store. Offline-safe, deterministic, dev-server only. Behaviorally identical to the booth build. No real eval primitive fires. |
+| `cloud` | Emits the **real** Inngest eval primitives so scores and experiments land in the Inngest Cloud dashboard. Registers against Cloud (`isDev=false`, keys from env). |
+
+In `cloud` mode the app emits real primitives at three call sites:
+
+- **Run-level score (Act 1 → 2):** `src/inngest/functions/triage-agent.ts` writes the
+  localization score with a durable, run-level `step.score(...)` (no `stepId`, so it
+  attaches to the run). This requires `scoreMiddleware()` on the client, which is
+  registered unconditionally in `src/inngest/client.ts`.
+- **Deferred outcome scorer (Act 2 hero):** `src/inngest/scorers/localization-scorer.ts`
+  defines a `createScorer(...)` deferred function. `src/inngest/functions/score-incident.ts`
+  triggers it with `defer(id, { function, data })` when an RCA is saved. The scorer
+  returns `{ name, value, runId }` and the SDK writes it via `client.score(...)`.
+- **Experiment (Act 3):** `src/inngest/functions/experiment-bakeoff.ts` runs a real
+  `group.experiment(...)` (GPT-5.5 vs claude-opus-4.8) and calls `inngest.score(...)`
+  inside each variant so the score auto-associates with the experiment + variant.
+
+The faked branch is always the fallback. Every real-primitive call site is wrapped
+`if (isCloud) { ...real... } else { ...existing faked... }`, and the faked branch is
+unchanged from the local build.
+
+`DEMO_TARGET` is orthogonal to `INNGEST_DEV`. `local` implies the dev server; `cloud`
+sets `isDev=false`. The client derives `isDev` from `isCloud` (`isDev: !isCloud`), so
+**do not also set `INNGEST_DEV` in cloud mode** — let the flag drive it.
+
+### Sessions are deferred (BLOCKED)
+
+The **sessions** view stays faked in **both** modes this pass. The sessions primitive is
+not in the pinned SDK tag (`inngest@pr-1521`, which resolves to `4.4.1-pr-1521.15`); it
+ships in a different base (`pr-1547` / `4.6.1`). `seededSessions` in
+`src/content/seed-data.ts` and the session deep-link in `src/lib/inngest-dashboard.ts`
+keep reading seed data in both modes. There is no `if (isCloud)` branch for sessions.
+
+> BLOCKED: needs the unified scoring + sessions SDK tag (pr-1547 / base 4.6.1).
+> Owner: Jakob. Do not wire a real sessions primitive against pr-1521 — it does not
+> exist there. Revisit when the unified tag lands.
+
+### SDK pin for cloud mode
+
+Real primitives require `inngest@pr-1521` (`npm i inngest@pr-1521`, resolves to
+`4.4.1-pr-1521.15`). The default `^4.5.0` pin has none of these primitives. Installing
+the pin is a separate step (it is not run as part of this docs pass).
+
+### Running cloud mode
+
+1. Set `DEMO_TARGET=cloud`, `INNGEST_EVENT_KEY`, and `INNGEST_SIGNING_KEY`. Leave
+   `INNGEST_DEV` unset/false.
+2. Deploy to Vercel (see "Production Inngest" below) and sync the `/api/inngest`
+   serve endpoint with Inngest Cloud.
+3. Seed the Cloud corpus of real runs, scores, and experiments:
+
+   ```bash
+   DEMO_TARGET=cloud npm run demo:seed-cloud
+   ```
+
+   The seeder is idempotent (deterministic event ids dedupe re-runs) and refuses to run
+   unless `DEMO_TARGET=cloud` and the keys are present. Use `--dry-run` (or `DRY_RUN=1`)
+   to print the planned events without sending anything.
+
+After seeding, the Cloud dashboard shows: a triage run with a run-level localization
+score, a deferred outcome score on the run when an RCA is saved, and a real
+`group.experiment` with per-variant scores. Sessions remain faked.
+
 ## Production Inngest
 
 The app is wired for Inngest Cloud the same way the swag-store apps are:
@@ -81,9 +152,11 @@ The app is wired for Inngest Cloud the same way the swag-store apps are:
   production so copied Cloud env vars do not break local rehearsals.
 
 For Vercel production, set these environment variables on the project and leave
-`INNGEST_DEV` unset:
+`INNGEST_DEV` unset. To emit the real eval primitives, also set `DEMO_TARGET=cloud`
+(omit it or set `local` to keep the faked path):
 
 ```txt
+DEMO_TARGET=cloud
 INNGEST_EVENT_KEY=
 INNGEST_SIGNING_KEY=
 INNGEST_ENCRYPTION_KEY=

@@ -1,10 +1,12 @@
 import { encryptionMiddleware } from "@inngest/middleware-encryption";
 import { Inngest, eventType, staticSchema } from "inngest";
+import { scoreMiddleware } from "inngest/experimental";
+import { isCloud } from "@/lib/demo-target";
 import type { DemoFlags } from "@/lib/demo-flags";
 
 // ── 1. incident arrives → triggers the agent ──────────────────────────────
 export type IncidentReceivedData = {
-  incidentId: string; // e.g. "EXE-1737" — must match an entry in incidents.ts
+  incidentId: string; // e.g. "EXE-1737"; must match an entry in incidents.ts
   title: string;
   body: string;
   flags: DemoFlags;
@@ -55,11 +57,48 @@ export const incidentSaved = eventType("agent/incident.saved", {
   schema: staticSchema<IncidentSavedData>(),
 });
 
-const middleware = process.env.INNGEST_ENCRYPTION_KEY
-  ? [encryptionMiddleware({ key: process.env.INNGEST_ENCRYPTION_KEY })]
-  : [];
+// ── 5. Act 3 experiment bake-off request (drives group.experiment) ─────────
+export type ExperimentRequestedData = {
+  incidentId: string; // corpus incident the bake-off runs over
+  clientRunId?: string; // optional UI correlation id
+  source: "booth-demo";
+};
+
+export const experimentRequested = eventType("agent/experiment.requested", {
+  schema: staticSchema<ExperimentRequestedData>(),
+});
+
+// scoreMiddleware() is REQUIRED for ctx.step.score to exist. It is safe to
+// register in BOTH modes: it only adds the step.score extension; the local
+// (faked) path simply never calls it. Registering it unconditionally keeps the
+// client shape identical across modes and avoids type drift.
+//
+// TYPING NOTE: ctx.step.score only surfaces when the client's `middleware`
+// TYPE is a tuple whose FIRST element is the literal `scoreMiddleware()` return
+// type — the SDK's ApplyAllMiddlewareCtxExtensions<TMw> only fires for
+// `[Middleware.Class, ...Middleware.Class[]]`, never for a widened
+// `Middleware.Class[]`. The `Inngest<const TClientOpts ...>` constructor
+// captures the options object's literal types, so the array must be written as
+// an INLINE literal whose first element is statically `scoreMiddleware()`.
+//   - A ternary (`key ? [score, enc] : [score]`) widens to a union of tuples
+//     and the extension is LOST.
+//   - A conditional SPREAD *after* a fixed first element keeps the head literal:
+//     the variadic tail degrades to `Middleware.Class[]`, which still satisfies
+//     the `[Middleware.Class, ...Middleware.Class[]]` shape. That's the form
+//     used below.
+const encryptionKey = process.env.INNGEST_ENCRYPTION_KEY;
 
 export const inngest = new Inngest({
   id: "incident-triage-booth-demo",
-  middleware,
+  // cloud ⇒ isDev:false ⇒ the SDK reads INNGEST_EVENT_KEY + INNGEST_SIGNING_KEY
+  // from env and talks to Inngest Cloud. local ⇒ isDev:true ⇒ dev server.
+  // Derived from the single DEMO_TARGET flag so cloud/dev can't drift. Do NOT
+  // also set INNGEST_DEV in cloud mode — let isDev drive it.
+  isDev: !isCloud,
+  middleware: [
+    scoreMiddleware(),
+    ...(encryptionKey
+      ? [encryptionMiddleware({ key: encryptionKey })]
+      : []),
+  ],
 });

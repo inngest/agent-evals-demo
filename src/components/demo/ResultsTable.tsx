@@ -4,7 +4,7 @@ import { Check, FileCode, FileText, Target, X } from "lucide-react";
 import type { TriageResult } from "@/components/demo/types";
 
 /**
- * The RCA + cited-files view (was the SQL ResultsTable). Renders the agent's
+ * The analysis + cited-files view (was the SQL ResultsTable). Renders the agent's
  * root-cause analysis markdown plus the list of cited files, each badged
  * against the incident's ground-truth fix files.
  */
@@ -22,11 +22,11 @@ export function ResultsTable({
       <div className="grid h-full min-h-0 place-items-center overflow-hidden border-t border-[var(--rule-soft)] bg-white">
         <div className="max-w-sm text-center">
           <div className="display text-2xl font-medium">
-            The RCA lands here.
+            The analysis lands here.
           </div>
           <p className="mt-2 text-sm leading-6 text-[var(--muted-copy)]">
-            Pick an incident and hit Investigate. The agent runs its tool loop
-            through Inngest and posts a root-cause analysis with cited files.
+            Pick a bug report and hit Investigate. The agent runs its repo,
+            Linear, Slack, code-suggestion, and PR tool loop through Inngest.
           </p>
           {isRunning ? (
             <div className="mx-auto mt-5 h-1 w-48 bg-[var(--cloud)] load-bar" />
@@ -39,16 +39,16 @@ export function ResultsTable({
   const truth = new Set(groundTruthFixFiles);
 
   return (
-    <div className="grid h-full min-h-0 overflow-hidden border-t border-[var(--rule-soft)] bg-white lg:grid-cols-[minmax(0,1fr)_300px]">
-      <section className="min-h-0 overflow-auto border-r border-[var(--rule-soft)] p-5">
+    <div className="grid h-full min-h-0 overflow-hidden border-t border-[var(--rule-soft)] bg-white lg:grid-cols-[minmax(0,1fr)_minmax(380px,0.62fr)]">
+      <section className="min-h-0 overflow-auto border-r border-[var(--rule-soft)] p-4">
         <div className="mono mb-3 flex items-center gap-2 text-[11px] uppercase text-[var(--muted-copy)]">
           <FileText className="size-3.5" />
-          Root-cause analysis
+          Code-triage analysis
         </div>
         <RcaMarkdown markdown={result.rca} />
       </section>
 
-      <aside className="grid min-h-0 content-start gap-5 overflow-auto bg-[var(--bone)] p-5">
+      <aside className="grid min-h-0 content-start gap-4 bg-[var(--bone)] p-4">
         <div>
           <div className="mono mb-3 flex items-center gap-2 text-[11px] uppercase text-[var(--muted-copy)]">
             <Target className="size-3.5" />
@@ -60,11 +60,11 @@ export function ResultsTable({
               return (
                 <li
                   key={file}
-                  className="flex items-center justify-between gap-2 border border-[var(--rule-soft)] bg-white px-3 py-2"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border border-[var(--rule-soft)] bg-white px-3 py-2"
                 >
-                  <span className="mono flex min-w-0 items-center gap-2 text-xs">
+                  <span className="mono flex min-w-0 items-start gap-2 text-xs leading-5">
                     <FileCode className="size-3.5 shrink-0 text-[var(--coral)]" />
-                    <span className="truncate">{file}</span>
+                    <span className="min-w-0 break-all">{file}</span>
                   </span>
                   <span
                     className={`mono inline-flex h-5 shrink-0 items-center gap-1 border px-1.5 text-[10px] uppercase ${
@@ -94,7 +94,7 @@ export function ResultsTable({
             {groundTruthFixFiles.map((file) => (
               <li
                 key={file}
-                className="mono truncate text-xs text-[var(--muted-copy)]"
+                className="mono break-all text-xs leading-5 text-[var(--muted-copy)]"
               >
                 {file}
               </li>

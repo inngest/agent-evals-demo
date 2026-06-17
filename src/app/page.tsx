@@ -1,8 +1,8 @@
-import { QueryConsole } from "@/components/demo/QueryConsole";
+import { IncidentDemo } from "@/components/demo/IncidentDemo";
 import { getHighlightedCodeSnippets } from "@/lib/highlight";
 
 export default async function Home() {
   const snippets = await getHighlightedCodeSnippets();
 
-  return <QueryConsole snippets={snippets} />;
+  return <IncidentDemo snippets={snippets} />;
 }

@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import {
-  getInngestDashboardUrl,
-  getInngestRunsUrl,
-} from "@/lib/inngest-dashboard";
+import { getDeepLink } from "@/lib/inngest-dashboard";
 import { getScoreHistory } from "@/lib/scoring";
+import { incidents } from "@/content/incidents";
+import { seededExperiment, seededSessions } from "@/content/seed-data";
 
 export async function GET() {
   const history = await getScoreHistory();
@@ -14,8 +13,8 @@ export async function GET() {
   const hasApiKey = Boolean(process.env.INNGEST_API_KEY);
   const hasInsightsQuery = Boolean(process.env.INNGEST_INSIGHTS_SCORE_QUERY);
   const hasSeedToken = Boolean(process.env.DEMO_SEED_TOKEN);
-  const dashboardUrl = getInngestDashboardUrl();
-  const runsUrl = getInngestRunsUrl();
+  const dashboardUrl = getDeepLink("envDashboard");
+  const runsUrl = getDeepLink("runTrace");
 
   return NextResponse.json({
     ok: true,
@@ -32,7 +31,7 @@ export async function GET() {
       hasApiKey,
       hasInsightsQuery,
       hasSeedToken,
-      hasRunsUrl: Boolean(process.env.NEXT_PUBLIC_INNGEST_RUNS_URL),
+      hasDashboardBase: Boolean(process.env.NEXT_PUBLIC_INNGEST_DASHBOARD_BASE),
       inngestEnv: process.env.INNGEST_ENV ?? null,
     },
     readiness: {
@@ -42,14 +41,14 @@ export async function GET() {
       demoOpsRequireToken: isProductionRuntime,
       demoOpsTokenConfigured: !isProductionRuntime || hasSeedToken,
       seedEndpointProtected: isProductionRuntime,
-      scoreHistoryBackedByInsights: history.source === "inngest-insights",
+      incidentCorpusReady: incidents.length === 12,
+      sessionsSeeded: seededSessions.length >= 1,
+      experimentSeeded: seededExperiment.cells.length > 0,
     },
     scoreHistory: {
       source: history.source,
       points: history.points.length,
       trendPoints: history.trend.length,
-      savedCount: history.savedCount,
-      discardedCount: history.discardedCount,
       updatedAt: history.updatedAt,
     },
   });

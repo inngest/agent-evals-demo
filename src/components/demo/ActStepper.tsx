@@ -33,14 +33,14 @@ export function ActStepper({
             aria-selected={isActive}
             data-active={isActive}
             onClick={() => onActChange(act.id)}
-            className={`demo-segment-button group flex flex-col items-start gap-0.5 px-3 py-2 text-left ${
+            className={`demo-segment-button act-step-tab group flex min-h-[56px] flex-col items-start justify-center gap-1 text-left ${
               index > 0 ? "border-l border-[var(--ink)]" : ""
             }`}
           >
-            <span className="mono text-[10px] uppercase tracking-wide opacity-70">
+            <span className="mono text-[10px] uppercase leading-none tracking-wide opacity-70">
               {act.kicker}
             </span>
-            <span className="display text-sm font-medium leading-tight">
+            <span className="display text-sm font-medium leading-5">
               {act.label}
             </span>
           </button>

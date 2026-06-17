@@ -11,7 +11,7 @@ export type ActMeta = {
 };
 
 // ── Main console tabs (Act 1/2 work surface) ────────────────────────────────
-export type DemoTab = "rca" | "trace" | "scores" | "code";
+export type DemoTab = "rca" | "trace" | "flow" | "code";
 
 // ── Run-state machine ───────────────────────────────────────────────────────
 export type RunPhase =
@@ -25,7 +25,7 @@ export type RunPhase =
 // Visual trace step rendered in TracePanel (mirrors the real Inngest steps).
 export type TraceStep = {
   id: string;
-  label: string; // e.g. "think-1", "tool: get_run"
+  label: string; // e.g. "Scope bug report", "Create Linear ticket"
   detail: string;
   kind: "think" | "tool" | "score" | "final";
   tool?: string; // tool name when kind === "tool"
@@ -47,7 +47,7 @@ export type TriggerResponse = {
   error?: string;
 };
 
-// ── Agent function resolved value (CONTRACT §1 — BACKEND produces) ──────────
+// Agent function resolved value (CONTRACT section 1, BACKEND produces).
 export type TriageResult = {
   incidentId: string;
   clientRunId: string;

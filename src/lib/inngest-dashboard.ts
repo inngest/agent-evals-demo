@@ -7,6 +7,16 @@
 // FRONTEND: import `getDeepLink` for all "open in Inngest" buttons. Do not
 // hardcode dashboard URLs in components.
 
+// Captured 2026-06-17 in app.inngest.com, org "Inngest Demo", env "Production":
+// - Env dashboard: https://app.inngest.com/env/production
+// - Cloud run trace: https://app.inngest.com/env/production/runs/01KVBA4ZSW0X10ZJEEZV9SN4HC
+// - Local run trace: http://localhost:8290/run?runID=01KVBAT0PDMF968YB8DWF0ZS5Q
+// - Scores: https://app.inngest.com/env/production/scores
+// - Experiments: https://app.inngest.com/env/production/experiments
+// - Insights query editor: https://app.inngest.com/env/production/insights
+// - Session: no session route was exposed in this env; /env/production/sessions
+//   rendered "Environment not found", so session links fall back to Runs.
+
 // ⬇⬇⬇ SWAP TO CLOUD URLS HERE ⬇⬇⬇
 // For the booth on local: leave as-is. For a cloud recording, set
 // NEXT_PUBLIC_INNGEST_DASHBOARD_BASE to https://app.inngest.com/env/<env>
@@ -33,15 +43,27 @@ export type DeepLinkIds = {
 // Each entry is a function of optional ids so deep-links can target a specific
 // run/session/experiment. All return absolute URLs.
 export const deepLinks: Record<DeepLinkKey, (ids?: DeepLinkIds) => string> = {
-  runTrace: (ids) => `${DASHBOARD_BASE}/runs/${ids?.runId ?? "demo-run"}`,
-  scoresOnTrace: (ids) =>
-    `${DASHBOARD_BASE}/runs/${ids?.runId ?? "demo-run"}?tab=scores`,
-  session: (ids) =>
-    `${DASHBOARD_BASE}/sessions/${ids?.sessionId ?? "demo-session"}`,
-  experiment: (ids) =>
-    `${DASHBOARD_BASE}/experiments/${ids?.experimentId ?? "demo-experiment"}`,
-  envDashboard: () => `${DASHBOARD_BASE}/functions`,
-  insights: () => `${DASHBOARD_BASE}/insights`,
+  runTrace: (ids) => {
+    if (isLocalDashboard()) {
+      return ids?.runId && looksLikeInngestRunId(ids.runId)
+        ? `${DASHBOARD_BASE}/run?runID=${encodeURIComponent(ids.runId)}`
+        : joinDashboardPath("runs");
+    }
+
+    return joinDashboardPath("runs", ids?.runId ?? "demo-run");
+  },
+  scoresOnTrace: () =>
+    isLocalDashboard() ? joinDashboardPath("runs") : joinDashboardPath("scores"),
+  // SESSIONS: FAKED in both local and cloud modes this pass. Placeholder URL
+  // (falls back to Runs) in both modes. BLOCKED: needs the unified
+  // scoring+sessions SDK tag (pr-1547 / base 4.6.1). Owner: Jakob. Do NOT wire
+  // a real sessions deep-link against pr-1521 — sessions do not exist there.
+  session: () => joinDashboardPath("runs"),
+  experiment: () =>
+    isLocalDashboard() ? joinDashboardPath("runs") : joinDashboardPath("experiments"),
+  envDashboard: () => DASHBOARD_BASE,
+  insights: () =>
+    isLocalDashboard() ? DASHBOARD_BASE : joinDashboardPath("insights"),
 };
 
 export function getDeepLink(key: DeepLinkKey, ids?: DeepLinkIds): string {
@@ -57,5 +79,33 @@ export function getInngestDashboardUrl(): string {
 }
 
 export function getInngestRunsUrl(): string {
-  return `${DASHBOARD_BASE}/runs`;
+  return joinDashboardPath("runs");
+}
+
+function joinDashboardPath(...parts: string[]): string {
+  const base = DASHBOARD_BASE.replace(/\/+$/, "");
+  const suffix = parts
+    .filter((part) => part.length > 0)
+    .map((part) => encodePathPart(part))
+    .join("/");
+
+  return suffix ? `${base}/${suffix}` : base;
+}
+
+function encodePathPart(part: string): string {
+  return part
+    .split("/")
+    .filter(Boolean)
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+}
+
+function isLocalDashboard(): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(
+    DASHBOARD_BASE
+  );
+}
+
+function looksLikeInngestRunId(id: string): boolean {
+  return /^01[A-Z0-9]{24}$/.test(id);
 }

@@ -1,9 +1,9 @@
 /**
- * Mock LLM — deterministic agent driver for the incident-triage demo.
+ * Mock LLM: deterministic agent driver for the code-triage demo.
  *
- * There is no Anthropic key at the booth. Given the active incident and the
+ * There is no Anthropic key at the booth. Given the active bug report and the
  * current 1-based loop iteration, this returns the next assistant turn:
- *   - while the incident's `toolPlan` has remaining steps → a `tool_use` turn
+ *   - while the bug's `toolPlan` has remaining steps → a `tool_use` turn
  *     emitting the next planned tool call;
  *   - once the plan is exhausted → a `final` turn carrying the canned RCA and
  *     its cited files.
@@ -50,7 +50,7 @@ export async function nextTurn(args: {
   if (!incident) {
     return {
       type: "final",
-      rca: `**Summary** — Unknown incident \`${args.incidentId}\`; cannot investigate.`,
+      rca: `**Summary:** Unknown incident \`${args.incidentId}\`; cannot investigate.`,
       citedFiles: [],
     };
   }

@@ -7,35 +7,68 @@ import type { HighlightedCodeSnippet } from "@/lib/highlight";
 export function CodeView({
   snippets,
   activeId: controlledId,
+  variant = "full",
 }: {
   snippets: HighlightedCodeSnippet[];
   // Optional: let the shell sync the visible snippet to the current act.
   activeId?: HighlightedCodeSnippet["id"];
+  variant?: "full" | "rail";
 }) {
   const [internalId, setInternalId] = React.useState<
     HighlightedCodeSnippet["id"]
   >(snippets[0]?.id);
+  const isControlled = controlledId !== undefined;
   const activeId = controlledId ?? internalId;
-  const setActiveId = setInternalId;
-  const [codeFontSize, setCodeFontSize] = React.useState(15);
+  const [codeFontSize, setCodeFontSize] = React.useState(
+    variant === "rail" ? 13 : 15
+  );
   const active = snippets.find((snippet) => snippet.id === activeId) ?? snippets[0];
   const canZoomOut = codeFontSize > 12;
   const canZoomIn = codeFontSize < 20;
+  const showPicker = variant === "full" && !isControlled;
+
+  if (!active) {
+    return null;
+  }
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-white">
-      <div className="grid gap-3 border-b border-[var(--rule-soft)] p-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div
+        className={
+          variant === "rail"
+            ? "grid gap-3 border-b border-[var(--rule-soft)] p-4"
+            : "grid gap-3 border-b border-[var(--rule-soft)] p-4 lg:grid-cols-[220px_minmax(0,1fr)]"
+        }
+      >
         <div>
           <div className="mono flex items-center gap-2 text-[11px] uppercase text-[var(--muted-copy)]">
             <Code2 className="size-3.5" />
             Curated code
           </div>
-          <div className="display mt-1 text-xl font-medium">
+          <div
+            className={
+              variant === "rail"
+                ? "display mt-1 text-lg font-medium"
+                : "display mt-1 text-xl font-medium"
+            }
+          >
             {active.eyebrow}
           </div>
         </div>
-        <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <p className="max-w-2xl text-sm leading-6 text-[var(--muted-copy)]">
+        <div
+          className={
+            variant === "rail"
+              ? "grid min-w-0 gap-3"
+              : "flex min-w-0 flex-col gap-3 lg:flex-row lg:items-start lg:justify-between"
+          }
+        >
+          <p
+            className={
+              variant === "rail"
+                ? "text-xs leading-5 text-[var(--muted-copy)]"
+                : "max-w-2xl text-sm leading-6 text-[var(--muted-copy)]"
+            }
+          >
             {active.description}
           </p>
           <div className="flex shrink-0 flex-wrap items-start gap-3">
@@ -68,19 +101,21 @@ export function CodeView({
                 <Plus className="size-4" />
               </button>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {snippets.map((snippet) => (
-                <button
-                  key={snippet.id}
-                  type="button"
-                  onClick={() => setActiveId(snippet.id)}
-                  data-active={activeId === snippet.id}
-                  className="demo-segment-button mono h-9 min-w-20 px-3 text-center text-[11px] uppercase"
-                >
-                  {snippet.label}
-                </button>
-              ))}
-            </div>
+            {showPicker ? (
+              <div className="flex flex-wrap gap-2">
+                {snippets.map((snippet) => (
+                  <button
+                    key={snippet.id}
+                    type="button"
+                    onClick={() => setInternalId(snippet.id)}
+                    data-active={activeId === snippet.id}
+                    className="demo-segment-button mono h-9 min-w-20 px-3 text-center text-[11px] uppercase"
+                  >
+                    {snippet.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
