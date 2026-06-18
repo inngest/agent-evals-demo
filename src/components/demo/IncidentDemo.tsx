@@ -141,28 +141,36 @@ export function IncidentDemo({ snippets }: IncidentDemoProps) {
       setToast("Local Inngest is not reachable. Foreground demo will still complete.");
     }
 
-    for (let i = 0; i < 18; i += 1) {
+    // Thread a resolved real Inngest run id (cloud mode) into the link state so
+    // "Open trace" opens this exact run. Returns true once it's a real run id.
+    const realRunId = /^01[A-Z0-9]{24}$/;
+    const applyResolvedLink = (status: RunStatusResponse): boolean => {
+      if (!status.runId || !status.traceUrl) return false;
+      const resolvedRunId = status.runId;
+      const resolvedTraceUrl = status.traceUrl;
+      setTrigger((prev) =>
+        prev
+          ? { ...prev, runId: resolvedRunId, traceUrl: resolvedTraceUrl }
+          : prev
+      );
+      return realRunId.test(resolvedRunId);
+    };
+
+    let linkResolved = false;
+    let completed = false;
+
+    for (let i = 0; i < 18 && !completed; i += 1) {
       await wait(650);
       const status = await fetchRunStatus(triggerResponse, activeIncident.id);
-
-      // Once run-status resolves the real Inngest run id (cloud mode), thread
-      // it into the link state so "Open trace" opens this exact run.
-      if (status.runId && status.traceUrl) {
-        const resolvedRunId = status.runId;
-        const resolvedTraceUrl = status.traceUrl;
-        setTrigger((prev) =>
-          prev
-            ? { ...prev, runId: resolvedRunId, traceUrl: resolvedTraceUrl }
-            : prev
-        );
-      }
+      linkResolved = applyResolvedLink(status) || linkResolved;
 
       if (status.status === "completed" && status.result) {
         setResult(status.result);
         setOutcomeScore(status.result.localizationScore);
         setPhase("complete");
         setActiveTab("rca");
-        return;
+        completed = true;
+        break;
       }
 
       if (status.status === "failed") {
@@ -174,8 +182,20 @@ export function IncidentDemo({ snippets }: IncidentDemoProps) {
       setPhase(status.hadRetry ? "retrying" : "investigating");
     }
 
-    setPhase("error");
-    setToast("Run status timed out");
+    if (!completed) {
+      setPhase("error");
+      setToast("Run status timed out");
+      return;
+    }
+
+    // The faked UI completes in ~5s, but the real cloud run id can take a few
+    // more seconds to be queryable. Keep resolving in the background (no UI
+    // impact) so "Open trace" lands on the exact run. No-op in local mode.
+    for (let j = 0; j < 16 && !linkResolved; j += 1) {
+      await wait(1500);
+      const status = await fetchRunStatus(triggerResponse, activeIncident.id);
+      linkResolved = applyResolvedLink(status);
+    }
   }
 
   async function score(signal: "up" | "down" | "saved" | "discarded") {
