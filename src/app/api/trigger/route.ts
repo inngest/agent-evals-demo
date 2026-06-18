@@ -91,6 +91,7 @@ export async function POST(request: Request) {
       dashboardUrl,
       traceUrl,
       runId: clientRunId,
+      inngestEventId,
     });
   } catch (error) {
     const message =

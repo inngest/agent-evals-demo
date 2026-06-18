@@ -1144,6 +1144,11 @@ async function fetchRunStatus(trigger: TriggerResponse, incidentId: string) {
   const url = new URL("/api/run-status", window.location.origin);
   url.searchParams.set("clientRunId", trigger.clientRunId);
   url.searchParams.set("incidentId", incidentId);
+  if (trigger.inngestEventId) {
+    // Carry the real event id so run-status can resolve the live run id even
+    // if it lands on a different serverless instance (no shared store).
+    url.searchParams.set("inngestEventId", trigger.inngestEventId);
+  }
   const response = await fetch(url, { cache: "no-store" });
 
   if (!response.ok) {

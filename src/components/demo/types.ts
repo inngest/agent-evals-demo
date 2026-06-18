@@ -44,6 +44,9 @@ export type TriggerResponse = {
   dashboardUrl: string;
   traceUrl: string;
   runId?: string;
+  // Real Inngest internal event id (from inngest.send), passed back to
+  // run-status so it can resolve the live run id without shared server state.
+  inngestEventId?: string;
   error?: string;
 };
 

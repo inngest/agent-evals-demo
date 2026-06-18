@@ -28,11 +28,14 @@ type StoredRun = {
  * callers fall back to the client-minted id.
  */
 async function resolveCloudRunId(
+  paramEventId: string | undefined,
   stored: StoredRun | undefined
 ): Promise<string | undefined> {
-  if (!isCloud || !stored) return undefined;
-  if (stored.inngestRunId) return stored.inngestRunId;
-  const eventId = stored.inngestEventId;
+  if (!isCloud) return undefined;
+  if (stored?.inngestRunId) return stored.inngestRunId;
+  // Prefer the event id passed from the client (survives serverless instance
+  // hops); fall back to the in-memory store when present.
+  const eventId = paramEventId || stored?.inngestEventId;
   const signingKey = process.env.INNGEST_SIGNING_KEY;
   if (!eventId || !signingKey) return undefined;
   const base = process.env.INNGEST_API_BASE_URL || "https://api.inngest.com";
@@ -45,7 +48,7 @@ async function resolveCloudRunId(
     const json = (await res.json()) as { data?: Array<{ run_id?: string }> };
     const realRunId = json?.data?.[0]?.run_id;
     if (realRunId) {
-      stored.inngestRunId = realRunId; // cache on the shared store entry
+      if (stored) stored.inngestRunId = realRunId; // cache when a store entry exists
       return realRunId;
     }
   } catch {
@@ -99,7 +102,10 @@ async function buildStatus(
   const clientRunIdValue = clientRunId || stored?.clientRunId || "demo-run";
   // Prefer the real Inngest run id (cloud) so deep-links open the exact run;
   // fall back to the client-minted id locally or before the run is resolvable.
-  const cloudRunId = await resolveCloudRunId(stored);
+  const cloudRunId = await resolveCloudRunId(
+    params.get("inngestEventId") ?? undefined,
+    stored
+  );
   const runId = cloudRunId ?? clientRunIdValue;
   const traceUrl = getDeepLink("runTrace", { runId });
 
