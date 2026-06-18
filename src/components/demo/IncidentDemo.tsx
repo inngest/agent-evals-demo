@@ -145,6 +145,18 @@ export function IncidentDemo({ snippets }: IncidentDemoProps) {
       await wait(650);
       const status = await fetchRunStatus(triggerResponse, activeIncident.id);
 
+      // Once run-status resolves the real Inngest run id (cloud mode), thread
+      // it into the link state so "Open trace" opens this exact run.
+      if (status.runId && status.traceUrl) {
+        const resolvedRunId = status.runId;
+        const resolvedTraceUrl = status.traceUrl;
+        setTrigger((prev) =>
+          prev
+            ? { ...prev, runId: resolvedRunId, traceUrl: resolvedTraceUrl }
+            : prev
+        );
+      }
+
       if (status.status === "completed" && status.result) {
         setResult(status.result);
         setOutcomeScore(status.result.localizationScore);

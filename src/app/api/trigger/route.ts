@@ -11,6 +11,11 @@ type StoredRun = {
   requestedAt: string;
   sent: boolean;
   error?: string;
+  // Real Inngest internal event id (returned by inngest.send) and the run id
+  // resolved from it via the REST API in cloud mode. Used to deep-link the
+  // live run to its exact trace in the cloud dashboard.
+  inngestEventId?: string;
+  inngestRunId?: string;
 };
 
 const globalRunStore = globalThis as typeof globalThis & {
@@ -47,7 +52,7 @@ export async function POST(request: Request) {
   const traceUrl = getDeepLink("runTrace", { runId: clientRunId });
 
   try {
-    await inngest.send(
+    const sendResult = await inngest.send(
       incidentReceived.create(
         {
           incidentId: incident.id,
@@ -62,12 +67,19 @@ export async function POST(request: Request) {
       )
     );
 
+    // inngest.send returns the real internal event id(s); keep the first so
+    // run-status can resolve the live run id from it in cloud mode.
+    const ids = (sendResult as { ids?: string[] } | undefined)?.ids;
+    const inngestEventId =
+      Array.isArray(ids) && ids.length > 0 ? ids[0] : undefined;
+
     runStore.set(clientRunId, {
       incidentId: incident.id,
       clientRunId,
       eventId,
       requestedAt,
       sent: true,
+      inngestEventId,
     });
 
     return NextResponse.json({

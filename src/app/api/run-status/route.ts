@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { defaultIncidentId, getIncident } from "@/content/incidents";
 import { localizationScore } from "@/lib/scoring";
 import { getDeepLink } from "@/lib/inngest-dashboard";
+import { isCloud } from "@/lib/demo-target";
 import type { RunStatusResponse, TriageResult } from "@/components/demo/types";
 
 type StoredRun = {
@@ -11,7 +12,47 @@ type StoredRun = {
   requestedAt: string;
   sent: boolean;
   error?: string;
+  // Real Inngest internal event id (from inngest.send) + the run id resolved
+  // from it via the REST API in cloud mode. Lets the live run deep-link to its
+  // exact trace instead of the client-minted id.
+  inngestEventId?: string;
+  inngestRunId?: string;
 };
+
+/**
+ * In cloud mode, resolve the real Inngest run id for a triggered event so the
+ * "Open trace" link lands on the exact run. Looks up the run by the internal
+ * event id via the REST API (authenticated with the signing key), and caches
+ * the result on the store entry so repeated polls only call the API once.
+ * Returns undefined in local mode, before the run exists, or on any error —
+ * callers fall back to the client-minted id.
+ */
+async function resolveCloudRunId(
+  stored: StoredRun | undefined
+): Promise<string | undefined> {
+  if (!isCloud || !stored) return undefined;
+  if (stored.inngestRunId) return stored.inngestRunId;
+  const eventId = stored.inngestEventId;
+  const signingKey = process.env.INNGEST_SIGNING_KEY;
+  if (!eventId || !signingKey) return undefined;
+  const base = process.env.INNGEST_API_BASE_URL || "https://api.inngest.com";
+  try {
+    const res = await fetch(`${base}/v1/events/${eventId}/runs`, {
+      headers: { Authorization: `Bearer ${signingKey}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return undefined;
+    const json = (await res.json()) as { data?: Array<{ run_id?: string }> };
+    const realRunId = json?.data?.[0]?.run_id;
+    if (realRunId) {
+      stored.inngestRunId = realRunId; // cache on the shared store entry
+      return realRunId;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
 
 const globalRunStore = globalThis as typeof globalThis & {
   __incidentTriageRuns?: Map<string, StoredRun>;
@@ -23,7 +64,7 @@ const runStore =
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  return NextResponse.json(buildStatus(url.searchParams));
+  return NextResponse.json(await buildStatus(url.searchParams));
 }
 
 export async function POST(request: Request) {
@@ -36,10 +77,12 @@ export async function POST(request: Request) {
     }
   }
 
-  return NextResponse.json(buildStatus(params));
+  return NextResponse.json(await buildStatus(params));
 }
 
-function buildStatus(params: URLSearchParams): RunStatusResponse {
+async function buildStatus(
+  params: URLSearchParams
+): Promise<RunStatusResponse> {
   const clientRunId = params.get("clientRunId") ?? "";
   const stored = clientRunId ? runStore.get(clientRunId) : undefined;
   const incidentId =
@@ -53,7 +96,11 @@ function buildStatus(params: URLSearchParams): RunStatusResponse {
   const elapsed = Date.now() - new Date(requestedAt).getTime();
   const completionMs = 3600 + (incident?.toolPlan.length ?? 6) * 260;
   const retryAtMs = Math.min(1800, completionMs - 1200);
-  const runId = clientRunId || stored?.clientRunId || "demo-run";
+  const clientRunIdValue = clientRunId || stored?.clientRunId || "demo-run";
+  // Prefer the real Inngest run id (cloud) so deep-links open the exact run;
+  // fall back to the client-minted id locally or before the run is resolvable.
+  const cloudRunId = await resolveCloudRunId(stored);
+  const runId = cloudRunId ?? clientRunIdValue;
   const traceUrl = getDeepLink("runTrace", { runId });
 
   if (!incident) {
@@ -97,7 +144,7 @@ function buildStatus(params: URLSearchParams): RunStatusResponse {
 
   const result: TriageResult = {
     incidentId: incident.id,
-    clientRunId: runId,
+    clientRunId: clientRunIdValue,
     rca: incident.rca,
     citedFiles: incident.citedFiles,
     iterations: incident.toolPlan.length + 1,
