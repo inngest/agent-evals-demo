@@ -3,8 +3,8 @@
  *
  * Triggered by `agent/experiment.requested` (one per corpus incident; SEED's
  * cloud seeder emits these). Runs a real A/B bake-off between two models over
- * the same incident, scoring INSIDE each variant so the live inngest.score()
- * auto-associates with the experiment + selected variant in the dashboard.
+ * the same incident, then scoring the selected variant with experimentRef so
+ * the dashboard can attribute the score to the experiment over time.
  *
  * Local mode never fires this — Act 3 reads `seededExperiment` from
  * seed-data.ts there. This function only runs in cloud (it's served in both
@@ -28,32 +28,31 @@ export const experimentBakeoff = inngest.createFunction(
     const truth = incident?.groundTruthFixFiles ?? [];
     const cited = incident?.citedFiles ?? [];
 
-    const { result, variant } = await group.experiment(
+    const { result, variant, experimentRef } = await group.experiment(
       "localization-bakeoff",
       {
         variants: {
           "gpt-5.5": () =>
             step.run("gpt-5.5", async () => {
-              const value = localizationScore(cited, truth);
-              // Live score, no ids → targets the current step, so it
-              // auto-associates with this experiment + variant.
-              await inngest.score({ name: "rca_localization", value });
-              return value;
+              return localizationScore(cited, truth);
             }),
           "claude-opus-4.8": () =>
             step.run("claude-opus-4.8", async () => {
-              const value = localizationScore(cited, truth);
-              await inngest.score({ name: "rca_localization", value });
-              return value;
+              return localizationScore(cited, truth);
             }),
         },
         // weighted: run-id seeded + deterministic. Swap to
         // experiment.bucket(incidentId) if the SAME incident should always hit
         // the same model across the corpus — one-liner change on `select`.
         select: experiment.weighted({ "gpt-5.5": 50, "claude-opus-4.8": 50 }),
-        withVariant: true,
       }
     );
+
+    await inngest.score.experiment({
+      experiment: experimentRef,
+      name: "rca_localization",
+      value: result,
+    });
 
     return { incidentId, variant, score: result };
   }

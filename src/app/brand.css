@@ -172,7 +172,8 @@ button.demo-segment-button:hover {
   box-shadow: inset 0 0 0 1px var(--coral);
 }
 
-button.demo-segment-button[data-active="true"] {
+button.demo-segment-button[data-active="true"],
+button.demo-segment-button[data-active="true"]:hover {
   background: var(--ink);
   color: var(--paper);
   border-color: var(--ink);
@@ -204,7 +205,8 @@ button.demo-main-tab-button:hover {
   box-shadow: inset 0 0 0 1px var(--coral);
 }
 
-button.demo-main-tab-button[data-active="true"] {
+button.demo-main-tab-button[data-active="true"],
+button.demo-main-tab-button[data-active="true"]:hover {
   position: relative;
   z-index: 2;
   bottom: -1px;

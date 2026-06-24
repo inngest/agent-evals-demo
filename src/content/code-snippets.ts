@@ -7,224 +7,203 @@ export type CodeSnippet = {
   eyebrow: string;
   description: string;
   code: string;
-  highlightTerms?: string[];
 };
 
-const imports = `import { experiment } from "inngest";
-import {
-  inngest,
-  researchRunRequested,
-  researchRunCompleted,
-  researchFeedbackRecorded,
-  researchExperimentRequested,
-} from "@/inngest/client";
-import { runResearchCall, modelExperimentResult } from "@/lib/mock-research";`;
+const act1Code = `import { inngest, researchRunRequested } from "@/inngest/client";
+import { fetchResearchCorpus, synthesizeBrief } from "@/lib/research";
 
-const durableResearchAgent = `export const researchAgent = inngest.createFunction(
+export const researchAgent = inngest.createFunction(
   {
     id: "research-agent",
     retries: 4,
+    // @demo-highlight-start
     triggers: [
       researchRunRequested,
       { cron: "TZ=America/Los_Angeles 0 9 */6 * *" },
     ],
-  },
-  async ({ event, step, attempt, runId }) => {
-    if (attempt === 0) resetResearchCrashState();
-
-    const product = await step.run("load-product-context", () =>
-      runResearchCall("load-product-context", { attempt })
-    );
-    const notion = await step.run("fetch-notion-roadmap", () =>
-      runResearchCall("fetch-notion-roadmap", { attempt })
-    );
-    const confluence = await step.run("fetch-confluence-rfps", () =>
-      runResearchCall("fetch-confluence-rfps", { attempt })
-    );
-    const docs = await step.run("fetch-google-docs-notes", () =>
-      runResearchCall("fetch-google-docs-notes", { attempt })
-    );
-    const slack = await step.run("fetch-slack-win-loss", () =>
-      runResearchCall("fetch-slack-win-loss", { attempt })
-    );
-    const crm = await step.run("fetch-crm-deals", () =>
-      runResearchCall("fetch-crm-deals", { attempt })
-    );
-    const support = await step.run("fetch-support-tickets", () =>
-      runResearchCall("fetch-support-tickets", { attempt })
-    );
-    const churn = await step.run("fetch-churn-reasons", () =>
-      runResearchCall("fetch-churn-reasons", { attempt })
-    );
-    const pricing = await step.run("fetch-pricing-pages", () =>
-      runResearchCall("fetch-pricing-pages", { attempt })
-    );
-
-    // This API returns a 503 once. Inngest retries this boundary,
-    // while every successful step above replays from memoized state.
-    const changelog = await step.run("fetch-competitor-changelog", () =>
-      runResearchCall("fetch-competitor-changelog", { attempt })
-    );
-
-    const web = await step.run("run-parallel-web-search", () =>
-      runResearchCall("run-parallel-web-search", { attempt })
-    );
-    const aiSearch = await step.run("run-ai-search", () =>
-      runResearchCall("run-ai-search", { attempt })
-    );
-    const g2 = await step.run("query-g2-reviews", () =>
-      runResearchCall("query-g2-reviews", { attempt })
-    );
-    const github = await step.run("query-github-issues", () =>
-      runResearchCall("query-github-issues", { attempt })
-    );
-    const forum = await step.run("query-community-forum", () =>
-      runResearchCall("query-community-forum", { attempt })
-    );
-    const normalized = await step.run("normalize-evidence", () =>
-      normalizeEvidence({ product, notion, confluence, docs, slack, crm, support, churn, pricing, changelog, web, aiSearch, g2, github, forum })
-    );
-    const ranked = await step.run("rank-findings", () =>
-      rankFindings(normalized)
-    );
-    const brief = await step.run("synthesize-brief", () =>
-      writeResearchBrief(ranked)
-    );
-    await step.run("publish-brief", () => publishToNotion(brief));
-    await step.run("notify-stakeholders", () => notifySlack(brief));
-
-    return { runId, brief };
-  }
-);`;
-
-const scoreAndSessionAddition = `// ACT 2 ADDITION: two lines turn this autonomous run into eval data.
-const quality = await step.run("evaluate-research-quality", () =>
-  evaluateResearchQuality({ brief, ranked })
-);
-
-await step.sendEvent(
-  "score-and-session",
-  researchRunCompleted.create({
-    researchRunId: event.data.researchRunId,
-    parentRunId: runId,
-    sessionId: "sess-competitive-research-q3",
-    topic: event.data.topic,
-    model: event.data.model,
-    qualityScore: quality.value,
-    tokenCount: quality.tokenCount,
-    costUsd: quality.costUsd,
-    sources: quality.sources,
-    findings: quality.findings,
-    completedAt: new Date().toISOString(),
-    source: "booth-demo",
-  })
-);`;
-
-const scoreFunction = `export const researchScoreRun = inngest.createFunction(
-  {
-    id: "research-score-run",
-    triggers: [researchRunCompleted, researchFeedbackRecorded],
+    // @demo-highlight-end
   },
   async ({ event, step }) => {
-    if (event.name === "research/run.completed") {
-      await step.score("attach-research-quality-score", {
-        runId: event.data.parentRunId,
-        name: "research_quality",
-        value: event.data.qualityScore,
-      });
+    // Internal systems: Notion, Confluence, Google Docs, Slack, CRM.
+    // @demo-highlight-start
+    const internalContext = await step.run("load-internal-context", () =>
+      fetchResearchCorpus.internal({
+        topic: event.data.topic,
+        sessionId: event.data.sessionId,
+      })
+    );
+    // @demo-highlight-end
 
-      await step.score("attach-research-cost-score", {
-        runId: event.data.parentRunId,
-        name: "research_cost_usd",
-        value: event.data.costUsd,
-      });
-    }
+    // This API returns a 503 once. Inngest retries this step while every
+    // successful step above replays from memoized state.
+    // @demo-highlight-start
+    const changelog = await step.run("fetch-competitor-changelog", () =>
+      fetchResearchCorpus.competitorChangelog(event.data.competitors)
+    );
+    // @demo-highlight-end
 
-    return { sessionId: event.data.sessionId };
+    // ...support tickets, pricing pages, web search, AI search, G2, GitHub...
+
+    const brief = await step.run("synthesize-brief", () =>
+      synthesizeBrief({
+        model: "gpt-5.5",
+        internalContext,
+        changelog,
+      })
+    );
+
+    return { researchRunId: event.data.researchRunId, brief };
   }
 );`;
 
-const experimentFunction = `export const researchExperimentBakeoff = inngest.createFunction(
-  {
-    id: "research-experiment-bakeoff",
-    triggers: [researchExperimentRequested],
-  },
-  async ({ event, step, group }) => {
-    const { result, variant } = await group.experiment(
+const act2Code = `import { staticSchema } from "inngest";
+import { createScorer } from "inngest/experimental";
+import { inngest, researchRunRequested } from "@/inngest/client";
+import {
+  fetchResearchCorpus,
+  gradeResearchBrief,
+  synthesizeBrief,
+  type ResearchBrief,
+} from "@/lib/research";
+
+export const researchAgent = inngest.createFunction(
+  { id: "research-agent", triggers: [researchRunRequested] },
+  async ({ event, step, defer }) => {
+    const internalContext = await step.run("load-internal-context", () =>
+      fetchResearchCorpus.internal({ topic: event.data.topic })
+    );
+
+    const brief = await step.run("synthesize-brief", () =>
+      synthesizeBrief({ model: "gpt-5.5", internalContext })
+    );
+
+    // @demo-highlight-start
+    defer("score-brief-quality", {
+      function: researchQualityScorer,
+      data: {
+        researchRunId: event.data.researchRunId,
+        brief,
+        sources: internalContext.sources,
+      },
+    });
+
+    defer("score-saved-outcome", {
+      function: researchSavedOutcomeScorer,
+      data: { researchRunId: event.data.researchRunId },
+    });
+    // @demo-highlight-end
+
+    return { researchRunId: event.data.researchRunId, brief };
+  }
+);
+
+type QualityInput = {
+  researchRunId: string;
+  brief: ResearchBrief;
+  sources: string[];
+};
+
+// @demo-highlight-start
+export const researchQualityScorer = createScorer(
+  inngest,
+  { id: "research-quality-scorer", schema: staticSchema<QualityInput>() },
+  async ({ event, step }) => {
+    const rubric = await step.run("grade-against-rubric", () =>
+      gradeResearchBrief(event.data.brief, event.data.sources)
+    );
+
+    return { name: "research_quality", value: rubric.score };
+  }
+);
+// @demo-highlight-end
+
+// @demo-highlight-start
+export const researchSavedOutcomeScorer = createScorer(
+  inngest,
+  { id: "research-saved-outcome-scorer" },
+  async ({ event, step }) => {
+    const saved = await step.waitForEvent("wait-for-brief-save", {
+      event: "research/brief.saved",
+      if: "async.data.researchRunId == event.data.researchRunId",
+      timeout: "7d",
+    });
+
+    return { name: "research_saved", value: Boolean(saved) };
+  }
+);
+// @demo-highlight-end`;
+
+const act3Code = `import { experiment } from "inngest";
+import { inngest, researchRunRequested } from "@/inngest/client";
+import { researchQualityScorer } from "@/inngest/scorers/research-quality-scorer";
+import { fetchResearchCorpus, synthesizeBrief } from "@/lib/research";
+
+export const researchAgent = inngest.createFunction(
+  { id: "research-agent", triggers: [researchRunRequested] },
+  async ({ event, step, group, defer }) => {
+    const evidence = await step.run("load-research-evidence", () =>
+      fetchResearchCorpus.all({ topic: event.data.topic })
+    );
+
+    // Act 1 used one durable model step here. Act 3 swaps that step for
+    // an experiment without changing the rest of the agent.
+    // @demo-highlight-start
+    const { result: brief, variant, experimentRef } = await group.experiment(
       "competitive-research-model-bakeoff",
       {
         variants: {
           "gpt-5.5": () =>
-            step.run("evaluate-gpt-5.5", async () => {
-              const outcome = modelExperimentResult("gpt-5.5");
-              await inngest.score({
-                name: "research_quality",
-                value: outcome.qualityScore,
-              });
-              await inngest.score({
-                name: "research_cost_usd",
-                value: outcome.costUsd,
-              });
-              return outcome;
-            }),
+            step.run("synthesize-gpt-5.5", () =>
+              synthesizeBrief({ model: "gpt-5.5", evidence })
+            ),
           "claude-opus-4.8": () =>
-            step.run("evaluate-claude-opus-4.8", async () => {
-              const outcome = modelExperimentResult("claude-opus-4.8");
-              await inngest.score({
-                name: "research_quality",
-                value: outcome.qualityScore,
-              });
-              await inngest.score({
-                name: "research_cost_usd",
-                value: outcome.costUsd,
-              });
-              return outcome;
-            }),
+            step.run("synthesize-claude-opus-4.8", () =>
+              synthesizeBrief({ model: "claude-opus-4.8", evidence })
+            ),
         },
         select: experiment.weighted({
           "gpt-5.5": 50,
           "claude-opus-4.8": 50,
         }),
-        withVariant: true,
       }
     );
+    // @demo-highlight-end
 
-    return {
-      experimentRunId: event.data.experimentRunId,
-      variant,
-      qualityScore: result.qualityScore,
-      tokenCount: result.tokenCount,
-      costUsd: result.costUsd,
-    };
+    // score.experiment() runs at function-body level, outside step.run().
+    // @demo-highlight-start
+    await inngest.score.experiment({
+      experiment: experimentRef,
+      name: "research_token_cost_usd",
+      value: brief.costUsd,
+    });
+
+    defer("score-brief-quality", {
+      function: researchQualityScorer,
+      experiment: experimentRef,
+      data: {
+        researchRunId: event.data.researchRunId,
+        brief,
+        selectedModel: variant,
+      },
+    });
+    // @demo-highlight-end
+
+    return { researchRunId: event.data.researchRunId, variant, brief };
   }
 );`;
 
 const insightQuery = `SELECT
-  model,
+  experiment_name,
+  variant,
   AVG(score.value) FILTER (WHERE score.name = 'research_quality') AS quality,
-  AVG(score.value) FILTER (WHERE score.name = 'research_cost_usd') AS cost,
+  AVG(score.value) FILTER (WHERE score.name = 'research_token_cost_usd') AS cost,
   AVG(run.duration_ms) AS latency,
   COUNT(*) AS research_runs
 FROM inngest.scores score
 JOIN inngest.runs run ON run.id = score.run_id
-WHERE run.function_id IN ('research-agent', 'research-experiment-bakeoff')
-GROUP BY model
+WHERE run.function_id = 'research-agent'
+GROUP BY experiment_name, variant
 ORDER BY quality DESC, cost ASC;`;
-
-const act1Code = [imports, durableResearchAgent].join("\n\n");
-const act2Code = [
-  imports,
-  durableResearchAgent.replace(
-    "    return { runId, brief };",
-    `    ${scoreAndSessionAddition.replace(/\n/g, "\n    ")}
-
-    return { runId, brief, quality };`
-  ),
-  scoreFunction,
-].join("\n\n");
-const act3Code = [imports, durableResearchAgent, scoreFunction, experimentFunction].join(
-  "\n\n"
-);
 
 export const codeSnippets: CodeSnippet[] = [
   {
@@ -233,32 +212,17 @@ export const codeSnippets: CodeSnippet[] = [
     label: "Act 1",
     eyebrow: "Durable research agent",
     description:
-      "A scheduled research agent touches internal tools, public APIs, and model calls as named durable steps. The changelog API fails once so the trace can show retry and replay.",
+      "A scheduled research agent moves through named durable steps. One competitor API fails once so the trace can show retry, replay, and memoized progress.",
     code: act1Code,
-    highlightTerms: [
-      'triggers: [',
-      '{ cron: "TZ=America/Los_Angeles 0 9 */6 * *" }',
-      'step.run("fetch-competitor-changelog"',
-      "returns a 503 once",
-    ],
   },
   {
     id: "act2",
     act: 2,
     label: "Act 2",
-    eyebrow: "Add scores and sessions",
+    eyebrow: "Add deferred scoring",
     description:
-      "The original agent stays intact. The highlighted addition evaluates the brief, emits a score/session event, and a second function attaches quality and cost to the run.",
+      "The original agent gets a small defer addition. createScorer turns rubric and outcome checks into durable score functions attached back to the parent run.",
     code: act2Code,
-    highlightTerms: [
-      "ACT 2 ADDITION",
-      'step.run("evaluate-research-quality"',
-      'step.sendEvent(',
-      'researchRunCompleted.create',
-      'id: "research-score-run"',
-      'step.score("attach-research-quality-score"',
-      'step.score("attach-research-cost-score"',
-    ],
   },
   {
     id: "act3",
@@ -266,16 +230,8 @@ export const codeSnippets: CodeSnippet[] = [
     label: "Act 3",
     eyebrow: "Add experimentation",
     description:
-      "The experiment function runs the same research task as a model bakeoff and scores quality plus token cost for each selected variant.",
+      "The same model step becomes group.experiment. experimentRef lets live and deferred scores land on the selected variant over time.",
     code: act3Code,
-    highlightTerms: [
-      'id: "research-experiment-bakeoff"',
-      'group.experiment(',
-      '"gpt-5.5"',
-      '"claude-opus-4.8"',
-      "experiment.weighted",
-      "research_cost_usd",
-    ],
   },
   {
     id: "act4",
@@ -285,7 +241,6 @@ export const codeSnippets: CodeSnippet[] = [
     description:
       "Optional close: because the agent, scores, and experiment all ran on Inngest, Insights can query the same execution data.",
     code: insightQuery,
-    highlightTerms: ["research_quality", "research_cost_usd", "GROUP BY model"],
   },
 ];
 

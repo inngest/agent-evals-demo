@@ -311,7 +311,7 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
                 <button
                   key={act.id}
                   type="button"
-                  data-active={activeAct === act.id}
+                  data-active={activeAct === act.id ? "true" : undefined}
                   className="demo-segment-button mono flex h-10 min-w-0 items-center justify-center gap-1.5 border-0 border-r border-[var(--ink)] px-1 text-[10px] uppercase last:border-r-0 data-[active=true]:bg-[var(--ink)] data-[active=true]:text-white"
                   onClick={() => setActiveAct(act.id)}
                 >
@@ -450,7 +450,7 @@ function ActTwoControls({
       <PanelTitle
         eyebrow="Act 2"
         title="Add scores and sessions"
-        detail="The same agent emits one event. A second function attaches quality, cost, and human feedback to the run."
+        detail="The same agent defers scorers. createScorer attaches quality, outcome, and human feedback to the run."
       />
       <div className="grid grid-cols-3 gap-2">
         <Button

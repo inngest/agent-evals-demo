@@ -342,7 +342,7 @@ export function BoothControlPanel({
                 <button
                   key={section.id}
                   type="button"
-                  data-active={activeSection === section.id}
+                  data-active={activeSection === section.id ? "true" : undefined}
                   className="demo-segment-button mono flex h-11 min-w-0 items-center justify-center gap-1 border-0 border-r border-[var(--ink)] px-1 text-[10px] uppercase last:border-r-0 data-[active=true]:bg-[var(--ink)] data-[active=true]:text-white"
                   onClick={() => setActiveSection(section.id)}
                 >
@@ -887,7 +887,7 @@ function CodeDrawer({
               <button
                 key={tab.id}
                 type="button"
-                data-active={activeCodeId === tab.id}
+                data-active={activeCodeId === tab.id ? "true" : undefined}
                 className="demo-segment-button mono h-9 border-0 border-r border-[var(--ink)] text-[10px] uppercase last:border-r-0 data-[active=true]:bg-[var(--ink)] data-[active=true]:text-white"
                 onClick={() => onActiveCodeChange(tab.id)}
               >

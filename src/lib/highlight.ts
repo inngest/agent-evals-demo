@@ -14,35 +14,52 @@ export async function getHighlightedCodeSnippets(): Promise<
       html: await codeToHtml(snippet.code, {
         lang: "ts",
         theme: "github-dark",
-        transformers: [highlightLines(snippet.highlightTerms ?? [])],
+        transformers: [highlightMarkedLines()],
       }),
     }))
   );
 }
 
-function highlightLines(terms: string[]): ShikiTransformer {
+const highlightStart = "// @demo-highlight-start";
+const highlightEnd = "// @demo-highlight-end";
+const highlightLine = "// @demo-highlight-line";
+
+function highlightMarkedLines(): ShikiTransformer {
+  const highlightedLines = new Set<number>();
+
   return {
     name: "demo-highlight-lines",
-    line(hast) {
-      const line = hastToText(hast);
+    preprocess(code) {
+      let isHighlighting = false;
+      let outputLine = 0;
+      const output: string[] = [];
 
-      if (terms.some((term) => line.includes(term))) {
+      for (const sourceLine of code.split("\n")) {
+        if (sourceLine.includes(highlightStart)) {
+          isHighlighting = true;
+          continue;
+        }
+
+        if (sourceLine.includes(highlightEnd)) {
+          isHighlighting = false;
+          continue;
+        }
+
+        const hasLineMarker = sourceLine.includes(highlightLine);
+        outputLine += 1;
+        output.push(sourceLine.replace(highlightLine, "").trimEnd());
+
+        if (isHighlighting || hasLineMarker) {
+          highlightedLines.add(outputLine);
+        }
+      }
+
+      return output.join("\n");
+    },
+    line(hast, line) {
+      if (highlightedLines.has(line)) {
         this.addClassToHast(hast, "code-line-highlight");
       }
     },
   };
-}
-
-type HastLike = {
-  type?: string;
-  value?: unknown;
-  children?: HastLike[];
-};
-
-function hastToText(node: HastLike): string {
-  if (typeof node.value === "string") {
-    return node.value;
-  }
-
-  return (node.children ?? []).map(hastToText).join("");
 }

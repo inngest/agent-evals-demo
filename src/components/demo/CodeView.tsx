@@ -152,7 +152,7 @@ export function CodeView({
                     key={snippet.id}
                     type="button"
                     onClick={() => setInternalId(snippet.id)}
-                    data-active={activeId === snippet.id}
+                    data-active={activeId === snippet.id ? "true" : undefined}
                     className="demo-segment-button mono h-9 min-w-20 px-3 text-center text-[11px] uppercase"
                   >
                     {snippet.label}

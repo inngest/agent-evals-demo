@@ -12,41 +12,34 @@ export const researchExperimentBakeoff = inngest.createFunction(
     triggers: [researchExperimentRequested],
   },
   async ({ event, step, group }) => {
-    const { result, variant } = await group.experiment(
+    const { result, variant, experimentRef } = await group.experiment(
       "competitive-research-model-bakeoff",
       {
         variants: {
           "gpt-5.5": () =>
             step.run("evaluate-gpt-5.5", async () => {
-              const outcome = modelExperimentResult("gpt-5.5");
-              await inngest.score({
-                name: "research_quality",
-                value: outcome.qualityScore,
-              });
-              await inngest.score({
-                name: "research_cost_usd",
-                value: outcome.costUsd,
-              });
-              return outcome;
+              return modelExperimentResult("gpt-5.5");
             }),
           "claude-opus-4.8": () =>
             step.run("evaluate-claude-opus-4.8", async () => {
-              const outcome = modelExperimentResult("claude-opus-4.8");
-              await inngest.score({
-                name: "research_quality",
-                value: outcome.qualityScore,
-              });
-              await inngest.score({
-                name: "research_cost_usd",
-                value: outcome.costUsd,
-              });
-              return outcome;
+              return modelExperimentResult("claude-opus-4.8");
             }),
         },
         select: experiment.weighted({ "gpt-5.5": 50, "claude-opus-4.8": 50 }),
-        withVariant: true,
       }
     );
+
+    await inngest.score.experiment({
+      experiment: experimentRef,
+      name: "research_quality",
+      value: result.qualityScore,
+    });
+
+    await inngest.score.experiment({
+      experiment: experimentRef,
+      name: "research_cost_usd",
+      value: result.costUsd,
+    });
 
     return {
       experimentRunId: event.data.experimentRunId,

@@ -499,7 +499,7 @@ function ActOne({
               key={tab.id}
               type="button"
               onClick={() => onTabChange(tab.id)}
-              data-active={activeTab === tab.id}
+              data-active={activeTab === tab.id ? "true" : undefined}
               className="demo-main-tab-button mono px-4 text-center text-[11px] uppercase"
             >
               {tab.label}
@@ -931,7 +931,7 @@ function WorkbenchTabs<T extends string>({
             key={tab.id}
             type="button"
             onClick={() => onTabChange(tab.id)}
-            data-active={activeTab === tab.id}
+            data-active={activeTab === tab.id ? "true" : undefined}
             className="demo-main-tab-button mono px-4 text-center text-[11px] uppercase"
           >
             {tab.label}

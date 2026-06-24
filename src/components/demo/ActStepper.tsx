@@ -31,7 +31,7 @@ export function ActStepper({
             type="button"
             role="tab"
             aria-selected={isActive}
-            data-active={isActive}
+            data-active={isActive ? "true" : undefined}
             onClick={() => onActChange(act.id)}
             className={`demo-segment-button act-step-tab group flex min-h-[56px] flex-col items-start justify-center gap-1 text-left ${
               index > 0 ? "border-l border-[var(--ink)]" : ""

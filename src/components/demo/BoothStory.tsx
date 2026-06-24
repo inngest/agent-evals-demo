@@ -683,7 +683,7 @@ function CodeDrawer({
               <button
                 key={tab.id}
                 type="button"
-                data-active={activeCodeId === tab.id}
+                data-active={activeCodeId === tab.id ? "true" : undefined}
                 className="demo-segment-button mono h-9 border-0 border-r border-[var(--ink)] text-[10px] uppercase last:border-r-0 data-[active=true]:bg-[var(--ink)] data-[active=true]:text-white"
                 onClick={() => onActiveCodeChange(tab.id)}
               >

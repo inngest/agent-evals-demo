@@ -239,7 +239,8 @@ button {
   box-shadow: inset 0 0 0 1px var(--coral);
 }
 
-.demo-segment-button[data-active="true"] {
+.demo-segment-button[data-active="true"],
+.demo-segment-button[data-active="true"]:hover {
   background: var(--ink);
   color: var(--paper);
   border-color: var(--ink);
