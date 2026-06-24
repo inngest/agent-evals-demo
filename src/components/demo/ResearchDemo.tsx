@@ -10,7 +10,6 @@ import {
   Play,
   RotateCcw,
   Save,
-  Sparkles,
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
@@ -19,7 +18,6 @@ import { DashboardLink } from "@/components/demo/DashboardLink";
 import { Button } from "@/components/ui/button";
 import {
   defaultResearchTopic,
-  researchSessionId,
   type ResearchRunSummary,
 } from "@/content/research-demo";
 import { getDeepLink } from "@/lib/inngest-dashboard";
@@ -336,13 +334,11 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
               <ActTwoControls
                 result={result}
                 scoresUrl={scoresUrl}
-                sessionId={researchSessionId}
                 onSignal={sendSignal}
               />
             ) : null}
             {activeAct === 3 ? (
               <ActThreeControls
-                experiment={experiment}
                 experimentUrl={experimentUrl}
                 onRunExperiment={runExperiment}
               />
@@ -437,12 +433,10 @@ function ActOneControls({
 function ActTwoControls({
   result,
   scoresUrl,
-  sessionId,
   onSignal,
 }: {
   result: ResearchRunSummary | null;
   scoresUrl: string;
-  sessionId: string;
   onSignal: (signal: "useful" | "missed-context" | "saved") => void;
 }) {
   return (
@@ -480,25 +474,10 @@ function ActTwoControls({
           Save
         </Button>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <Metric
-          icon={Gauge}
-          label="quality"
-          value={result ? result.qualityScore.toFixed(2) : "waiting"}
-        />
-        <Metric
-          icon={Activity}
-          label="tokens"
-          value={result ? compactNumber(result.tokenCount) : "waiting"}
-        />
-      </div>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-        <div className="mono min-w-0 truncate border border-[var(--rule-soft)] bg-white px-2 py-2 text-[10px] uppercase text-[var(--muted-copy)]">
-          {sessionId}
-        </div>
+      <div className="flex justify-end">
         <DashboardLink
           href={scoresUrl}
-          className="demo-segment-button mono inline-flex h-8 items-center gap-1.5 px-2 text-[10px] uppercase"
+          className="demo-segment-button mono inline-flex h-9 items-center gap-1.5 px-3 text-[10px] uppercase"
         >
           <ExternalLink className="size-3.5" />
           Scores
@@ -509,11 +488,9 @@ function ActTwoControls({
 }
 
 function ActThreeControls({
-  experiment,
   experimentUrl,
   onRunExperiment,
 }: {
-  experiment: { sent: boolean; experimentRunId: string } | null;
   experimentUrl: string;
   onRunExperiment: () => void;
 }) {
@@ -531,18 +508,10 @@ function ActThreeControls({
         <FlaskConical className="size-4" />
         Run model bakeoff
       </Button>
-      <div className="grid grid-cols-3 gap-2">
-        <Metric icon={Sparkles} label="models" value="2" />
-        <Metric icon={Gauge} label="winner" value="gpt-5.5" />
-        <Metric icon={Activity} label="cost" value="$0.41" />
-      </div>
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-        <div className="mono min-w-0 truncate border border-[var(--rule-soft)] bg-white px-2 py-2 text-[10px] uppercase text-[var(--muted-copy)]">
-          {experiment?.experimentRunId ?? "competitive-research-model-bakeoff"}
-        </div>
+      <div className="flex justify-end">
         <DashboardLink
           href={experimentUrl}
-          className="demo-segment-button mono inline-flex h-8 items-center gap-1.5 px-2 text-[10px] uppercase"
+          className="demo-segment-button mono inline-flex h-9 items-center gap-1.5 px-3 text-[10px] uppercase"
         >
           <ExternalLink className="size-3.5" />
           Experiment
@@ -580,26 +549,6 @@ function StatusPill({ phase }: { phase: RunPhase }) {
   );
 }
 
-function Metric({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="min-w-0 border border-[var(--rule-soft)] bg-white p-2">
-      <div className="flex items-center gap-1.5 text-[var(--muted-copy)]">
-        <Icon className="size-3.5" />
-        <span className="mono truncate text-[9px] uppercase">{label}</span>
-      </div>
-      <div className="display mt-1 truncate text-lg font-medium">{value}</div>
-    </div>
-  );
-}
-
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -633,12 +582,4 @@ async function fetchStatus(trigger: TriggerResponse): Promise<StatusResponse> {
 
 function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function compactNumber(value: number) {
-  if (value >= 1000) {
-    return `${(value / 1000).toFixed(1)}k`;
-  }
-
-  return String(value);
 }
