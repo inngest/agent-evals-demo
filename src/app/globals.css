@@ -177,6 +177,8 @@ button {
 
 .code-html pre {
   margin: 0;
+  width: max-content;
+  min-width: 100%;
   min-height: 100%;
   overflow-x: auto;
   border-radius: 0;
@@ -187,8 +189,37 @@ button {
   line-height: 1.65;
 }
 
+.code-html .line {
+  display: inline-block;
+  min-width: 100%;
+  padding: 0 12px;
+  margin: 0 -12px;
+}
+
+.code-html .code-line-highlight {
+  background: rgba(239, 233, 21, 0.16);
+  box-shadow: inset 3px 0 0 var(--citrine);
+}
+
 .code-html code {
   font-family: inherit;
+}
+
+.code-zoom-button {
+  border: 1px solid #8d8792;
+  background: #e7e3dc;
+  color: #595360;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.28);
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.code-zoom-button:hover {
+  border-color: #f2eee8;
+  background: #f2eee8;
+  color: #17131a;
 }
 
 .demo-segment-button {

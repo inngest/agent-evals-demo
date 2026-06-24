@@ -12,7 +12,7 @@ export function CodeView({
   snippets: HighlightedCodeSnippet[];
   // Optional: let the shell sync the visible snippet to the current act.
   activeId?: HighlightedCodeSnippet["id"];
-  variant?: "full" | "rail";
+  variant?: "full" | "rail" | "minimal";
 }) {
   const [internalId, setInternalId] = React.useState<
     HighlightedCodeSnippet["id"]
@@ -20,15 +20,59 @@ export function CodeView({
   const isControlled = controlledId !== undefined;
   const activeId = controlledId ?? internalId;
   const [codeFontSize, setCodeFontSize] = React.useState(
-    variant === "rail" ? 13 : 15
+    variant === "rail" || variant === "minimal" ? 13 : 15
   );
   const active = snippets.find((snippet) => snippet.id === activeId) ?? snippets[0];
   const canZoomOut = codeFontSize > 12;
   const canZoomIn = codeFontSize < 20;
   const showPicker = variant === "full" && !isControlled;
+  const isMinimal = variant === "minimal";
 
   if (!active) {
     return null;
+  }
+
+  if (isMinimal) {
+    return (
+      <div className="relative h-full min-h-0 min-w-0 overflow-hidden bg-[#17131a]">
+        <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+          <button
+            type="button"
+            aria-label="Zoom code out"
+            title="Zoom code out"
+            disabled={!canZoomOut}
+            onClick={() =>
+              setCodeFontSize((current) => Math.max(12, current - 1))
+            }
+            className="code-zoom-button grid size-7 place-items-center disabled:pointer-events-none disabled:opacity-35"
+          >
+            <Minus className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom code in"
+            title="Zoom code in"
+            disabled={!canZoomIn}
+            onClick={() =>
+              setCodeFontSize((current) => Math.min(20, current + 1))
+            }
+            className="code-zoom-button grid size-7 place-items-center disabled:pointer-events-none disabled:opacity-35"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        </div>
+        <div
+          className="code-html h-full min-h-0 min-w-0 overflow-auto bg-[#17131a] pt-9"
+          style={
+            {
+              "--code-font-size": `${codeFontSize}px`,
+            } as React.CSSProperties
+          }
+        >
+          <div dangerouslySetInnerHTML={{ __html: active.html }} />
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -3,6 +3,7 @@ import { Inngest, eventType, staticSchema } from "inngest";
 import { scoreMiddleware } from "inngest/experimental";
 import { isCloud } from "@/lib/demo-target";
 import type { DemoFlags } from "@/lib/demo-flags";
+import type { ResearchModel, ResearchStepId } from "@/content/research-demo";
 
 // ── 1. incident arrives → triggers the agent ──────────────────────────────
 export type IncidentReceivedData = {
@@ -67,6 +68,69 @@ export type ExperimentRequestedData = {
 export const experimentRequested = eventType("agent/experiment.requested", {
   schema: staticSchema<ExperimentRequestedData>(),
 });
+
+// ── 6. research agent arrives → triggers the booth research workflow ───────
+export type ResearchRunRequestedData = {
+  researchRunId: string;
+  topic: string;
+  cadence: "manual" | "six-day-cron" | "six-month-cron" | "seeded";
+  model: ResearchModel;
+  failureStep?: ResearchStepId;
+  latencyMs?: number;
+  requestedAt: string;
+  source: "booth-demo";
+};
+
+// ── 7. research agent finished → score/session function attaches eval data ─
+export type ResearchRunCompletedData = {
+  researchRunId: string;
+  parentRunId?: string;
+  sessionId: string;
+  topic: string;
+  model: ResearchModel;
+  qualityScore: number;
+  tokenCount: number;
+  costUsd: number;
+  sources: string[];
+  findings: string[];
+  completedAt: string;
+  source: "booth-demo";
+};
+
+// ── 8. human/product signal → same score/session function records feedback ─
+export type ResearchFeedbackRecordedData = {
+  researchRunId: string;
+  parentRunId?: string;
+  sessionId: string;
+  signal: "useful" | "missed-context" | "saved";
+  feedbackAt: string;
+  source: "booth-demo";
+};
+
+// ── 9. Act 3 model bakeoff → group.experiment over historic research runs ─
+export type ResearchExperimentRequestedData = {
+  experimentRunId: string;
+  topic: string;
+  corpusRunIds: string[];
+  requestedAt: string;
+  source: "booth-demo";
+};
+
+export const researchRunRequested = eventType("research/run.requested", {
+  schema: staticSchema<ResearchRunRequestedData>(),
+});
+export const researchRunCompleted = eventType("research/run.completed", {
+  schema: staticSchema<ResearchRunCompletedData>(),
+});
+export const researchFeedbackRecorded = eventType("research/feedback.recorded", {
+  schema: staticSchema<ResearchFeedbackRecordedData>(),
+});
+export const researchExperimentRequested = eventType(
+  "research/experiment.requested",
+  {
+    schema: staticSchema<ResearchExperimentRequestedData>(),
+  }
+);
 
 // scoreMiddleware() is REQUIRED for ctx.step.score to exist. It is safe to
 // register in BOTH modes: it only adds the step.score extension; the local

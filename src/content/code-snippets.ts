@@ -1,12 +1,3 @@
-// src/content/code-snippets.ts (CODEVIEW owns)
-//
-// Cumulative booth code. Each act keeps the same durable-agent body on screen
-// and adds only the new layer needed for that act:
-//   Act 1: full Gester-style code-triage agent
-//   Act 2: the same agent plus scoring/session events
-//   Act 3: Acts 1 and 2 plus the experiment wrapper
-//   Act 4: the tiny scorer + Insights query that explains the bigger vision
-
 export type CodeSnippetId = "act1" | "act2" | "act3" | "act4";
 
 export type CodeSnippet = {
@@ -16,267 +7,285 @@ export type CodeSnippet = {
   eyebrow: string;
   description: string;
   code: string;
+  highlightTerms?: string[];
 };
 
-function boothImports({
-  clientExtras = [],
-  scoringExtras = [],
-  extra = "",
-}: {
-  clientExtras?: string[];
-  scoringExtras?: string[];
-  extra?: string;
-} = {}) {
-  const clientNames = ["inngest", "incidentReceived", ...clientExtras].join(", ");
-  const scoringNames = ["localizationScore", ...scoringExtras].join(", ");
+const imports = `import { experiment } from "inngest";
+import {
+  inngest,
+  researchRunRequested,
+  researchRunCompleted,
+  researchFeedbackRecorded,
+  researchExperimentRequested,
+} from "@/inngest/client";
+import { runResearchCall, modelExperimentResult } from "@/lib/mock-research";`;
 
-  return `import { ${clientNames} } from "@/inngest/client";
-import { getIncident } from "@/content/incidents";
-import { normalizeDemoFlags } from "@/lib/demo-flags";
-import { nextTurn } from "@/lib/mock-llm";
-import { executeTool, resetCrashState, type ToolName } from "@/lib/mock-tools";
-import { modelStepName, toolStepName } from "@/lib/agent-step-names";
-import { ${scoringNames} } from "@/lib/scoring";${extra}`;
-}
-
-const durableAgentCode = `const MAX_ITERATIONS = 14;
-
-export type TriageResult = {
-  incidentId: string;
-  clientRunId: string;
-  rca: string;
-  citedFiles: string[];
-  iterations: number;
-  toolCalls: string[];
-  localizationScore: number;
-};
-
-export const triageAgent = inngest.createFunction(
+const durableResearchAgent = `export const researchAgent = inngest.createFunction(
   {
-    id: "triage-agent",
+    id: "research-agent",
     retries: 4,
-    triggers: [incidentReceived],
+    triggers: [
+      researchRunRequested,
+      { cron: "TZ=America/Los_Angeles 0 9 */6 * *" },
+    ],
   },
-  async ({ event, step, attempt }): Promise<TriageResult> => {
-    const flags = normalizeDemoFlags(event.data.flags);
-    const { incidentId, clientRunId } = event.data;
+  async ({ event, step, attempt, runId }) => {
+    if (attempt === 0) resetResearchCrashState();
 
-    // First attempt arms the demo failure. On retry the failed repo-read step
-    // runs again, while all earlier step.run values replay from memory.
-    if (attempt === 0) {
-      resetCrashState();
-    }
+    const product = await step.run("load-product-context", () =>
+      runResearchCall("load-product-context", { attempt })
+    );
+    const notion = await step.run("fetch-notion-roadmap", () =>
+      runResearchCall("fetch-notion-roadmap", { attempt })
+    );
+    const confluence = await step.run("fetch-confluence-rfps", () =>
+      runResearchCall("fetch-confluence-rfps", { attempt })
+    );
+    const docs = await step.run("fetch-google-docs-notes", () =>
+      runResearchCall("fetch-google-docs-notes", { attempt })
+    );
+    const slack = await step.run("fetch-slack-win-loss", () =>
+      runResearchCall("fetch-slack-win-loss", { attempt })
+    );
+    const crm = await step.run("fetch-crm-deals", () =>
+      runResearchCall("fetch-crm-deals", { attempt })
+    );
+    const support = await step.run("fetch-support-tickets", () =>
+      runResearchCall("fetch-support-tickets", { attempt })
+    );
+    const churn = await step.run("fetch-churn-reasons", () =>
+      runResearchCall("fetch-churn-reasons", { attempt })
+    );
+    const pricing = await step.run("fetch-pricing-pages", () =>
+      runResearchCall("fetch-pricing-pages", { attempt })
+    );
 
-    const incident = getIncident(incidentId);
-    const groundTruthFixFiles = incident?.groundTruthFixFiles ?? [];
+    // This API returns a 503 once. Inngest retries this boundary,
+    // while every successful step above replays from memoized state.
+    const changelog = await step.run("fetch-competitor-changelog", () =>
+      runResearchCall("fetch-competitor-changelog", { attempt })
+    );
 
-    const toolCalls: string[] = [];
-    let iterations = 0;
-    let rca = "";
-    let citedFiles: string[] = [];
+    const web = await step.run("run-parallel-web-search", () =>
+      runResearchCall("run-parallel-web-search", { attempt })
+    );
+    const aiSearch = await step.run("run-ai-search", () =>
+      runResearchCall("run-ai-search", { attempt })
+    );
+    const g2 = await step.run("query-g2-reviews", () =>
+      runResearchCall("query-g2-reviews", { attempt })
+    );
+    const github = await step.run("query-github-issues", () =>
+      runResearchCall("query-github-issues", { attempt })
+    );
+    const forum = await step.run("query-community-forum", () =>
+      runResearchCall("query-community-forum", { attempt })
+    );
+    const normalized = await step.run("normalize-evidence", () =>
+      normalizeEvidence({ product, notion, confluence, docs, slack, crm, support, churn, pricing, changelog, web, aiSearch, g2, github, forum })
+    );
+    const ranked = await step.run("rank-findings", () =>
+      rankFindings(normalized)
+    );
+    const brief = await step.run("synthesize-brief", () =>
+      writeResearchBrief(ranked)
+    );
+    await step.run("publish-brief", () => publishToNotion(brief));
+    await step.run("notify-stakeholders", () => notifySlack(brief));
 
-    for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
-      iterations = iteration;
-      const plannedStep = incident?.toolPlan[iteration - 1];
-
-      const turn = await step.run(modelStepName(plannedStep, iteration), () =>
-        nextTurn({ incidentId, iteration, attempt, flags })
-      );
-
-      if (turn.type === "final") {
-        rca = turn.rca;
-        citedFiles = turn.citedFiles;
-        break;
-      }
-
-      for (const call of turn.calls) {
-        toolCalls.push(call.name);
-
-        await step.run(
-          toolStepName(
-            { tool: call.name as ToolName, input: call.input },
-            iteration
-          ),
-          () =>
-            executeTool(incidentId, call.name as ToolName, call.input, {
-              attempt,
-            })
-        );
-      }
-    }
-
-    const score = localizationScore(citedFiles, groundTruthFixFiles);
-
-    return {
-      incidentId,
-      clientRunId,
-      rca,
-      citedFiles,
-      iterations,
-      toolCalls,
-      localizationScore: score,
-    };
+    return { runId, brief };
   }
 );`;
 
-const scoringAndSessionCode = `// ACT 2 ADDITION: saving the RCA starts a second durable function.
-// The same clientRunId ties the trace, feedback, score, and session thread.
-export const scoreIncident = inngest.createFunction(
+const scoreAndSessionAddition = `// ACT 2 ADDITION: two lines turn this autonomous run into eval data.
+const quality = await step.run("evaluate-research-quality", () =>
+  evaluateResearchQuality({ brief, ranked })
+);
+
+await step.sendEvent(
+  "score-and-session",
+  researchRunCompleted.create({
+    researchRunId: event.data.researchRunId,
+    parentRunId: runId,
+    sessionId: "sess-competitive-research-q3",
+    topic: event.data.topic,
+    model: event.data.model,
+    qualityScore: quality.value,
+    tokenCount: quality.tokenCount,
+    costUsd: quality.costUsd,
+    sources: quality.sources,
+    findings: quality.findings,
+    completedAt: new Date().toISOString(),
+    source: "booth-demo",
+  })
+);`;
+
+const scoreFunction = `export const researchScoreRun = inngest.createFunction(
   {
-    id: "score-incident",
-    retries: 2,
-    triggers: [incidentSaved],
+    id: "research-score-run",
+    triggers: [researchRunCompleted, researchFeedbackRecorded],
   },
   async ({ event, step }) => {
-    const { incidentId, clientRunId, signal, savedAt } = event.data;
-
-    const scored = await step.run("score-localization", () => {
-      const incident = getIncident(incidentId);
-      const truth = incident?.groundTruthFixFiles ?? [];
-      const cited = signal === "saved" ? incident?.citedFiles ?? [] : [];
-
-      return recordOutcomeScore(incidentId, clientRunId, cited, truth, {
-        scoredAt: savedAt,
-        source: "live",
+    if (event.name === "research/run.completed") {
+      await step.score("attach-research-quality-score", {
+        runId: event.data.parentRunId,
+        name: "research_quality",
+        value: event.data.qualityScore,
       });
-    });
 
-    await step.sendEvent(
-      "emit-rca-scored",
-      rcaScored.create(
-        {
-          incidentId,
-          clientRunId,
-          citedFiles: scored.citedFiles,
-          groundTruthFixFiles: scored.groundTruthFixFiles,
-          score: scored.score,
-          scoredAt: scored.scoredAt,
-          source: "booth-demo",
+      await step.score("attach-research-cost-score", {
+        runId: event.data.parentRunId,
+        name: "research_cost_usd",
+        value: event.data.costUsd,
+      });
+    }
+
+    return { sessionId: event.data.sessionId };
+  }
+);`;
+
+const experimentFunction = `export const researchExperimentBakeoff = inngest.createFunction(
+  {
+    id: "research-experiment-bakeoff",
+    triggers: [researchExperimentRequested],
+  },
+  async ({ event, step, group }) => {
+    const { result, variant } = await group.experiment(
+      "competitive-research-model-bakeoff",
+      {
+        variants: {
+          "gpt-5.5": () =>
+            step.run("evaluate-gpt-5.5", async () => {
+              const outcome = modelExperimentResult("gpt-5.5");
+              await inngest.score({
+                name: "research_quality",
+                value: outcome.qualityScore,
+              });
+              await inngest.score({
+                name: "research_cost_usd",
+                value: outcome.costUsd,
+              });
+              return outcome;
+            }),
+          "claude-opus-4.8": () =>
+            step.run("evaluate-claude-opus-4.8", async () => {
+              const outcome = modelExperimentResult("claude-opus-4.8");
+              await inngest.score({
+                name: "research_quality",
+                value: outcome.qualityScore,
+              });
+              await inngest.score({
+                name: "research_cost_usd",
+                value: outcome.costUsd,
+              });
+              return outcome;
+            }),
         },
-        { id: "scored:" + clientRunId + ":" + scored.scoredAt }
-      )
+        select: experiment.weighted({
+          "gpt-5.5": 50,
+          "claude-opus-4.8": 50,
+        }),
+        withVariant: true,
+      }
     );
 
     return {
-      sessionId: "sess-" + incidentId,
-      clientRunId,
-      score: scored.score,
+      experimentRunId: event.data.experimentRunId,
+      variant,
+      qualityScore: result.qualityScore,
+      tokenCount: result.tokenCount,
+      costUsd: result.costUsd,
     };
   }
 );`;
 
-const experimentCode = `// ACT 3 ADDITION: the experiment is the same run and same scorer,
-// repeated across a resolved bug corpus and tagged as one group.
-const experimentRequested = eventType("agent/experiment.requested", {
-  schema: staticSchema<{ corpusIncidentIds: string[] }>(),
-});
+const insightQuery = `SELECT
+  model,
+  AVG(score.value) FILTER (WHERE score.name = 'research_quality') AS quality,
+  AVG(score.value) FILTER (WHERE score.name = 'research_cost_usd') AS cost,
+  AVG(run.duration_ms) AS latency,
+  COUNT(*) AS research_runs
+FROM inngest.scores score
+JOIN inngest.runs run ON run.id = score.run_id
+WHERE run.function_id IN ('research-agent', 'research-experiment-bakeoff')
+GROUP BY model
+ORDER BY quality DESC, cost ASC;`;
 
-const MODELS = ["gpt-5.5", "claude-opus-4.8"] as const;
-
-export const localizationBakeoff = inngest.createFunction(
-  {
-    id: "localization-bakeoff",
-    triggers: [experimentRequested],
-  },
-  async ({ event, step }) => {
-    for (const incidentId of event.data.corpusIncidentIds) {
-      for (const model of MODELS) {
-        await step.run("grade-" + model + "-" + incidentId, async () => {
-          const turn = await runModelOnIncident(model, incidentId);
-          const incident = getIncident(incidentId)!;
-
-          return recordExperimentCell({
-            group: "group.experiment",
-            experimentId: "exp-localization-bakeoff",
-            incidentId,
-            model,
-            outcomeScore: localizationScore(
-              turn.citedFiles,
-              incident.groundTruthFixFiles
-            ),
-          });
-        });
-      }
-    }
-
-    return aggregateByModel("exp-localization-bakeoff");
-  }
-);`;
-
-const scorerVisionCode = `export function localizationScore(cited: string[], truth: string[]): number {
-  const truthSet = new Set(truth);
-  const intersection = cited.filter((file) => truthSet.has(file)).length;
-  const union = new Set([...cited, ...truth]).size;
-
-  return union === 0 ? 0 : Math.min(1, intersection / union);
-}
-
-// Because the agent, scorer, and experiment all ran on Inngest, Insights can
-// query the same execution data. No second eval system is required.
-//
-// SELECT model, AVG(outcome_score) AS accuracy, AVG(latency_ms) AS latency
-// FROM scores
-// WHERE experiment_id = 'exp-localization-bakeoff'
-// GROUP BY model
-// ORDER BY accuracy DESC;`;
-
-const act1Code = [boothImports(), durableAgentCode].join("\n\n");
+const act1Code = [imports, durableResearchAgent].join("\n\n");
 const act2Code = [
-  boothImports({
-    clientExtras: ["incidentSaved", "rcaScored"],
-    scoringExtras: ["recordOutcomeScore"],
-  }),
-  durableAgentCode,
-  scoringAndSessionCode,
+  imports,
+  durableResearchAgent.replace(
+    "    return { runId, brief };",
+    `    ${scoreAndSessionAddition.replace(/\n/g, "\n    ")}
+
+    return { runId, brief, quality };`
+  ),
+  scoreFunction,
 ].join("\n\n");
-const act3Code = [
-  boothImports({
-    clientExtras: ["incidentSaved", "rcaScored"],
-    scoringExtras: ["recordOutcomeScore"],
-    extra: `
-import { eventType, staticSchema } from "inngest";`,
-  }),
-  durableAgentCode,
-  scoringAndSessionCode,
-  experimentCode,
-].join("\n\n");
+const act3Code = [imports, durableResearchAgent, scoreFunction, experimentFunction].join(
+  "\n\n"
+);
 
 export const codeSnippets: CodeSnippet[] = [
   {
     id: "act1",
     act: 1,
     label: "Act 1",
-    eyebrow: "Full Gester-style agent",
+    eyebrow: "Durable research agent",
     description:
-      "This is the whole code-triage function: repo reads and mocked Linear, Slack, code-suggestion, and PR tool calls are durable steps.",
+      "A scheduled research agent touches internal tools, public APIs, and model calls as named durable steps. The changelog API fails once so the trace can show retry and replay.",
     code: act1Code,
+    highlightTerms: [
+      'triggers: [',
+      '{ cron: "TZ=America/Los_Angeles 0 9 */6 * *" }',
+      'step.run("fetch-competitor-changelog"',
+      "returns a 503 once",
+    ],
   },
   {
     id: "act2",
     act: 2,
     label: "Act 2",
-    eyebrow: "Agent plus score/session",
+    eyebrow: "Add scores and sessions",
     description:
-      "Same agent, with the saved-analysis function added underneath. The clientRunId ties feedback, deferred score, and session history to the run that produced the RCA.",
+      "The original agent stays intact. The highlighted addition evaluates the brief, emits a score/session event, and a second function attaches quality and cost to the run.",
     code: act2Code,
+    highlightTerms: [
+      "ACT 2 ADDITION",
+      'step.run("evaluate-research-quality"',
+      'step.sendEvent(',
+      'researchRunCompleted.create',
+      'id: "research-score-run"',
+      'step.score("attach-research-quality-score"',
+      'step.score("attach-research-cost-score"',
+    ],
   },
   {
     id: "act3",
     act: 3,
     label: "Act 3",
-    eyebrow: "Agent plus experiment",
+    eyebrow: "Add experimentation",
     description:
-      "Acts 1 and 2 stay intact. The experiment wrapper reruns the resolved bug corpus across two models and reuses the exact same localization scorer.",
+      "The experiment function runs the same research task as a model bakeoff and scores quality plus token cost for each selected variant.",
     code: act3Code,
+    highlightTerms: [
+      'id: "research-experiment-bakeoff"',
+      'group.experiment(',
+      '"gpt-5.5"',
+      '"claude-opus-4.8"',
+      "experiment.weighted",
+      "research_cost_usd",
+    ],
   },
   {
     id: "act4",
     act: 4,
-    label: "Act 4",
-    eyebrow: "Scorer plus Insights",
+    label: "Query",
+    eyebrow: "Queryable run history",
     description:
-      "The big idea is small code: a scorer returns 0 to 1, then Insights can query runs, scores, sessions, and experiments from the same substrate.",
-    code: scorerVisionCode,
+      "Optional close: because the agent, scores, and experiment all ran on Inngest, Insights can query the same execution data.",
+    code: insightQuery,
+    highlightTerms: ["research_quality", "research_cost_usd", "GROUP BY model"],
   },
 ];
 

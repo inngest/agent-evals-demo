@@ -50,7 +50,9 @@ export const deepLinks: Record<DeepLinkKey, (ids?: DeepLinkIds) => string> = {
         : joinDashboardPath("runs");
     }
 
-    return joinDashboardPath("runs", ids?.runId ?? "demo-run");
+    return ids?.runId && looksLikeInngestRunId(ids.runId)
+      ? joinDashboardPath("runs", ids.runId)
+      : joinDashboardPath("runs");
   },
   scoresOnTrace: () =>
     isLocalDashboard() ? joinDashboardPath("runs") : joinDashboardPath("scores"),

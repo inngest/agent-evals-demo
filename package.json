@@ -15,6 +15,8 @@
     "demo:seed-cloud": "node scripts/seed-cloud.mjs",
     "demo:smoke": "node scripts/smoke-demo.mjs",
     "demo:viewport": "node scripts/viewport-qa.mjs",
+    "demo:booth-viewport": "node scripts/booth-control-viewport.mjs",
+    "demo:story-viewport": "node scripts/booth-story-viewport.mjs",
     "demo:insights-check": "node scripts/insights-score-check.mjs",
     "demo:cloud-handoff": "node scripts/cloud-handoff.mjs",
     "demo:cloud-ready": "node scripts/cloud-ready.mjs",

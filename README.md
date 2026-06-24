@@ -4,6 +4,8 @@ This demo follows `PRD.md`: a Next.js App Router app with a real Inngest v4 work
 
 For dry-run and booth ops, use `docs/booth-runbook.md`. For the Lauren/Riley
 stakeholder walkthrough and booth driver script, use `docs/demo-talk-track.md`.
+For the experimental split-screen booth-control pivot, use
+`docs/split-screen-control-panel-prd.md`.
 For the printable booth driver card, use `docs/driver-card.md`.
 For display sign-off and fallback capture, use
 `docs/booth-qa-checklist.md` and `docs/contingency-recording.md`. For the
