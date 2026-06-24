@@ -1,3 +1,4 @@
+import { RetryAfterError } from "inngest";
 import {
   buildResearchRunSummary,
   getResearchStep,
@@ -14,6 +15,7 @@ type ResearchCallOptions = {
 };
 
 let hasCrashed = false;
+const retryAfterDelay = "16s";
 
 export function resetResearchCrashState(): void {
   hasCrashed = false;
@@ -30,9 +32,12 @@ export async function runResearchCall(
     await new Promise((resolve) => setTimeout(resolve, latency));
   }
 
-  if (options.failStep === id && !hasCrashed) {
+  if (options.failStep === id && options.attempt === 0 && !hasCrashed) {
     hasCrashed = true;
-    throw new Error(`${step.source} returned 503 while reading ${step.label}`);
+    throw new RetryAfterError(
+      `${step.source} returned 503 while reading ${step.label}`,
+      retryAfterDelay
+    );
   }
 
   return {
