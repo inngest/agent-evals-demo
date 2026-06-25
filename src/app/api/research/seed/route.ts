@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       eventsSent: runEvents.length + experimentEvents.length,
       dashboardUrl: getDeepLink("envDashboard"),
       experimentUrl: getDeepLink("experiment", {
-        experimentId: "competitive-research-model-bakeoff",
+        experimentId: "research-agent-model-bakeoff",
       }),
       seededAt: new Date().toISOString(),
     });

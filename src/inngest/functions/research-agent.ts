@@ -23,6 +23,7 @@ export type ResearchAgentResult = ReturnType<typeof summarizeResearchRun> & {
 export const researchAgent = inngest.createFunction(
   {
     id: "research-agent",
+    name: "Research agent",
     retries: 4,
     triggers: [
       researchRunRequested,
@@ -134,7 +135,7 @@ export const researchAgent = inngest.createFunction(
     // Act 2's addition in the code view: this event is the durable boundary
     // that lets the scoring/session function attach eval data to this run.
     await step.sendEvent(
-      "score-and-session",
+      "emit-research-run-completed",
       researchRunCompleted.create(
         {
           ...summary,

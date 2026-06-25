@@ -9,7 +9,8 @@ import { isCloud } from "@/lib/demo-target";
 
 export const researchScoreRun = inngest.createFunction(
   {
-    id: "research-score-run",
+    id: "research-agent-score-run",
+    name: "Research agent score run",
     retries: 2,
     triggers: [researchRunCompleted, researchFeedbackRecorded],
   },
@@ -21,7 +22,7 @@ export const researchScoreRun = inngest.createFunction(
       const targetRunId = getScoreTargetRunId(data.parentRunId);
 
       if (isCloud) {
-        await step.score("attach-human-feedback-score", {
+        await step.score("attach-research-human-feedback-score", {
           ...(targetRunId ? { runId: targetRunId } : {}),
           name: "research_human_feedback",
           value: signalScore,

@@ -153,7 +153,7 @@ export const researchExperimentRequested = eventType(
 const encryptionKey = process.env.INNGEST_ENCRYPTION_KEY;
 
 export const inngest = new Inngest({
-  id: "incident-triage-booth-demo",
+  id: "research-agent-evals-demo",
   // cloud ⇒ isDev:false ⇒ the SDK reads INNGEST_EVENT_KEY + INNGEST_SIGNING_KEY
   // from env and talks to Inngest Cloud. local ⇒ isDev:true ⇒ dev server.
   // Derived from the single DEMO_TARGET flag so cloud/dev can't drift. Do NOT

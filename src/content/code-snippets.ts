@@ -149,7 +149,7 @@ export const researchAgent = inngest.createFunction(
     // an experiment without changing the rest of the agent.
     // @demo-highlight-start
     const { result: brief, variant, experimentRef } = await group.experiment(
-      "competitive-research-model-bakeoff",
+      "research-agent-model-bakeoff",
       {
         variants: {
           "gpt-5.5": () =>

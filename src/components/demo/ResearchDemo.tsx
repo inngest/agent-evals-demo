@@ -90,7 +90,7 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
   const experimentUrl =
     experiment?.experimentUrl ??
     getDeepLink("experiment", {
-      experimentId: "competitive-research-model-bakeoff",
+      experimentId: "research-agent-model-bakeoff",
     });
 
   function resizeFrom(startY: number, startHeight: number) {

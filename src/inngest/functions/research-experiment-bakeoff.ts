@@ -7,21 +7,22 @@ const MODELS = ["gpt-5.5", "claude-opus-4.8"] as const satisfies readonly Resear
 
 export const researchExperimentBakeoff = inngest.createFunction(
   {
-    id: "research-experiment-bakeoff",
+    id: "research-agent-model-bakeoff",
+    name: "Research agent model bakeoff",
     retries: 2,
     triggers: [researchExperimentRequested],
   },
   async ({ event, step, group }) => {
     const { result, variant, experimentRef } = await group.experiment(
-      "competitive-research-model-bakeoff",
+      "research-agent-model-bakeoff",
       {
         variants: {
           "gpt-5.5": () =>
-            step.run("evaluate-gpt-5.5", async () => {
+            step.run("evaluate-research-brief-gpt-5.5", async () => {
               return modelExperimentResult("gpt-5.5");
             }),
           "claude-opus-4.8": () =>
-            step.run("evaluate-claude-opus-4.8", async () => {
+            step.run("evaluate-research-brief-claude-opus-4.8", async () => {
               return modelExperimentResult("claude-opus-4.8");
             }),
         },

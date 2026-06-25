@@ -43,7 +43,7 @@ export async function POST(request: Request) {
       experimentRunId,
       eventIds: (result as { ids?: string[] } | undefined)?.ids ?? [],
       experimentUrl: getDeepLink("experiment", {
-        experimentId: "competitive-research-model-bakeoff",
+        experimentId: "research-agent-model-bakeoff",
       }),
     });
   } catch (error) {
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         sent: false,
         experimentRunId,
         experimentUrl: getDeepLink("experiment", {
-          experimentId: "competitive-research-model-bakeoff",
+          experimentId: "research-agent-model-bakeoff",
         }),
         error:
           error instanceof Error ? error.message : "Inngest is not reachable",
