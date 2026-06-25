@@ -77,6 +77,8 @@ export type ResearchRunRequestedData = {
   model: ResearchModel;
   failureStep?: ResearchStepId;
   latencyMs?: number;
+  seededFeedbackSignal?: ResearchFeedbackSignal;
+  seededFeedbackAt?: string;
   requestedAt: string;
   source: "booth-demo";
 };
@@ -102,10 +104,12 @@ export type ResearchFeedbackRecordedData = {
   researchRunId: string;
   parentRunId?: string;
   sessionId: string;
-  signal: "useful" | "missed-context" | "saved";
+  signal: ResearchFeedbackSignal;
   feedbackAt: string;
   source: "booth-demo";
 };
+
+export type ResearchFeedbackSignal = "useful" | "missed-context" | "saved";
 
 // ── 9. Act 3 model bakeoff → group.experiment over historic research runs ─
 export type ResearchExperimentRequestedData = {
