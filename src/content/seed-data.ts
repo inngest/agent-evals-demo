@@ -1,84 +1,179 @@
-export const canonicalPrompt =
-  "Show me everyone who signed up in the last two weeks but hasn't activated yet.";
+import { incidents } from "@/content/incidents";
 
-export const canonicalSql = `SELECT u.id, u.email, u.signed_up_at
-FROM users u
-LEFT JOIN events e ON e.user_id = u.id AND e.name = 'activated'
-WHERE u.signed_up_at >= now() - interval '14 days'
-  AND e.id IS NULL
-ORDER BY u.signed_up_at DESC;`;
-
-export type MockUser = {
-  id: string;
-  email: string;
-  signed_up_at: string;
-  activated: false;
+export type SeededScore = {
+  runId: string;
+  incidentId: string;
+  liveSignal: "up" | "down" | null;
+  liveScore: number;
+  outcomeScore: number;
+  scoredAt: string;
 };
 
-export const mockUsers: MockUser[] = [
-  {
-    id: "usr_9d21",
-    email: "maya.chen@example.com",
-    signed_up_at: "2026-05-31T17:24:00.000Z",
-    activated: false,
-  },
-  {
-    id: "usr_2ac8",
-    email: "noah.patel@example.com",
-    signed_up_at: "2026-05-30T22:11:00.000Z",
-    activated: false,
-  },
-  {
-    id: "usr_61fb",
-    email: "ava.rodriguez@example.com",
-    signed_up_at: "2026-05-29T14:45:00.000Z",
-    activated: false,
-  },
-  {
-    id: "usr_34ea",
-    email: "liam.jordan@example.com",
-    signed_up_at: "2026-05-28T09:17:00.000Z",
-    activated: false,
-  },
-  {
-    id: "usr_c801",
-    email: "zoe.kim@example.com",
-    signed_up_at: "2026-05-27T19:02:00.000Z",
-    activated: false,
-  },
-  {
-    id: "usr_7f4b",
-    email: "ethan.ross@example.com",
-    signed_up_at: "2026-05-26T12:38:00.000Z",
-    activated: false,
-  },
-  {
-    id: "usr_b51d",
-    email: "isla.brooks@example.com",
-    signed_up_at: "2026-05-24T18:51:00.000Z",
-    activated: false,
-  },
-  {
-    id: "usr_480c",
-    email: "sam.wilson@example.com",
-    signed_up_at: "2026-05-23T16:09:00.000Z",
-    activated: false,
-  },
-  {
-    id: "usr_18a0",
-    email: "nina.nguyen@example.com",
-    signed_up_at: "2026-05-22T08:33:00.000Z",
-    activated: false,
-  },
-  {
-    id: "usr_f3a7",
-    email: "leo.martin@example.com",
-    signed_up_at: "2026-05-20T20:06:00.000Z",
-    activated: false,
-  },
-];
+export const seededScores: SeededScore[] = incidents.map((incident, index) => {
+  const liveSignal = index % 6 === 2 ? "down" : index % 5 === 3 ? null : "up";
+  return {
+    runId: `seed-run-${incident.id.toLowerCase()}`,
+    incidentId: incident.id,
+    liveSignal,
+    liveScore: liveSignal === "down" ? 0 : liveSignal === "up" ? 1 : 0.5,
+    outcomeScore: localizationScore(
+      incident.citedFiles,
+      incident.groundTruthFixFiles
+    ),
+    scoredAt: new Date(Date.UTC(2026, 5, 16, 14, index * 7)).toISOString(),
+  };
+});
 
-export const seededScoreTrend = [
-  0.81, 0.8, 0.82, 0.84, 0.83, 0.85, 0.86, 0.88, 0.87, 0.89, 0.9, 0.91,
-  0.9, 0.92,
-];
+export type SeededRun = {
+  runId: string;
+  attempt: number;
+  status: "completed" | "failed" | "retried";
+  iterations: number;
+  outcomeScore: number;
+  startedAt: string;
+  durationMs: number;
+};
+
+// SESSIONS: FAKED in both local and cloud modes this pass.
+// BLOCKED: needs the unified scoring+sessions SDK tag (pr-1547 / base 4.6.1).
+// Owner: Jakob. Do NOT wire a real sessions primitive against pr-1521 — it
+// does not exist there. Revisit when the unified tag lands.
+export type SeededSession = {
+  sessionId: string;
+  incidentId: string;
+  title: string;
+  runs: SeededRun[];
+  latestOutcomeScore: number;
+};
+
+export const seededSessions: SeededSession[] = incidents.map((incident, index) => {
+  const baseScore = localizationScore(
+    incident.citedFiles,
+    incident.groundTruthFixFiles
+  );
+  const started = Date.UTC(2026, 5, 16, 16, index * 5);
+  const runs: SeededRun[] = [
+    {
+      runId: `sess-${incident.id.toLowerCase()}-a`,
+      attempt: 1,
+      status: "failed",
+      iterations: Math.max(3, incident.toolPlan.length - 2),
+      outcomeScore: Math.max(0.2, baseScore - 0.26),
+      startedAt: new Date(started).toISOString(),
+      durationMs: 2480 + index * 53,
+    },
+    {
+      runId: `sess-${incident.id.toLowerCase()}-b`,
+      attempt: 2,
+      status: "retried",
+      iterations: incident.toolPlan.length,
+      outcomeScore: Math.max(0.35, baseScore - 0.1),
+      startedAt: new Date(started + 6 * 60 * 1000).toISOString(),
+      durationMs: 4200 + index * 71,
+    },
+    {
+      runId: `sess-${incident.id.toLowerCase()}-c`,
+      attempt: 3,
+      status: "completed",
+      iterations: incident.toolPlan.length + 1,
+      outcomeScore: baseScore,
+      startedAt: new Date(started + 14 * 60 * 1000).toISOString(),
+      durationMs: 3600 + index * 61,
+    },
+  ];
+
+  return {
+    sessionId: `sess-${incident.id}`,
+    incidentId: incident.id,
+    title: incident.title,
+    runs,
+    latestOutcomeScore: runs[runs.length - 1].outcomeScore,
+  };
+});
+
+export type ExperimentModel = "gpt-5.5" | "claude-opus-4.8";
+
+export type ExperimentCell = {
+  incidentId: string;
+  model: ExperimentModel;
+  outcomeScore: number;
+  latencyMs: number;
+  costUsd: number;
+};
+
+export type ExperimentAggregate = {
+  model: ExperimentModel;
+  accuracy: number;
+  avgLatencyMs: number;
+  avgCostUsd: number;
+};
+
+export type SeededExperiment = {
+  experimentId: string;
+  name: string;
+  groupExperimentName: string;
+  corpusIncidentIds: string[];
+  cells: ExperimentCell[];
+  aggregates: ExperimentAggregate[];
+};
+
+const corpusIncidentIds = incidents.slice(0, 8).map((incident) => incident.id);
+
+const cells: ExperimentCell[] = corpusIncidentIds.flatMap((incidentId, index) => [
+  {
+    incidentId,
+    model: "gpt-5.5",
+    outcomeScore: [0.74, 0.8, 0.68, 0.82, 0.72, 0.78, 0.77, 0.71][index],
+    latencyMs: [760, 820, 700, 890, 780, 840, 910, 750][index],
+    costUsd: [0.016, 0.019, 0.014, 0.021, 0.017, 0.018, 0.02, 0.015][index],
+  },
+  {
+    incidentId,
+    model: "claude-opus-4.8",
+    outcomeScore: [0.95, 0.91, 0.88, 0.94, 0.9, 0.93, 0.92, 0.89][index],
+    latencyMs: [2100, 2280, 1980, 2350, 2160, 2240, 2380, 2060][index],
+    costUsd: [0.072, 0.081, 0.069, 0.086, 0.078, 0.083, 0.088, 0.074][index],
+  },
+]);
+
+export const seededExperiment: SeededExperiment = {
+  experimentId: "exp-localization-bakeoff",
+  name: "Resolved code-bug localization bakeoff",
+  groupExperimentName: "group.experiment",
+  corpusIncidentIds,
+  cells,
+  aggregates: aggregateExperiment(cells),
+};
+
+function aggregateExperiment(cells: ExperimentCell[]): ExperimentAggregate[] {
+  const models: ExperimentModel[] = ["gpt-5.5", "claude-opus-4.8"];
+
+  return models.map((model) => {
+    const modelCells = cells.filter((cell) => cell.model === model);
+    return {
+      model,
+      accuracy: mean(modelCells.map((cell) => cell.outcomeScore)),
+      avgLatencyMs: mean(modelCells.map((cell) => cell.latencyMs)),
+      avgCostUsd: mean(modelCells.map((cell) => cell.costUsd)),
+    };
+  });
+}
+
+function mean(values: number[]): number {
+  return values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1);
+}
+
+function localizationScore(citedFiles: string[], groundTruthFixFiles: string[]) {
+  const cited = new Set(citedFiles.map((file) => file.toLowerCase()));
+  const truth = new Set(groundTruthFixFiles.map((file) => file.toLowerCase()));
+  const union = new Set([...cited, ...truth]);
+  let intersection = 0;
+
+  for (const file of cited) {
+    if (truth.has(file)) {
+      intersection += 1;
+    }
+  }
+
+  return union.size === 0 ? 0 : intersection / union.size;
+}

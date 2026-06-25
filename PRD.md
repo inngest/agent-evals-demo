@@ -7,7 +7,7 @@
 **Notion outline (team):** [Agent Evals — Conference Booth Demo (3-Act Outline)](https://www.notion.so/372b64753bbd813182e5cf5b100ca95d)
 **Review loop:** Sterling → Lauren (sniff test) → Dan (technical).
 
-> ⚠️ **MOCK EVERYTHING EXCEPT INNGEST.** No database, no real LLM, no API keys. The ONLY live pieces are the real Inngest agent (run + retries + trace) and `group.defer` once it ships. Mock LLM returns canned SQL; mock endpoint returns static rows; the Scores panel is faked. This is a stage prop with a real engine, built to never break on a conference floor.
+> ⚠️ **MOCK EVERYTHING EXCEPT INNGEST.** No database, no real LLM, no API keys. The ONLY live pieces are the real Inngest agent (run + retries + trace) and `defer()`/scoring once they ship. Mock LLM returns canned SQL; mock endpoint returns static rows; the Scores panel is faked or backed by seeded demo signals. This is a stage prop with a real engine, built to never break on a conference floor.
 
 ---
 
@@ -17,7 +17,7 @@ A single **Next.js (App Router) + TypeScript** app, deployed to **Vercel**, that
 
 **Data world: generic SaaS** (a fictional product's `users` + `events`), NOT Inngest's own `runs` data — a cold booth visitor must grok the query with zero setup.
 
-Design principle: **nothing on the demo's critical path depends on a UI or primitive that doesn't exist yet.** Real Inngest run + retry + trace are the only live dependencies. `group.defer` and scoring are **stubbed behind clean swap-seams** (they're shipping; structure is ready).
+Design principle: **nothing on the demo's critical path depends on a UI or primitive that doesn't exist yet.** Real Inngest run + retry + trace are the only live dependencies. `defer()` and scoring are **stubbed behind clean swap-seams** (they're shipping; structure is ready).
 
 The whole thing rides on **one canonical query, one mock LLM, toggles as the star.**
 
@@ -68,14 +68,14 @@ A real Inngest function — this is the only genuinely live piece.
 - **No `step.ai`** — it's being removed. Wrap the mock LLM call in `step.run`.
 
 ### Scoring / defer — STUB with a swap-seam
-`group.defer` and the scoring primitive are coming. Build the seam now:
+`defer()` and the scoring primitive are coming. Build the seam now:
 ```ts
 // lib/scoring.ts
-// TODO(launch): replace with real group.defer + scoring primitive when shipped.
+// TODO(launch): replace with createDefer/defer + scoring primitive when shipped.
 export async function scoreSavedQuery(runId: string, signal: "saved" | "discarded") {
   // STUB: today, update the in-app mock score store and (optionally) send a normal
   // Inngest event so a deferred-looking run appears in the dashboard runs tab.
-  // SWAP: this becomes a real group.defer block that scores asynchronously.
+  // SWAP: this becomes a real deferred scorer that scores asynchronously.
 }
 ```
 Keep it isolated so swapping in the real primitive is a one-file change.
@@ -124,13 +124,13 @@ A read-only, syntax-highlighted **Code** tab inside the app. **Not** live VS Cod
     );
     ```
   - **Act 2 (observable):** show that observability is "free" — a comment callout that orchestrating here means every step above is already traced (inputs/outputs/timing), plus event replay. Minimal/zero extra code — that's the point.
-  - **Act 3 (optimize):** the `group.defer` block, clearly commented as the new piece:
+  - **Act 3 (optimize):** the `createDefer` + `defer()` block, clearly commented as the new piece:
     ```ts
     // When the user SAVES the query, that's a signal the answer was good.
     // Score it asynchronously — this can land seconds or DAYS later.
-    await step.group.defer("score-on-save", async () => {   // ← shipping; stubbed today
-      // comment line: your agent loop / scoring logic
-      // group.defer → score this query from real product behavior
+    defer("score-on-save", {
+      function: scoreSavedQuery,
+      data: { runId: event.data.runId, signal: "saved" },
     });
     ```
 - Each snippet has a one-line description beside it the demoer can read aloud.
@@ -163,7 +163,7 @@ Model the screen on Dan's Insights screenshot, **stripped to the essentials** (h
 3. **Trace** tab → the loop, inputs/outputs, the retry that recovered. *(Act 2)*
 4. **Code** tab → `step.run` + `retries` + the "observability for free" callout. *(Act 2 code)*
 5. **Save** → "scored 0.92 ✓" → **Scores** tab → trend (+ experiment if time). *(Act 3)*
-6. **Code** tab → `group.defer` snippet (commented as the new piece). *(Act 3 code)*
+6. **Code** tab → `createDefer` + `defer()` snippet (commented as the new piece). *(Act 3 code)*
 
 ## 12. Constraints & voice
 
@@ -182,7 +182,7 @@ Model the screen on Dan's Insights screenshot, **stripped to the essentials** (h
 | Demo toggles + reset | none | ✅ |
 | In-app Code View (annotated snippets) | none | ✅ |
 | Faked Scores tab (score + trend + experiment) | none | ✅ |
-| `group.defer` real wiring | ~Wed | 🟡 stub now, swap later |
+| `defer()` real wiring | ~Wed | 🟡 stub now, swap later |
 | Extended traces (AI inputs/outputs in trace) | ~this week | 🟡 trace view degrades gracefully if not landed |
 
 ## 14. Proposed file tree
@@ -225,7 +225,7 @@ agent-evals-booth-demo/
 >
 > Tabs: **Result** (the rows), **Trace** ("View trace" deep-links to the Inngest run), **Code** (read-only syntax-highlighted curated snippets with commented-out explanation interleaved between the `step.run`s, progressive per act — see `content/code-snippets.ts`), **Scores** (faked: a 0.92 score on save, a seeded 2-week trend sparkline, an optional GPT-vs-Claude experiment sub-tab).
 >
-> Saving a query calls `lib/scoring.ts::scoreSavedQuery` — today a STUB that updates the mock score store and optionally sends an event so a deferred-looking run shows in the dashboard; leave a clear TODO to swap to real `group.defer` + scoring. Do NOT use `step.ai`. No database, no real LLM, no API keys.
+> Saving a query calls `lib/scoring.ts::scoreSavedQuery` — today a STUB that updates the mock score store and optionally sends an event so a deferred-looking run shows in the dashboard; leave a clear TODO to swap to real `createDefer` / `defer()` + scoring. Do NOT use `step.ai`. No database, no real LLM, no API keys.
 >
 > Layout mirrors the real Inngest Insights screen (SQL editor + "Insights AI" assistant panel on the right + results below), stripped to essentials. For styling, reuse the design layer from `~/inngest/swag-store-demo` (Next.js + shadcn, Tailwind v4): copy `components.json`, `src/components/ui/`, and the `globals.css` `@theme` tokens — design only, no commerce content.
 
