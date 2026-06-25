@@ -396,12 +396,13 @@ function ActOneControls({
       />
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <Button
-          className="h-10 bg-[var(--ink)] text-white hover:bg-[var(--coral)] hover:text-[var(--ink)]"
+          variant="outline"
+          className="demo-segment-button h-10 w-full min-w-0 rounded-none text-sm disabled:pointer-events-none disabled:opacity-55"
           onClick={onRun}
           disabled={isRunning}
         >
           <Play className="size-4" />
-          Run research
+          <span className="truncate">Run research</span>
         </Button>
         <DashboardLink
           href={traceUrl}
