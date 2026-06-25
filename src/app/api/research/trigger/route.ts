@@ -117,8 +117,8 @@ function normalizeModel(value: unknown): ResearchModel {
   return value === "claude-opus-4.8" ? "claude-opus-4.8" : defaultResearchModel;
 }
 
-function normalizeFailureStep(value: unknown): ResearchStepId | undefined {
-  return value === "none" ? undefined : "fetch-competitor-changelog";
+function normalizeFailureStep(value: unknown): ResearchStepId | "none" {
+  return value === "none" ? "none" : "fetch-competitor-changelog";
 }
 
 function normalizeLatency(value: unknown): number {

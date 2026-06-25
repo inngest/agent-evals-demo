@@ -75,7 +75,7 @@ export type ResearchRunRequestedData = {
   topic: string;
   cadence: "manual" | "six-day-cron" | "six-month-cron" | "seeded";
   model: ResearchModel;
-  failureStep?: ResearchStepId;
+  failureStep?: ResearchStepId | "none";
   latencyMs?: number;
   seededFeedbackSignal?: ResearchFeedbackSignal;
   seededFeedbackAt?: string;

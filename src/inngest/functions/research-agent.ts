@@ -37,7 +37,10 @@ export const researchAgent = inngest.createFunction(
     const researchRunId =
       data.researchRunId ?? `scheduled-research-${new Date().toISOString()}`;
     const model = data.model ?? "gpt-5.5";
-    const failureStep = data.failureStep ?? "fetch-competitor-changelog";
+    const failureStep =
+      data.failureStep === "none"
+        ? undefined
+        : data.failureStep ?? "fetch-competitor-changelog";
     const latencyMs = data.latencyMs ?? 0;
     const seededFeedbackSignal = normalizeSeededFeedbackSignal(
       data.seededFeedbackSignal

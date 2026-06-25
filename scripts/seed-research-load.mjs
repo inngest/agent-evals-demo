@@ -119,7 +119,7 @@ const allEvents = [...researchEvents, ...experimentEvents];
 const positiveSignals = feedbackSignals.filter((signal) => signal !== "missed-context");
 const negativeSignals = feedbackSignals.filter((signal) => signal === "missed-context");
 const retryRuns = researchEvents.filter(
-  (event) => event.data.failureStep
+  (event) => event.data.failureStep && event.data.failureStep !== "none"
 ).length;
 
 printPlan();
@@ -159,12 +159,21 @@ console.log(
   ].join("\n")
 );
 
+if (sentIds.length > 0) {
+  const visibleIds = sentIds.slice(0, 12);
+  console.log(
+    `Inngest event IDs: ${visibleIds.join(", ")}${
+      sentIds.length > visibleIds.length ? `, ... (${sentIds.length} total)` : ""
+    }`
+  );
+}
+
 function buildResearchRunEvent(index, feedbackSignal) {
   const ts = fromTs + index * spacingMs;
   const researchRunId = `${batchId}-research-${String(index + 1).padStart(4, "0")}`;
   const model = rng() < 0.58 ? "gpt-5.5" : "claude-opus-4.8";
   const shouldRetry = rng() < failureRate;
-  const failureStep = shouldRetry ? pickFailureStep(index) : undefined;
+  const failureStep = shouldRetry ? pickFailureStep(index) : "none";
   const sessionId = `${researchSessionId}-wave-${Math.floor(index / 25) + 1}`;
   const feedbackAt = new Date(ts + feedbackOffsetMs).toISOString();
 
