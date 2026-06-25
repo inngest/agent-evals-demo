@@ -439,6 +439,9 @@ function ActTwoControls({
   scoresUrl: string;
   onSignal: (signal: "useful" | "missed-context" | "saved") => void;
 }) {
+  const actionButtonClass =
+    "demo-segment-button inline-flex h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-none px-2 text-xs disabled:pointer-events-none disabled:opacity-55";
+
   return (
     <div className="grid gap-3">
       <PanelTitle
@@ -446,41 +449,40 @@ function ActTwoControls({
         title="Add scores and sessions"
         detail="The same agent defers scorers. createScorer attaches quality, outcome, and human feedback to the run."
       />
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-4 gap-2">
         <Button
           variant="outline"
-          className="h-9 border-[var(--ink)] bg-white text-xs"
+          className={actionButtonClass}
           onClick={() => onSignal("useful")}
           disabled={!result}
         >
           <ThumbsUp className="size-4" />
-          Good
+          <span className="truncate">Good</span>
         </Button>
         <Button
           variant="outline"
-          className="h-9 border-[var(--ink)] bg-white text-xs"
+          className={actionButtonClass}
           onClick={() => onSignal("missed-context")}
           disabled={!result}
         >
           <ThumbsDown className="size-4" />
-          Miss
+          <span className="truncate">Miss</span>
         </Button>
         <Button
-          className="h-9 bg-[var(--ink)] text-xs text-white hover:bg-[var(--coral)] hover:text-[var(--ink)]"
+          variant="outline"
+          className={actionButtonClass}
           onClick={() => onSignal("saved")}
           disabled={!result}
         >
           <Save className="size-4" />
-          Save
+          <span className="truncate">Save</span>
         </Button>
-      </div>
-      <div className="flex justify-end">
         <DashboardLink
           href={scoresUrl}
-          className="demo-segment-button mono inline-flex h-9 items-center gap-1.5 px-3 text-[10px] uppercase"
+          className={`${actionButtonClass} mono text-[10px] uppercase`}
         >
           <ExternalLink className="size-3.5" />
-          Scores
+          <span className="truncate">Scores</span>
         </DashboardLink>
       </div>
     </div>
