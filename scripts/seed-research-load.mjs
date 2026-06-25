@@ -24,10 +24,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  defaultResearchTopic,
-  researchSessionId,
-} from "../src/content/research-demo.ts";
+
+const defaultResearchTopic =
+  "Competitive research brief for AI workflow platforms";
+const researchSessionId = "sess-competitive-research-q3";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadDotEnv(path.join(__dirname, "..", ".env.local"));
