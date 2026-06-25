@@ -396,12 +396,13 @@ function ActOneControls({
       />
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <Button
-          className="h-10 bg-[var(--ink)] text-white hover:bg-[var(--coral)] hover:text-[var(--ink)]"
+          variant="outline"
+          className="demo-segment-button h-10 w-full min-w-0 rounded-none text-sm disabled:pointer-events-none disabled:opacity-55"
           onClick={onRun}
           disabled={isRunning}
         >
           <Play className="size-4" />
-          Run research
+          <span className="truncate">Run research</span>
         </Button>
         <DashboardLink
           href={traceUrl}
@@ -503,20 +504,21 @@ function ActThreeControls({
         title="Add experimentation"
         detail="Compare models on research quality, token consumption, cost, and latency using the same scorer."
       />
-      <Button
-        className="h-10 bg-[var(--ink)] text-white hover:bg-[var(--coral)] hover:text-[var(--ink)]"
-        onClick={onRunExperiment}
-      >
-        <FlaskConical className="size-4" />
-        Run model bakeoff
-      </Button>
-      <div className="flex justify-end">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+        <Button
+          variant="outline"
+          className="demo-segment-button h-10 w-full min-w-0 rounded-none text-sm"
+          onClick={onRunExperiment}
+        >
+          <FlaskConical className="size-4" />
+          <span className="truncate">Run model bakeoff</span>
+        </Button>
         <DashboardLink
           href={experimentUrl}
-          className="demo-segment-button mono inline-flex h-9 items-center gap-1.5 px-3 text-[10px] uppercase"
+          className="demo-segment-button mono inline-flex h-10 items-center gap-1.5 px-3 text-[10px] uppercase"
         >
           <ExternalLink className="size-3.5" />
-          Experiment
+          <span className="truncate">Experiment</span>
         </DashboardLink>
       </div>
     </div>
