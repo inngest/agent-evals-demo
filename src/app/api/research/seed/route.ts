@@ -10,6 +10,7 @@ import {
 } from "@/inngest/client";
 import { authorizeDemoOpsRequest } from "@/lib/demo-ops-auth";
 import { getDeepLink } from "@/lib/inngest-dashboard";
+import { researchSessionMeta } from "@/lib/research-session-meta";
 
 export async function POST(request: Request) {
   const authorizationError = authorizeDemoOpsRequest(request, "seed");
@@ -33,7 +34,11 @@ export async function POST(request: Request) {
         requestedAt: new Date(ts).toISOString(),
         source: "booth-demo",
       },
-      { id: `seed-research:${run.researchRunId}`, ts }
+      {
+        id: `seed-research:${run.researchRunId}`,
+        ts,
+        meta: researchSessionMeta(run.sessionId),
+      }
     );
   });
 
@@ -48,7 +53,11 @@ export async function POST(request: Request) {
         requestedAt: new Date(ts).toISOString(),
         source: "booth-demo",
       },
-      { id: `seed-research-experiment:${index + 1}`, ts }
+      {
+        id: `seed-research-experiment:${index + 1}`,
+        ts,
+        meta: researchSessionMeta(run.sessionId),
+      }
     );
   });
 

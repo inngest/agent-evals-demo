@@ -11,6 +11,10 @@ import {
   summarizeResearchRun,
 } from "@/lib/mock-research";
 import { isCloud } from "@/lib/demo-target";
+import {
+  researchSessionKey,
+  researchSessionMeta,
+} from "@/lib/research-session-meta";
 
 export type ResearchAgentResult = ReturnType<typeof summarizeResearchRun> & {
   parentRunId?: string;
@@ -32,6 +36,8 @@ export const researchAgent = inngest.createFunction(
     const model = data.model ?? "gpt-5.5";
     const failureStep = data.failureStep ?? "fetch-competitor-changelog";
     const latencyMs = data.latencyMs ?? 0;
+    const sessionId =
+      event.meta?.sessions?.[researchSessionKey] ?? researchSessionId;
 
     if (attempt === 0) {
       resetResearchCrashState();
@@ -133,11 +139,14 @@ export const researchAgent = inngest.createFunction(
         {
           ...summary,
           parentRunId: isCloud ? runId : researchRunId,
-          sessionId: researchSessionId,
+          sessionId,
           sources: [...new Set(sources)],
           source: "booth-demo",
         },
-        { id: `research-completed:${researchRunId}` }
+        {
+          id: `research-completed:${researchRunId}`,
+          meta: researchSessionMeta(sessionId),
+        }
       )
     );
 

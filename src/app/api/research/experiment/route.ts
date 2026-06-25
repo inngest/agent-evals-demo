@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
-import { seededResearchRuns, defaultResearchTopic } from "@/content/research-demo";
+import {
+  researchSessionId,
+  seededResearchRuns,
+  defaultResearchTopic,
+} from "@/content/research-demo";
 import { inngest, researchExperimentRequested } from "@/inngest/client";
 import { getDeepLink } from "@/lib/inngest-dashboard";
+import { researchSessionMeta } from "@/lib/research-session-meta";
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
@@ -25,7 +30,10 @@ export async function POST(request: Request) {
           requestedAt,
           source: "booth-demo",
         },
-        { id: `research-experiment:${experimentRunId}` }
+        {
+          id: `research-experiment:${experimentRunId}`,
+          meta: researchSessionMeta(researchSessionId),
+        }
       )
     );
 

@@ -11,6 +11,7 @@ import {
   type ResearchStepId,
 } from "@/content/research-demo";
 import { getDeepLink } from "@/lib/inngest-dashboard";
+import { researchSessionMeta } from "@/lib/research-session-meta";
 
 type StoredResearchRun = {
   researchRunId: string;
@@ -59,7 +60,10 @@ export async function POST(request: Request) {
 
   try {
     const result = await inngest.send(
-      researchRunRequested.create(data, { id: eventId })
+      researchRunRequested.create(data, {
+        id: eventId,
+        meta: researchSessionMeta(),
+      })
     );
     const ids = (result as { ids?: string[] } | undefined)?.ids;
     const inngestEventId =

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { inngest, researchFeedbackRecorded } from "@/inngest/client";
 import { researchSessionId } from "@/content/research-demo";
+import { researchSessionMeta } from "@/lib/research-session-meta";
 
 type FeedbackSignal = "useful" | "missed-context" | "saved";
 
@@ -28,7 +29,10 @@ export async function POST(request: Request) {
           feedbackAt,
           source: "booth-demo",
         },
-        { id: `research-feedback:${researchRunId}:${feedbackAt}` }
+        {
+          id: `research-feedback:${researchRunId}:${feedbackAt}`,
+          meta: researchSessionMeta(),
+        }
       )
     );
   } catch {
