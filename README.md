@@ -144,6 +144,9 @@ The app is wired for Inngest Cloud the same way the swag-store apps are:
 - `NEXT_PUBLIC_INNGEST_RUNS_URL` optionally overrides app links with a
   pre-filtered Runs view for the conference app/environment. Use it for the
   booth split-screen once Cloud is configured.
+- `NEXT_PUBLIC_INNGEST_INSIGHTS_URL` optionally points every "Open Insights"
+  button at a saved Cloud Insights query. If omitted, the app opens the generic
+  Insights route for the configured dashboard environment.
 - `INNGEST_API_KEY` + `INNGEST_INSIGHTS_SCORE_QUERY` are optional. When both
   are present, `/api/score` reads the Scores panel from Inngest Insights.
   Without them, the panel uses deterministic seeded demo signals. See
@@ -167,8 +170,9 @@ INNGEST_API_KEY=
 INNGEST_API_BASE_URL=https://api.inngest.com
 INNGEST_INSIGHTS_SCORE_QUERY=
 DEMO_SEED_TOKEN=
-NEXT_PUBLIC_INNGEST_DASHBOARD_URL=https://app.inngest.com
+NEXT_PUBLIC_INNGEST_DASHBOARD_URL=https://app.inngest.com/env/production
 NEXT_PUBLIC_INNGEST_RUNS_URL=
+NEXT_PUBLIC_INNGEST_INSIGHTS_URL=
 ```
 
 The original POC URL, `https://agent-evals-demo.vercel.app`, is live but is not

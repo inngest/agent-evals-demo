@@ -18,12 +18,16 @@
 //   rendered "Environment not found", so session links fall back to Runs.
 
 // ⬇⬇⬇ SWAP TO CLOUD URLS HERE ⬇⬇⬇
-// For the booth on local: leave as-is. For a cloud recording, set
-// NEXT_PUBLIC_INNGEST_DASHBOARD_BASE to https://app.inngest.com/env/<env>
-// and the paths below resolve against it.
-const DASHBOARD_BASE =
+// For the booth on local: leave as-is. For Cloud, prefer setting
+// NEXT_PUBLIC_INNGEST_DASHBOARD_URL to the env dashboard URL, for example:
+// https://app.inngest.com/env/production. A bare https://app.inngest.com value
+// is normalized to /env/production for the production booth.
+const configuredDashboardBase =
   process.env.NEXT_PUBLIC_INNGEST_DASHBOARD_BASE?.trim() ||
+  process.env.NEXT_PUBLIC_INNGEST_DASHBOARD_URL?.trim() ||
   "http://localhost:8288";
+const DASHBOARD_BASE = normalizeDashboardBase(configuredDashboardBase);
+const INSIGHTS_URL = process.env.NEXT_PUBLIC_INNGEST_INSIGHTS_URL?.trim();
 // ⬆⬆⬆ SWAP TO CLOUD URLS HERE ⬆⬆⬆
 
 export type DeepLinkKey =
@@ -64,8 +68,13 @@ export const deepLinks: Record<DeepLinkKey, (ids?: DeepLinkIds) => string> = {
   experiment: () =>
     isLocalDashboard() ? joinDashboardPath("runs") : joinDashboardPath("experiments"),
   envDashboard: () => DASHBOARD_BASE,
-  insights: () =>
-    isLocalDashboard() ? DASHBOARD_BASE : joinDashboardPath("insights"),
+  insights: () => {
+    if (INSIGHTS_URL) {
+      return INSIGHTS_URL;
+    }
+
+    return isLocalDashboard() ? DASHBOARD_BASE : joinDashboardPath("insights");
+  },
 };
 
 export function getDeepLink(key: DeepLinkKey, ids?: DeepLinkIds): string {
@@ -92,6 +101,16 @@ function joinDashboardPath(...parts: string[]): string {
     .join("/");
 
   return suffix ? `${base}/${suffix}` : base;
+}
+
+function normalizeDashboardBase(value: string): string {
+  const trimmed = value.replace(/\/+$/, "");
+
+  if (trimmed === "https://app.inngest.com") {
+    return `${trimmed}/env/production`;
+  }
+
+  return trimmed;
 }
 
 function encodePathPart(part: string): string {

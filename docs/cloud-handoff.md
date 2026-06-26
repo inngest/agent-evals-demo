@@ -212,11 +212,15 @@ a 5s delay by default. Override with `DEMO_CLOUD_READY_INSIGHTS_ATTEMPTS` and
 ## Generate The Insights Score Query
 
 Follow `docs/insights-score-query.md` after Cloud events exist. Then add the
-validated query to Vercel:
+validated query to Vercel. If Dan or another demoer creates a saved Insights
+query in Cloud, also add its browser URL as `NEXT_PUBLIC_INNGEST_INSIGHTS_URL`
+so every in-app "Open Insights" button lands directly on that saved query:
 
 ```bash
 INNGEST_INSIGHTS_SCORE_QUERY="$INNGEST_INSIGHTS_SCORE_QUERY" npm run demo:insights-check
 printf '%s' "$INNGEST_INSIGHTS_SCORE_QUERY" | npx vercel env add INNGEST_INSIGHTS_SCORE_QUERY production
+# Optional saved-query deep link:
+# printf '%s' "$NEXT_PUBLIC_INNGEST_INSIGHTS_URL" | npx vercel env add NEXT_PUBLIC_INNGEST_INSIGHTS_URL production
 npx vercel --prod
 DEMO_BASE_URL="$DEMO_BASE_URL" npm run demo:preflight
 ```
