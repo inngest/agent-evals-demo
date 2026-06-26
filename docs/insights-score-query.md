@@ -96,6 +96,13 @@ When the query returns the right row shape, set it in Vercel:
 vercel env add INNGEST_INSIGHTS_SCORE_QUERY production
 ```
 
+If the query has also been saved in the Cloud Insights UI, set the saved-query
+browser URL so the app's Insights buttons open it directly:
+
+```bash
+vercel env add NEXT_PUBLIC_INNGEST_INSIGHTS_URL production
+```
+
 Then redeploy and run:
 
 ```bash

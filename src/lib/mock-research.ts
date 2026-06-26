@@ -66,6 +66,7 @@ export function summarizeResearchRun(args: {
   researchRunId: string;
   model: ResearchModel;
   completedAt?: string;
+  qualityScore?: number;
 }): ResearchRunSummary {
   const sources = [...new Set(researchSteps.map((step) => step.source))];
   const tokenCount = researchSteps.reduce((sum, step) => sum + step.tokens, 0);
@@ -79,7 +80,7 @@ export function summarizeResearchRun(args: {
     researchRunId: args.researchRunId,
     model: args.model,
     completedAt: args.completedAt,
-    qualityScore,
+    qualityScore: args.qualityScore ?? qualityScore,
   });
 }
 

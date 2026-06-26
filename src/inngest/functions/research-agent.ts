@@ -42,6 +42,9 @@ export const researchAgent = inngest.createFunction(
         ? undefined
         : data.failureStep ?? "fetch-competitor-changelog";
     const latencyMs = data.latencyMs ?? 0;
+    const seededQualityScore = normalizeSeededQualityScore(
+      data.seededQualityScore
+    );
     const seededFeedbackSignal = normalizeSeededFeedbackSignal(
       data.seededFeedbackSignal
     );
@@ -118,7 +121,11 @@ export const researchAgent = inngest.createFunction(
       runResearchCall("notify-stakeholders", { attempt, failStep: failureStep, latencyMs })
     );
 
-    const summary = summarizeResearchRun({ researchRunId, model });
+    const summary = summarizeResearchRun({
+      researchRunId,
+      model,
+      qualityScore: seededQualityScore,
+    });
     const sources = [
       productContext,
       notionRoadmap,
@@ -198,6 +205,16 @@ function normalizeSeededFeedbackSignal(
   }
 
   return undefined;
+}
+
+function normalizeSeededQualityScore(value: unknown): number | undefined {
+  const score = Number(value);
+
+  if (!Number.isFinite(score)) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.min(1, score));
 }
 
 function normalizeSeededFeedbackAt(value: unknown): string {

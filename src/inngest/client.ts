@@ -73,10 +73,16 @@ export const experimentRequested = eventType("agent/experiment.requested", {
 export type ResearchRunRequestedData = {
   researchRunId: string;
   topic: string;
-  cadence: "manual" | "six-day-cron" | "six-month-cron" | "seeded";
+  cadence:
+    | "manual"
+    | "score-heartbeat-cron"
+    | "six-day-cron"
+    | "six-month-cron"
+    | "seeded";
   model: ResearchModel;
   failureStep?: ResearchStepId | "none";
   latencyMs?: number;
+  seededQualityScore?: number;
   seededFeedbackSignal?: ResearchFeedbackSignal;
   seededFeedbackAt?: string;
   requestedAt: string;

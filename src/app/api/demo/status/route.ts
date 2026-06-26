@@ -12,7 +12,12 @@ export async function GET() {
   const hasSigningKey = Boolean(process.env.INNGEST_SIGNING_KEY);
   const hasApiKey = Boolean(process.env.INNGEST_API_KEY);
   const hasInsightsQuery = Boolean(process.env.INNGEST_INSIGHTS_SCORE_QUERY);
+  const hasInsightsUrl = Boolean(process.env.NEXT_PUBLIC_INNGEST_INSIGHTS_URL);
   const hasSeedToken = Boolean(process.env.DEMO_SEED_TOKEN);
+  const hasDashboardUrl = Boolean(
+    process.env.NEXT_PUBLIC_INNGEST_DASHBOARD_BASE ||
+      process.env.NEXT_PUBLIC_INNGEST_DASHBOARD_URL
+  );
   const dashboardUrl = getDeepLink("envDashboard");
   const runsUrl = getDeepLink("runTrace");
 
@@ -30,8 +35,9 @@ export async function GET() {
       hasEncryptionKey: Boolean(process.env.INNGEST_ENCRYPTION_KEY),
       hasApiKey,
       hasInsightsQuery,
+      hasInsightsUrl,
       hasSeedToken,
-      hasDashboardBase: Boolean(process.env.NEXT_PUBLIC_INNGEST_DASHBOARD_BASE),
+      hasDashboardUrl,
       inngestEnv: process.env.INNGEST_ENV ?? null,
     },
     readiness: {
