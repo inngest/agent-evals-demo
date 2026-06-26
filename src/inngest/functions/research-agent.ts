@@ -1,8 +1,10 @@
 import { researchSteps, researchSessionId } from "@/content/research-demo";
 import {
   inngest,
+  researchFeedbackRecorded,
   researchRunCompleted,
   researchRunRequested,
+  type ResearchFeedbackSignal,
   type ResearchRunRequestedData,
 } from "@/inngest/client";
 import {
@@ -35,8 +37,15 @@ export const researchAgent = inngest.createFunction(
     const researchRunId =
       data.researchRunId ?? `scheduled-research-${new Date().toISOString()}`;
     const model = data.model ?? "gpt-5.5";
-    const failureStep = data.failureStep ?? "fetch-competitor-changelog";
+    const failureStep =
+      data.failureStep === "none"
+        ? undefined
+        : data.failureStep ?? "fetch-competitor-changelog";
     const latencyMs = data.latencyMs ?? 0;
+    const seededFeedbackSignal = normalizeSeededFeedbackSignal(
+      data.seededFeedbackSignal
+    );
+    const seededFeedbackAt = normalizeSeededFeedbackAt(data.seededFeedbackAt);
     const sessionId =
       event.meta?.sessions?.[researchSessionKey] ?? researchSessionId;
 
@@ -151,6 +160,27 @@ export const researchAgent = inngest.createFunction(
       )
     );
 
+    if (seededFeedbackSignal) {
+      await step.sendEvent(
+        "emit-seeded-research-feedback",
+        researchFeedbackRecorded.create(
+          {
+            researchRunId,
+            parentRunId: isCloud ? runId : researchRunId,
+            sessionId,
+            signal: seededFeedbackSignal,
+            feedbackAt: seededFeedbackAt,
+            source: "booth-demo",
+          },
+          {
+            id: `research-feedback:${researchRunId}:${seededFeedbackSignal}`,
+            ts: Date.parse(seededFeedbackAt),
+            meta: researchSessionMeta(sessionId),
+          }
+        )
+      );
+    }
+
     return {
       ...summary,
       parentRunId: isCloud ? runId : undefined,
@@ -159,3 +189,21 @@ export const researchAgent = inngest.createFunction(
 );
 
 export const researchStepCount = researchSteps.length;
+
+function normalizeSeededFeedbackSignal(
+  value: unknown
+): ResearchFeedbackSignal | undefined {
+  if (value === "useful" || value === "missed-context" || value === "saved") {
+    return value;
+  }
+
+  return undefined;
+}
+
+function normalizeSeededFeedbackAt(value: unknown): string {
+  if (typeof value === "string" && Number.isFinite(Date.parse(value))) {
+    return value;
+  }
+
+  return new Date().toISOString();
+}

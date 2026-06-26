@@ -13,6 +13,7 @@
     "demo:local-ready": "node scripts/local-ready.mjs",
     "demo:seed": "node scripts/seed-demo.mjs",
     "demo:seed-cloud": "node scripts/seed-cloud.mjs",
+    "demo:seed-research-load": "node scripts/seed-research-load.mjs",
     "demo:smoke": "node scripts/smoke-demo.mjs",
     "demo:viewport": "node scripts/viewport-qa.mjs",
     "demo:booth-viewport": "node scripts/booth-control-viewport.mjs",

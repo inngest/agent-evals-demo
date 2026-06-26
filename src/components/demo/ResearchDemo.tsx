@@ -23,6 +23,7 @@ import {
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import type { CodeSnippetId } from "@/content/code-snippets";
 import type { HighlightedCodeSnippet } from "@/lib/highlight";
+import type { ResearchFeedbackSignal } from "@/inngest/client";
 
 type ResearchDemoProps = {
   snippets: HighlightedCodeSnippet[];
@@ -55,6 +56,12 @@ type StatusResponse = {
   error?: string;
 };
 
+type FeedbackState = {
+  signal: ResearchFeedbackSignal;
+  score: number;
+  feedbackAt: string;
+};
+
 const acts: Array<{
   id: ActId;
   label: string;
@@ -73,8 +80,11 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
   const [, setCompletedSteps] = React.useState(0);
   const [result, setResult] = React.useState<ResearchRunSummary | null>(null);
   const [failureArmed, setFailureArmed] = React.useState(true);
+  const [lastFeedback, setLastFeedback] = React.useState<FeedbackState | null>(
+    null
+  );
   const [toast, setToast] = React.useState("");
-  const [topPaneHeight, setTopPaneHeight] = React.useState(306);
+  const [topPaneHeight, setTopPaneHeight] = React.useState(340);
   const [experiment, setExperiment] = React.useState<{
     sent: boolean;
     experimentRunId: string;
@@ -146,6 +156,7 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
     setPhase("sending");
     setTrigger(null);
     setResult(null);
+    setLastFeedback(null);
     setCompletedSteps(0);
     setToast("");
 
@@ -190,9 +201,19 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
     }
   }
 
-  async function sendSignal(signal: "useful" | "missed-context" | "saved") {
+  async function sendSignal(signal: ResearchFeedbackSignal) {
     setActiveAct(2);
-    const response = await postJson<{ ok: boolean; score: number }>(
+    setLastFeedback({
+      signal,
+      score: signal === "missed-context" ? 0 : 1,
+      feedbackAt: new Date().toISOString(),
+    });
+
+    const response = await postJson<{
+      ok: boolean;
+      score: number;
+      feedbackAt: string;
+    }>(
       "/api/research/signal",
       {
         researchRunId: trigger?.researchRunId,
@@ -200,18 +221,36 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
         signal,
       }
     );
+    setLastFeedback({
+      signal,
+      score: response.score,
+      feedbackAt: response.feedbackAt,
+    });
 
     showToast(
       signal === "missed-context"
-        ? "Feedback score sent"
+        ? "Feedback score captured"
         : response.score === 1
-          ? "Positive score sent"
-          : "Score sent"
+          ? "Positive score captured"
+          : "Score captured"
     );
   }
 
   async function runExperiment() {
     setActiveAct(3);
+    const corpusRunId = trigger?.researchRunId ?? result?.researchRunId;
+    const corpusRuns = corpusRunId
+      ? [
+          {
+            researchRunId: corpusRunId,
+            parentRunId: trigger?.runId,
+            sessionId: result?.sessionId,
+            feedbackSignal: lastFeedback?.signal,
+            feedbackScore: lastFeedback?.score,
+            scoredAt: lastFeedback?.feedbackAt,
+          },
+        ]
+      : undefined;
     const response = await postJson<{
       ok: boolean;
       sent: boolean;
@@ -219,6 +258,7 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
       experimentUrl: string;
     }>("/api/research/experiment", {
       topic: defaultResearchTopic,
+      corpusRuns,
     });
 
     setExperiment(response);
@@ -231,6 +271,7 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
     setTrigger(null);
     setCompletedSteps(0);
     setResult(null);
+    setLastFeedback(null);
     setExperiment(null);
     setToast("");
   }
@@ -332,8 +373,8 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
             ) : null}
             {activeAct === 2 ? (
               <ActTwoControls
-                result={result}
                 scoresUrl={scoresUrl}
+                selectedSignal={lastFeedback?.signal ?? null}
                 onSignal={sendSignal}
               />
             ) : null}
@@ -432,16 +473,18 @@ function ActOneControls({
 }
 
 function ActTwoControls({
-  result,
   scoresUrl,
+  selectedSignal,
   onSignal,
 }: {
-  result: ResearchRunSummary | null;
   scoresUrl: string;
+  selectedSignal: ResearchFeedbackSignal | null;
   onSignal: (signal: "useful" | "missed-context" | "saved") => void;
 }) {
   const actionButtonClass =
-    "demo-segment-button inline-flex h-9 w-full min-w-0 items-center justify-center gap-1.5 rounded-none px-2 text-xs disabled:pointer-events-none disabled:opacity-55";
+    "demo-segment-button inline-flex h-8 w-full min-w-0 items-center justify-center gap-1 rounded-none px-1.5 text-[11px] disabled:pointer-events-none disabled:opacity-55";
+  const isOtherSignal = (signal: ResearchFeedbackSignal) =>
+    selectedSignal !== null && selectedSignal !== signal;
 
   return (
     <div className="grid gap-3">
@@ -450,41 +493,60 @@ function ActTwoControls({
         title="Add scores and sessions"
         detail="The same agent defers scorers. createScorer attaches quality, outcome, and human feedback to the run."
       />
-      <div className="grid grid-cols-4 gap-2">
-        <Button
-          variant="outline"
-          className={actionButtonClass}
-          onClick={() => onSignal("useful")}
-          disabled={!result}
-        >
-          <ThumbsUp className="size-4" />
-          <span className="truncate">Good</span>
-        </Button>
-        <Button
-          variant="outline"
-          className={actionButtonClass}
-          onClick={() => onSignal("missed-context")}
-          disabled={!result}
-        >
-          <ThumbsDown className="size-4" />
-          <span className="truncate">Miss</span>
-        </Button>
-        <Button
-          variant="outline"
-          className={actionButtonClass}
-          onClick={() => onSignal("saved")}
-          disabled={!result}
-        >
-          <Save className="size-4" />
-          <span className="truncate">Save</span>
-        </Button>
-        <DashboardLink
-          href={scoresUrl}
-          className={`${actionButtonClass} mono text-[10px] uppercase`}
-        >
-          <ExternalLink className="size-3.5" />
-          <span className="truncate">Scores</span>
-        </DashboardLink>
+      <div className="border border-[var(--ink)] bg-white">
+        <div className="px-3 py-2">
+          <div className="mono text-[10px] uppercase text-[var(--muted-copy)]">
+            research brief
+          </div>
+          <p className="mt-1 text-[13px] font-medium leading-5">
+            Here&apos;s the competitive research: Acme Inc., CarberVac, and The
+            Chair Company split workflows, traces, and eval feedback.
+          </p>
+        </div>
+        <div className="grid grid-cols-4 gap-1.5 border-t border-[var(--rule-soft)] bg-[var(--bone)] p-1.5">
+          <Button
+            variant="outline"
+            className={actionButtonClass}
+            onClick={() => onSignal("useful")}
+            disabled={isOtherSignal("useful")}
+            data-active={selectedSignal === "useful" ? "true" : undefined}
+            aria-pressed={selectedSignal === "useful"}
+          >
+            <ThumbsUp className="size-4" />
+            <span className="truncate">Good</span>
+          </Button>
+          <Button
+            variant="outline"
+            className={actionButtonClass}
+            onClick={() => onSignal("missed-context")}
+            disabled={isOtherSignal("missed-context")}
+            data-active={
+              selectedSignal === "missed-context" ? "true" : undefined
+            }
+            aria-pressed={selectedSignal === "missed-context"}
+          >
+            <ThumbsDown className="size-4" />
+            <span className="truncate">Miss</span>
+          </Button>
+          <Button
+            variant="outline"
+            className={actionButtonClass}
+            onClick={() => onSignal("saved")}
+            disabled={isOtherSignal("saved")}
+            data-active={selectedSignal === "saved" ? "true" : undefined}
+            aria-pressed={selectedSignal === "saved"}
+          >
+            <Save className="size-4" />
+            <span className="truncate">Save</span>
+          </Button>
+          <DashboardLink
+            href={scoresUrl}
+            className={`${actionButtonClass} mono text-[10px] uppercase`}
+          >
+            <ExternalLink className="size-3.5" />
+            <span className="truncate">Scores</span>
+          </DashboardLink>
+        </div>
       </div>
     </div>
   );

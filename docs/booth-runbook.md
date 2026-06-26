@@ -193,6 +193,48 @@ After a fresh Cloud seed, allow the durable score runs a few seconds to emit
 `app/query.scored`. `DEMO_CLOUD_READY_SEED=1 npm run demo:cloud-ready` retries
 the Insights check automatically.
 
+## Seed Research Agent Load
+
+Use this when the Inngest dashboard needs a large history of the current
+research-agent demo across all acts:
+
+```bash
+npm run demo:seed-research-load -- --count 250 --experiments 200
+```
+
+The command loads `.env.local`, sends directly to the Inngest Cloud Event API,
+and emits:
+
+- `research/run.requested` events for Act 1 durable agent traces.
+- seeded feedback instructions that the agent turns into
+  `research/feedback.recorded` events after it knows the real Cloud run ID, so
+  Act 2 positive/negative scores attach to the durable run.
+- `research/experiment.requested` events for Act 3 model bakeoff data. Each
+  experiment event carries a `corpusRuns` window with the Act 2 feedback signal
+  and score from the same seeded batch, so the experiment output can point back
+  to scored research-agent runs.
+
+Preview the exact pattern without sending anything:
+
+```bash
+npm run demo:seed-research-load -- --dry-run --count 40 --experiments 20
+```
+
+Useful knobs:
+
+```bash
+npm run demo:seed-research-load -- \
+  --count 500 \
+  --experiments 500 \
+  --failure-rate 0.12 \
+  --batch-size 50
+```
+
+The default feedback pattern intentionally starts with 2-5 positive signals,
+then a 10-run negative streak, then recovery positives, with randomized
+repeats. Keep `--failure-rate` modest for large loads; each retry demo adds a
+durable retry attempt and a short retry delay.
+
 ## Walkthrough
 
 1. Click `Seed 14 runs` locally, or run the Cloud seed command above.

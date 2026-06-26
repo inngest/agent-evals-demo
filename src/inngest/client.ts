@@ -75,8 +75,10 @@ export type ResearchRunRequestedData = {
   topic: string;
   cadence: "manual" | "six-day-cron" | "six-month-cron" | "seeded";
   model: ResearchModel;
-  failureStep?: ResearchStepId;
+  failureStep?: ResearchStepId | "none";
   latencyMs?: number;
+  seededFeedbackSignal?: ResearchFeedbackSignal;
+  seededFeedbackAt?: string;
   requestedAt: string;
   source: "booth-demo";
 };
@@ -102,9 +104,20 @@ export type ResearchFeedbackRecordedData = {
   researchRunId: string;
   parentRunId?: string;
   sessionId: string;
-  signal: "useful" | "missed-context" | "saved";
+  signal: ResearchFeedbackSignal;
   feedbackAt: string;
   source: "booth-demo";
+};
+
+export type ResearchFeedbackSignal = "useful" | "missed-context" | "saved";
+
+export type ResearchExperimentCorpusRun = {
+  researchRunId: string;
+  parentRunId?: string;
+  sessionId?: string;
+  feedbackSignal?: ResearchFeedbackSignal;
+  feedbackScore?: number;
+  scoredAt?: string;
 };
 
 // ── 9. Act 3 model bakeoff → group.experiment over historic research runs ─
@@ -112,6 +125,7 @@ export type ResearchExperimentRequestedData = {
   experimentRunId: string;
   topic: string;
   corpusRunIds: string[];
+  corpusRuns?: ResearchExperimentCorpusRun[];
   requestedAt: string;
   source: "booth-demo";
 };
