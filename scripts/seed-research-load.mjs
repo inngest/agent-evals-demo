@@ -7,10 +7,12 @@
  *   2. seeded feedback instructions -> emitted by the agent after it knows
  *                                      the real Cloud run ID, so Act 2 scores
  *                                      attach back to the durable agent run
- *   3. research/experiment.requested -> Act 3 model bakeoff runs
+ *   3. research/experiment.requested -> Act 3 model bakeoff runs whose
+ *                                      corpus points back at the scored Act 2
+ *                                      research runs from the same batch
  *
  * Default profile:
- *   - 120 research-agent runs
+ *   - 120 connected research-agent runs
  *   - 90 model-bakeoff experiment requests
  *   - feedback streaks that begin with 2-5 positive signals, then a 10-run
  *     negative streak, then recovery positives, with randomized repeats.
@@ -201,7 +203,8 @@ function buildExperimentEvent(index, runEvents) {
   const baseTs = fromTs + (runEvents.length ? index % runEvents.length : index) * spacingMs;
   const ts = baseTs + experimentOffsetMs + Math.floor(index / Math.max(1, count)) * spacingMs;
   const experimentRunId = `${batchId}-experiment-${String(index + 1).padStart(4, "0")}`;
-  const corpusRunIds = sampleCorpusRunIds(index, runEvents);
+  const corpusRuns = sampleCorpusRuns(index, runEvents);
+  const corpusRunIds = corpusRuns.map((run) => run.researchRunId);
   const sessionId = `${researchSessionId}-experiment-wave-${Math.floor(index / 25) + 1}`;
 
   return {
@@ -212,6 +215,7 @@ function buildExperimentEvent(index, runEvents) {
       experimentRunId,
       topic: topicForIndex(index),
       corpusRunIds,
+      corpusRuns,
       requestedAt: new Date(ts).toISOString(),
       source: "booth-demo",
     },
@@ -272,9 +276,14 @@ function pickFailureStep(index) {
   return failureSteps[index % failureSteps.length];
 }
 
-function sampleCorpusRunIds(index, runEvents) {
+function sampleCorpusRuns(index, runEvents) {
   if (runEvents.length === 0) {
-    return [`${batchId}-research-placeholder-${String(index + 1).padStart(4, "0")}`];
+    return [
+      {
+        researchRunId: `${batchId}-research-placeholder-${String(index + 1).padStart(4, "0")}`,
+        sessionId: researchSessionId,
+      },
+    ];
   }
 
   const size = Math.min(runEvents.length, randomInt(rng, 8, 24));
@@ -282,7 +291,20 @@ function sampleCorpusRunIds(index, runEvents) {
 
   return Array.from({ length: size }, (_, offset) => {
     const event = runEvents[(start + offset) % runEvents.length];
-    return event.data.researchRunId;
+    const feedbackSignal = event.data.seededFeedbackSignal;
+
+    return omitUndefined({
+      researchRunId: event.data.researchRunId,
+      sessionId: event.meta?.sessions?.research_session_id,
+      feedbackSignal,
+      feedbackScore:
+        typeof feedbackSignal === "string"
+          ? feedbackSignal === "missed-context"
+            ? 0
+            : 1
+          : undefined,
+      scoredAt: event.data.seededFeedbackAt,
+    });
   });
 }
 
@@ -325,7 +347,7 @@ function printPlan() {
         : `Act 2 feedback: ${feedbackSignals.length} instructions ` +
           `(${positiveSignals.length} positive, ${negativeSignals.length} negative)`,
       `Act 1 retry demos: ${retryRuns}`,
-      `Act 3 experiments: ${experimentEvents.length}`,
+      `Act 3 experiments: ${experimentEvents.length} connected to scored run windows`,
       `Events emitted directly: ${allEvents.length}`,
     ].join("\n")
   );

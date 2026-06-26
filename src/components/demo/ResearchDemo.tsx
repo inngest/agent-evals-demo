@@ -23,6 +23,7 @@ import {
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import type { CodeSnippetId } from "@/content/code-snippets";
 import type { HighlightedCodeSnippet } from "@/lib/highlight";
+import type { ResearchFeedbackSignal } from "@/inngest/client";
 
 type ResearchDemoProps = {
   snippets: HighlightedCodeSnippet[];
@@ -55,6 +56,12 @@ type StatusResponse = {
   error?: string;
 };
 
+type FeedbackState = {
+  signal: ResearchFeedbackSignal;
+  score: number;
+  feedbackAt: string;
+};
+
 const acts: Array<{
   id: ActId;
   label: string;
@@ -73,6 +80,9 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
   const [, setCompletedSteps] = React.useState(0);
   const [result, setResult] = React.useState<ResearchRunSummary | null>(null);
   const [failureArmed, setFailureArmed] = React.useState(true);
+  const [lastFeedback, setLastFeedback] = React.useState<FeedbackState | null>(
+    null
+  );
   const [toast, setToast] = React.useState("");
   const [topPaneHeight, setTopPaneHeight] = React.useState(306);
   const [experiment, setExperiment] = React.useState<{
@@ -146,6 +156,7 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
     setPhase("sending");
     setTrigger(null);
     setResult(null);
+    setLastFeedback(null);
     setCompletedSteps(0);
     setToast("");
 
@@ -190,9 +201,13 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
     }
   }
 
-  async function sendSignal(signal: "useful" | "missed-context" | "saved") {
+  async function sendSignal(signal: ResearchFeedbackSignal) {
     setActiveAct(2);
-    const response = await postJson<{ ok: boolean; score: number }>(
+    const response = await postJson<{
+      ok: boolean;
+      score: number;
+      feedbackAt: string;
+    }>(
       "/api/research/signal",
       {
         researchRunId: trigger?.researchRunId,
@@ -200,6 +215,11 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
         signal,
       }
     );
+    setLastFeedback({
+      signal,
+      score: response.score,
+      feedbackAt: response.feedbackAt,
+    });
 
     showToast(
       signal === "missed-context"
@@ -212,6 +232,19 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
 
   async function runExperiment() {
     setActiveAct(3);
+    const corpusRunId = trigger?.researchRunId ?? result?.researchRunId;
+    const corpusRuns = corpusRunId
+      ? [
+          {
+            researchRunId: corpusRunId,
+            parentRunId: trigger?.runId,
+            sessionId: result?.sessionId,
+            feedbackSignal: lastFeedback?.signal,
+            feedbackScore: lastFeedback?.score,
+            scoredAt: lastFeedback?.feedbackAt,
+          },
+        ]
+      : undefined;
     const response = await postJson<{
       ok: boolean;
       sent: boolean;
@@ -219,6 +252,7 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
       experimentUrl: string;
     }>("/api/research/experiment", {
       topic: defaultResearchTopic,
+      corpusRuns,
     });
 
     setExperiment(response);
@@ -231,6 +265,7 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
     setTrigger(null);
     setCompletedSteps(0);
     setResult(null);
+    setLastFeedback(null);
     setExperiment(null);
     setToast("");
   }

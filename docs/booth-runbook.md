@@ -209,7 +209,10 @@ and emits:
 - seeded feedback instructions that the agent turns into
   `research/feedback.recorded` events after it knows the real Cloud run ID, so
   Act 2 positive/negative scores attach to the durable run.
-- `research/experiment.requested` events for Act 3 model bakeoff data.
+- `research/experiment.requested` events for Act 3 model bakeoff data. Each
+  experiment event carries a `corpusRuns` window with the Act 2 feedback signal
+  and score from the same seeded batch, so the experiment output can point back
+  to scored research-agent runs.
 
 Preview the exact pattern without sending anything:
 
@@ -221,8 +224,8 @@ Useful knobs:
 
 ```bash
 npm run demo:seed-research-load -- \
-  --count 300 \
-  --experiments 300 \
+  --count 500 \
+  --experiments 500 \
   --failure-rate 0.12 \
   --batch-size 50
 ```

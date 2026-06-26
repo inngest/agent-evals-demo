@@ -111,11 +111,21 @@ export type ResearchFeedbackRecordedData = {
 
 export type ResearchFeedbackSignal = "useful" | "missed-context" | "saved";
 
+export type ResearchExperimentCorpusRun = {
+  researchRunId: string;
+  parentRunId?: string;
+  sessionId?: string;
+  feedbackSignal?: ResearchFeedbackSignal;
+  feedbackScore?: number;
+  scoredAt?: string;
+};
+
 // ── 9. Act 3 model bakeoff → group.experiment over historic research runs ─
 export type ResearchExperimentRequestedData = {
   experimentRunId: string;
   topic: string;
   corpusRunIds: string[];
+  corpusRuns?: ResearchExperimentCorpusRun[];
   requestedAt: string;
   source: "booth-demo";
 };
