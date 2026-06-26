@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     typeof body.experimentRunId === "string" && body.experimentRunId.length > 0
       ? body.experimentRunId
       : crypto.randomUUID();
-  const requestedAt = new Date().toISOString();
+  const requestedAt = normalizeRequestedAt(body.requestedAt);
   const providedCorpusRuns = normalizeCorpusRuns(body.corpusRuns);
   const providedCorpusRunIds = normalizeCorpusRunIds(body.corpusRunIds);
   const fallbackCorpusRuns = seededResearchRuns.map((run) => ({
@@ -135,4 +135,12 @@ function normalizeFeedbackSignal(value: unknown): ResearchFeedbackSignal | undef
   }
 
   return undefined;
+}
+
+function normalizeRequestedAt(value: unknown): string {
+  if (typeof value === "string" && Number.isFinite(Date.parse(value))) {
+    return value;
+  }
+
+  return new Date().toISOString();
 }

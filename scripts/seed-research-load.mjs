@@ -21,6 +21,10 @@
  *   node scripts/seed-research-load.mjs --dry-run
  *   node scripts/seed-research-load.mjs --count 250 --experiments 180
  *   npm run demo:seed-research-load -- --count 300 --experiments 300
+ *
+ * Research run events go directly to the Inngest Event API. Connected
+ * experiment requests go through the deployed app API by default because the
+ * served SDK path carries the current corpus schema into Cloud reliably.
  */
 
 import fs from "node:fs";
@@ -83,8 +87,13 @@ const eventApiBase =
   (readFlag("--event-api-base-url") ??
     process.env.INNGEST_EVENT_API_BASE_URL ??
     "https://inn.gs").replace(/\/+$/, "");
+const appBaseUrl =
+  (readFlag("--app-base-url") ??
+    process.env.DEMO_BASE_URL ??
+    "https://agent-evals-demo.vercel.app").replace(/\/+$/, "");
 const eventKey = process.env.INNGEST_EVENT_KEY;
 const inngestEnv = process.env.INNGEST_ENV;
+const directExperiments = hasFlag("--direct-experiments");
 const fromTs = parseFromTimestamp(
   readFlag("--from") ?? process.env.DEMO_RESEARCH_SEED_FROM,
   count,
@@ -117,7 +126,11 @@ const experimentEvents = skipExperiments
   : Array.from({ length: experiments }, (_, index) =>
       buildExperimentEvent(index, researchEvents)
     );
-const allEvents = [...researchEvents, ...experimentEvents];
+const directEvents = [
+  ...researchEvents,
+  ...(directExperiments ? experimentEvents : []),
+];
+const appExperimentEvents = directExperiments ? [] : experimentEvents;
 const positiveSignals = feedbackSignals.filter((signal) => signal !== "missed-context");
 const negativeSignals = feedbackSignals.filter((signal) => signal === "missed-context");
 const retryRuns = researchEvents.filter(
@@ -131,16 +144,32 @@ if (dryRun) {
 }
 
 const sentIds = [];
-for (const [index, batch] of chunk(allEvents, batchSize).entries()) {
+for (const [index, batch] of chunk(directEvents, batchSize).entries()) {
   const result = await sendBatch(batch);
   const ids = Array.isArray(result.ids) ? result.ids : [];
   sentIds.push(...ids);
   console.log(
-    `Sent batch ${index + 1}/${Math.ceil(allEvents.length / batchSize)} ` +
+    `Sent Event API batch ${index + 1}/${Math.ceil(directEvents.length / batchSize)} ` +
       `(${batch.length} events${ids.length ? `, ${ids.length} ids` : ""}).`
   );
 
-  if (batchDelayMs > 0 && index < Math.ceil(allEvents.length / batchSize) - 1) {
+  if (batchDelayMs > 0 && index < Math.ceil(directEvents.length / batchSize) - 1) {
+    await sleep(batchDelayMs);
+  }
+}
+
+for (const [index, batch] of chunk(appExperimentEvents, batchSize).entries()) {
+  const ids = await sendExperimentBatchViaApp(batch);
+  sentIds.push(...ids);
+  console.log(
+    `Sent app experiment batch ${index + 1}/${Math.ceil(appExperimentEvents.length / batchSize)} ` +
+      `(${batch.length} requests${ids.length ? `, ${ids.length} ids` : ""}).`
+  );
+
+  if (
+    batchDelayMs > 0 &&
+    index < Math.ceil(appExperimentEvents.length / batchSize) - 1
+  ) {
     await sleep(batchDelayMs);
   }
 }
@@ -153,7 +182,9 @@ console.log(
       ? "Skipped Act 2 feedback instructions."
       : `Queued ${feedbackSignals.length} Act 2 feedback instructions ` +
         `(${positiveSignals.length} positive, ${negativeSignals.length} negative).`,
-    `Seeded ${experimentEvents.length} Act 3 experiment events.`,
+    directExperiments
+      ? `Seeded ${experimentEvents.length} Act 3 experiment events through Event API.`
+      : `Seeded ${experimentEvents.length} Act 3 experiment requests through ${appBaseUrl}.`,
     `Expected downstream function runs: ~${researchEvents.length * (skipFeedback ? 2 : 3) + experimentEvents.length}` +
       `${retryRuns ? ` plus ${retryRuns} retry attempts` : ""}.`,
     `Batch ID: ${batchId}`,
@@ -309,6 +340,10 @@ function sampleCorpusRuns(index, runEvents) {
 }
 
 async function sendBatch(events) {
+  if (events.length === 0) {
+    return { ids: [] };
+  }
+
   const response = await fetch(`${eventApiBase}/e/${eventKey}`, {
     method: "POST",
     headers: omitUndefined({
@@ -329,10 +364,39 @@ async function sendBatch(events) {
   return body;
 }
 
+async function sendExperimentBatchViaApp(events) {
+  const results = await Promise.all(events.map((event) => sendExperimentViaApp(event)));
+
+  return results.flatMap((result) => result.eventIds);
+}
+
+async function sendExperimentViaApp(event) {
+  const response = await fetch(`${appBaseUrl}/api/research/experiment`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(event.data),
+  });
+  const body = await response.json().catch(() => ({}));
+
+  if (!response.ok || body.ok === false) {
+    console.error(
+      `Experiment request failed with HTTP ${response.status}: ${JSON.stringify(body, null, 2)}`
+    );
+    process.exit(1);
+  }
+
+  return {
+    eventIds: Array.isArray(body.eventIds) ? body.eventIds : [],
+  };
+}
+
 function printPlan() {
   console.log(
     `${dryRun ? "Dry run: " : ""}research load seed plan for ${eventApiBase}/e/<INNGEST_EVENT_KEY>`
   );
+  console.log(`Experiment requests: ${directExperiments ? "Event API" : `${appBaseUrl}/api/research/experiment`}`);
   if (inngestEnv) {
     console.log(`Inngest env header: ${inngestEnv}`);
   }
@@ -348,7 +412,8 @@ function printPlan() {
           `(${positiveSignals.length} positive, ${negativeSignals.length} negative)`,
       `Act 1 retry demos: ${retryRuns}`,
       `Act 3 experiments: ${experimentEvents.length} connected to scored run windows`,
-      `Events emitted directly: ${allEvents.length}`,
+      `Event API events: ${directEvents.length}`,
+      `App API experiment requests: ${appExperimentEvents.length}`,
     ].join("\n")
   );
   console.log("");
