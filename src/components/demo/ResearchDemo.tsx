@@ -306,11 +306,15 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--ink)]">
       <div
-        className="grid h-screen w-full max-w-[560px] min-w-0 border-x border-[var(--ink)] bg-white"
-        style={{ gridTemplateRows: `${topPaneHeight}px 10px minmax(0, 1fr)` }}
+        className="grid h-screen w-full max-w-[560px] min-w-0 grid-rows-[var(--top-pane-height)_10px_minmax(0,1fr)] border-x border-[var(--ink)] bg-white xl:max-w-none xl:grid-cols-[minmax(420px,560px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)]"
+        style={
+          {
+            "--top-pane-height": `${topPaneHeight}px`,
+          } as React.CSSProperties
+        }
       >
-        <section className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden bg-[var(--bone)]">
-          <header className="flex min-w-0 items-center justify-between gap-3 border-b border-[var(--rule-soft)] px-3 py-2">
+        <section className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden bg-[var(--bone)] xl:border-r xl:border-[var(--ink)]">
+          <header className="flex min-w-0 items-center justify-between gap-3 border-b border-[var(--rule-soft)] px-3 py-2 xl:px-4 xl:py-3">
             <div className="min-w-0">
               <div className="mono text-[10px] uppercase text-[var(--muted-copy)]">
                 research agent booth
@@ -361,7 +365,7 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
             })}
           </nav>
 
-          <div className="min-h-0 overflow-auto p-3">
+          <div className="min-h-0 overflow-auto p-3 xl:p-4">
             {activeAct === 1 ? (
               <ActOneControls
                 failureArmed={failureArmed}
@@ -391,14 +395,14 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
           role="separator"
           aria-orientation="horizontal"
           aria-label="Resize code panel"
-          className="group relative cursor-row-resize border-y border-[var(--ink)] bg-white"
+          className="group relative cursor-row-resize border-y border-[var(--ink)] bg-white xl:hidden"
           onMouseDown={startMouseResize}
           onTouchStart={startTouchResize}
         >
           <div className="absolute left-1/2 top-1/2 h-1 w-12 -translate-x-1/2 -translate-y-1/2 bg-[var(--rule-soft)] transition group-hover:bg-[var(--muted-copy)]" />
         </div>
 
-        <section className="min-h-0 min-w-0">
+        <section className="min-h-0 min-w-0 xl:col-start-2 xl:row-start-1">
           <CodeView snippets={snippets} activeId={activeCodeId} variant="minimal" />
         </section>
       </div>
