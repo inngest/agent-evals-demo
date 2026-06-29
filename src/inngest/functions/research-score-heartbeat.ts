@@ -10,9 +10,7 @@ import {
 } from "@/inngest/client";
 import { researchAgent } from "@/inngest/functions/research-agent";
 
-const SCORE_HEARTBEAT_CRON = "* * * * *";
-const HEARTBEAT_INTERVAL_SECONDS = 15;
-const HEARTBEAT_SLOTS_PER_CRON = 4;
+const SCORE_HEARTBEAT_CRON = "*/15 * * * * *";
 
 export const researchScoreHeartbeat = inngest.createFunction(
   {
@@ -23,23 +21,37 @@ export const researchScoreHeartbeat = inngest.createFunction(
   },
   async ({ event, step }) => {
     const scheduledAt = getScheduledAt(event);
-    const minuteStart = toMinuteStart(scheduledAt);
-    const invocations = await Promise.all(
-      Array.from({ length: HEARTBEAT_SLOTS_PER_CRON }, async (_, slot) => {
-        const slotAt = new Date(
-          minuteStart.getTime() + slot * HEARTBEAT_INTERVAL_SECONDS * 1000
-        );
+    const slotId = compactTimestamp(scheduledAt);
+    const feedbackSignal = pickFeedbackSignal(slotId);
+    const model = pickModel(slotId);
+    const qualityScore = pickQualityScore(slotId, model, feedbackSignal);
+    const researchRunId = `score-heartbeat-${slotId}`;
+    const researchRunData: ResearchRunRequestedData = {
+      researchRunId,
+      topic: defaultResearchTopic,
+      cadence: "score-heartbeat-cron",
+      model,
+      failureStep: "none",
+      latencyMs: 0,
+      seededQualityScore: qualityScore,
+      seededFeedbackSignal: feedbackSignal,
+      seededFeedbackAt: scheduledAt.toISOString(),
+      requestedAt: scheduledAt.toISOString(),
+      source: "booth-demo",
+    };
 
-        await step.sleepUntil(`wait-for-heartbeat-slot-${slot}`, slotAt);
-
-        return invokeHeartbeatResearchRun(step, slotAt, slot);
-      })
-    );
+    const agentResult = await step.invoke("invoke-research-agent-heartbeat", {
+      function: researchAgent,
+      data: researchRunData,
+    });
 
     return {
+      researchRunId,
+      agentRunId: agentResult.parentRunId,
+      model,
+      qualityScore,
+      feedbackSignal,
       scheduledAt: scheduledAt.toISOString(),
-      intervalSeconds: HEARTBEAT_INTERVAL_SECONDS,
-      invocations,
     };
   }
 );
@@ -52,52 +64,6 @@ function getScheduledAt(event: { ts?: number | string }): Date {
   }
 
   return new Date();
-}
-
-function toMinuteStart(date: Date): Date {
-  const minuteMs = 60 * 1000;
-  const minuteStart = Math.floor(date.getTime() / minuteMs) * minuteMs;
-
-  return new Date(minuteStart);
-}
-
-async function invokeHeartbeatResearchRun(
-  step: Parameters<Parameters<typeof inngest.createFunction>[1]>[0]["step"],
-  slotAt: Date,
-  slot: number
-) {
-  const slotId = compactTimestamp(slotAt);
-  const feedbackSignal = pickFeedbackSignal(slotId);
-  const model = pickModel(slotId);
-  const qualityScore = pickQualityScore(slotId, model, feedbackSignal);
-  const researchRunId = `score-heartbeat-${slotId}`;
-  const researchRunData: ResearchRunRequestedData = {
-    researchRunId,
-    topic: defaultResearchTopic,
-    cadence: "score-heartbeat-cron",
-    model,
-    failureStep: "none",
-    latencyMs: 0,
-    seededQualityScore: qualityScore,
-    seededFeedbackSignal: feedbackSignal,
-    seededFeedbackAt: slotAt.toISOString(),
-    requestedAt: slotAt.toISOString(),
-    source: "booth-demo",
-  };
-
-  const agentResult = await step.invoke(`invoke-research-agent-slot-${slot}`, {
-    function: researchAgent,
-    data: researchRunData,
-  });
-
-  return {
-    researchRunId,
-    agentRunId: agentResult.parentRunId,
-    model,
-    qualityScore,
-    feedbackSignal,
-    scheduledAt: slotAt.toISOString(),
-  };
 }
 
 function compactTimestamp(date: Date): string {
