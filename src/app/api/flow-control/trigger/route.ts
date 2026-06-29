@@ -11,7 +11,7 @@ const MAX_COUNT = 24;
 const DEFAULT_WORK_MS = 2500;
 const MAX_WORK_MS = 9000;
 const DEFAULT_RETRY_EVERY = 3;
-const DEFAULT_FAIL_EVERY = 5;
+const DEFAULT_FAIL_EVERY = 2;
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));

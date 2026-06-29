@@ -324,7 +324,7 @@ export function BoothControlPanel({
           count: 15,
           workMs: 2500,
           retryEvery: 3,
-          failEvery: 5,
+          failEvery: 2,
         }
       );
 

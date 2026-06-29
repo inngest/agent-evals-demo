@@ -10,7 +10,7 @@
  *
  * Examples:
  *   node scripts/seed-flow-control-demo.mjs --dry-run
- *   npm run demo:flow-control -- --count 15 --retry-every 3 --fail-every 5
+ *   npm run demo:flow-control -- --count 15 --retry-every 3 --fail-every 2
  */
 
 import fs from "node:fs";
@@ -42,7 +42,7 @@ const retryEvery = readNonNegativeInt(
 const failEvery = readNonNegativeInt(
   "--fail-every",
   "DEMO_FLOW_CONTROL_FAIL_EVERY",
-  5
+  2
 );
 const accountId =
   readFlag("--account-id") ?? process.env.DEMO_FLOW_CONTROL_ACCOUNT_ID ?? "acme";
