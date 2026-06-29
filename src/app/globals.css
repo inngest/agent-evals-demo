@@ -159,12 +159,15 @@ button {
 }
 
 .status-dot {
-  width: 7px;
-  height: 7px;
+  display: inline-block;
+  width: 9px;
+  height: 9px;
   flex: 0 0 auto;
   border-radius: 999px;
   background: var(--pending, #c7c2be);
-  box-shadow: inset 0 0 0 1px rgba(26, 22, 28, 0.18);
+  box-shadow:
+    inset 0 0 0 1px rgba(26, 22, 28, 0.18),
+    0 0 0 1px rgba(26, 22, 28, 0.08);
 }
 
 .status-dot[data-state="sending"],
@@ -183,12 +186,12 @@ button {
 
 .status-dot[data-state="complete"] {
   background: var(--teal);
-  box-shadow: none;
+  box-shadow: 0 0 0 1px rgba(26, 22, 28, 0.18);
 }
 
 .status-dot[data-state="error"] {
   background: var(--destructive);
-  box-shadow: none;
+  box-shadow: 0 0 0 1px rgba(26, 22, 28, 0.18);
 }
 
 .step-in {

@@ -356,8 +356,9 @@ export function BoothControlPanel({
                 <ExternalLink className="size-3.5" />
                 <span className="truncate">Open Inngest</span>
               </DashboardLink>
-              <span className="mono grid h-8 min-w-20 place-items-center border border-[var(--ink)] bg-white px-2 text-[10px] uppercase tabnum">
-                {statusLabel}
+              <span className="mono inline-flex h-8 min-w-20 items-center justify-center gap-1.5 border border-[var(--ink)] bg-white px-2 text-[10px] uppercase tabnum">
+                <span className="status-dot" data-state={phase} />
+                <span>{statusLabel}</span>
               </span>
             </div>
           </header>
