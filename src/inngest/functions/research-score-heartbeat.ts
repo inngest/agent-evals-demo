@@ -3,6 +3,7 @@ import {
   defaultResearchTopic,
   type ResearchModel,
 } from "@/content/research-demo";
+import { invoke, staticSchema } from "inngest";
 import {
   inngest,
   type ResearchFeedbackSignal,
@@ -10,7 +11,13 @@ import {
 } from "@/inngest/client";
 import { researchAgent } from "@/inngest/functions/research-agent";
 
-const SCORE_HEARTBEAT_CRON = "*/15 * * * * *";
+type ResearchScoreHeartbeatSlotData = {
+  slotAt: string;
+};
+
+const SCORE_HEARTBEAT_CRON = "* * * * *";
+const HEARTBEAT_INTERVAL_SECONDS = 15;
+const HEARTBEAT_SLOTS_PER_CRON = 4;
 
 export const researchScoreHeartbeat = inngest.createFunction(
   {
@@ -21,6 +28,42 @@ export const researchScoreHeartbeat = inngest.createFunction(
   },
   async ({ event, step }) => {
     const scheduledAt = getScheduledAt(event);
+    const minuteStart = toMinuteStart(scheduledAt);
+    const invocations = await Promise.all(
+      Array.from({ length: HEARTBEAT_SLOTS_PER_CRON }, (_, slot) => {
+        const slotAt = new Date(
+          minuteStart.getTime() + slot * HEARTBEAT_INTERVAL_SECONDS * 1000
+        );
+
+        return step.invoke(`invoke-research-heartbeat-slot-${slot}`, {
+          function: researchScoreHeartbeatSlot,
+          data: { slotAt: slotAt.toISOString() },
+        });
+      })
+    );
+
+    return {
+      scheduledAt: scheduledAt.toISOString(),
+      intervalSeconds: HEARTBEAT_INTERVAL_SECONDS,
+      invocations,
+    };
+  }
+);
+
+export const researchScoreHeartbeatSlot = inngest.createFunction(
+  {
+    id: "research-agent-score-heartbeat-slot",
+    name: "Research agent score heartbeat slot",
+    retries: 2,
+    triggers: [
+      invoke(staticSchema<ResearchScoreHeartbeatSlotData>()),
+    ],
+  },
+  async ({ event, step }) => {
+    const scheduledAt = parseSlotAt(event.data.slotAt);
+
+    await step.sleepUntil("wait-for-heartbeat-slot", scheduledAt);
+
     const slotId = compactTimestamp(scheduledAt);
     const feedbackSignal = pickFeedbackSignal(slotId);
     const model = pickModel(slotId);
@@ -64,6 +107,23 @@ function getScheduledAt(event: { ts?: number | string }): Date {
   }
 
   return new Date();
+}
+
+function parseSlotAt(value: string): Date {
+  const timestamp = Date.parse(value);
+
+  if (!Number.isFinite(timestamp)) {
+    return new Date();
+  }
+
+  return new Date(timestamp);
+}
+
+function toMinuteStart(date: Date): Date {
+  const minuteMs = 60 * 1000;
+  const minuteStart = Math.floor(date.getTime() / minuteMs) * minuteMs;
+
+  return new Date(minuteStart);
 }
 
 function compactTimestamp(date: Date): string {
