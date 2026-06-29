@@ -152,6 +152,24 @@ export const researchExperimentRequested = eventType(
   }
 );
 
+// ── 10. flow-control website capture demo ─────────────────────────────────
+export type FlowControlDemoRequestedData = {
+  requestId: string;
+  batchId: string;
+  accountId: string;
+  accountName?: string;
+  workMs?: number;
+  requestedAt: string;
+  source: "booth-demo";
+};
+
+export const flowControlDemoRequested = eventType(
+  "demo/flow-control.requested",
+  {
+    schema: staticSchema<FlowControlDemoRequestedData>(),
+  }
+);
+
 // scoreMiddleware() is REQUIRED for ctx.step.score to exist. It is safe to
 // register in BOTH modes: it only adds the step.score extension; the local
 // (faked) path simply never calls it. Registering it unconditionally keeps the
