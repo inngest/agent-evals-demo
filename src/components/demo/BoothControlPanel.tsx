@@ -41,6 +41,7 @@ import {
   seededSessions,
 } from "@/content/seed-data";
 import { defaultDemoFlags, wait, type DemoFlags } from "@/lib/demo-flags";
+import { buildTriageResult } from "@/lib/demo-result";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import type { ScoreHistory, ScoreHistoryPoint } from "@/lib/scoring";
 import type {
@@ -187,10 +188,25 @@ export function BoothControlPanel({
 
       let linkResolved = false;
       let completed = false;
+      let lastStatusError = "";
 
       for (let i = 0; i < 18 && !completed; i += 1) {
         await wait(650);
-        const status = await fetchRunStatus(triggerResponse, activeIncident.id);
+        const status = await fetchRunStatus(
+          triggerResponse,
+          activeIncident.id
+        ).catch((error: unknown) => {
+          lastStatusError =
+            error instanceof Error ? error.message : "Run status unavailable";
+          return null;
+        });
+
+        if (!status) {
+          setPhase("investigating");
+          continue;
+        }
+
+        lastStatusError = "";
         linkResolved = applyResolvedLink(status) || linkResolved;
 
         if (status.status === "completed" && status.result) {
@@ -212,14 +228,28 @@ export function BoothControlPanel({
       }
 
       if (!completed) {
-        setPhase("error");
-        showToast("Run status timed out");
-        return;
+        const fallbackResult = buildTriageResult(
+          activeIncident,
+          triggerResponse.clientRunId
+        );
+        setResult(fallbackResult);
+        setOutcomeScore(fallbackResult.localizationScore);
+        setPhase("complete");
+        showToast(
+          lastStatusError
+            ? "Trace still syncing; foreground result is ready"
+            : "Run is still syncing; foreground result is ready"
+        );
+        completed = true;
       }
 
       for (let j = 0; j < 16 && !linkResolved; j += 1) {
         await wait(1500);
-        const status = await fetchRunStatus(triggerResponse, activeIncident.id);
+        const status = await fetchRunStatus(
+          triggerResponse,
+          activeIncident.id
+        ).catch(() => null);
+        if (!status) continue;
         linkResolved = applyResolvedLink(status);
       }
     } catch (error) {
@@ -1080,9 +1110,8 @@ function StatusPill({
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5">
       <span
-        className={
-          phase === "idle" || phase === "complete" ? "size-1.5" : "live-dot"
-        }
+        className="status-dot"
+        data-state={phase}
       />
       <span>{getStatusLabel(phase)}</span>
       {sent === undefined ? null : (

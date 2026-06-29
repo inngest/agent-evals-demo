@@ -17,6 +17,7 @@ import { CodeView } from "@/components/demo/CodeView";
 import { DashboardLink } from "@/components/demo/DashboardLink";
 import { Button } from "@/components/ui/button";
 import {
+  buildResearchRunSummary,
   defaultResearchTopic,
   type ResearchRunSummary,
 } from "@/content/research-demo";
@@ -174,10 +175,22 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
       }
 
       let completed = false;
+      let lastStatusError = "";
 
       for (let i = 0; i < 18 && !completed; i += 1) {
         await wait(650);
-        const status = await fetchStatus(response);
+        const status = await fetchStatus(response).catch((error: unknown) => {
+          lastStatusError =
+            error instanceof Error ? error.message : "Run status unavailable";
+          return null;
+        });
+
+        if (!status) {
+          setPhase("running");
+          continue;
+        }
+
+        lastStatusError = "";
         applyStatus(status);
 
         if (status.status === "completed" && status.result) {
@@ -192,8 +205,14 @@ export function ResearchDemo({ snippets }: ResearchDemoProps) {
       }
 
       if (!completed) {
-        setPhase("error");
-        showToast("Run status timed out");
+        setResult(buildResearchRunSummary({ researchRunId: response.researchRunId }));
+        setCompletedSteps(20);
+        setPhase("complete");
+        showToast(
+          lastStatusError
+            ? "Trace still syncing; research brief is ready"
+            : "Run is still syncing; research brief is ready"
+        );
       }
     } catch (error) {
       setPhase("error");
@@ -613,7 +632,8 @@ function PanelTitle({
 
 function StatusPill({ phase }: { phase: RunPhase }) {
   return (
-    <span className="mono inline-flex h-7 items-center border border-[var(--ink)] bg-white px-2 text-[10px] uppercase">
+    <span className="mono inline-flex h-7 items-center gap-1.5 border border-[var(--ink)] bg-white px-2 text-[10px] uppercase">
+      <span className="status-dot" data-state={phase} />
       {phase}
     </span>
   );

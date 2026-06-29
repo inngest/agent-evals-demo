@@ -1,6 +1,6 @@
 import { encryptionMiddleware } from "@inngest/middleware-encryption";
 import { Inngest, eventType, staticSchema } from "inngest";
-import { scoreMiddleware } from "inngest/experimental";
+import { metadataMiddleware, scoreMiddleware } from "inngest/experimental";
 import { isCloud } from "@/lib/demo-target";
 import type { DemoFlags } from "@/lib/demo-flags";
 import type { ResearchModel, ResearchStepId } from "@/content/research-demo";
@@ -170,10 +170,12 @@ export const flowControlDemoRequested = eventType(
   }
 );
 
-// scoreMiddleware() is REQUIRED for ctx.step.score to exist. It is safe to
-// register in BOTH modes: it only adds the step.score extension; the local
-// (faked) path simply never calls it. Registering it unconditionally keeps the
-// client shape identical across modes and avoids type drift.
+// scoreMiddleware() is REQUIRED for ctx.step.score to exist. metadataMiddleware()
+// enables ctx.step.metadata for Cloud run metadata that Insights can group by.
+// Both are safe to register in BOTH modes: the local (faked) path simply never
+// calls the Cloud-only score/metadata branches. Registering them
+// unconditionally keeps the client shape identical across modes and avoids type
+// drift.
 //
 // TYPING NOTE: ctx.step.score only surfaces when the client's `middleware`
 // TYPE is a tuple whose FIRST element is the literal `scoreMiddleware()` return
@@ -199,6 +201,7 @@ export const inngest = new Inngest({
   isDev: !isCloud,
   middleware: [
     scoreMiddleware(),
+    metadataMiddleware(),
     ...(encryptionKey
       ? [encryptionMiddleware({ key: encryptionKey })]
       : []),

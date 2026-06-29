@@ -144,6 +144,25 @@ export const researchAgent = inngest.createFunction(
       brief,
       published,
     ].map((item) => item.source);
+    const uniqueSources = [...new Set(sources)];
+
+    if (isCloud) {
+      await step.metadata("attach-research-run-metadata").update(
+        {
+          researchRunId,
+          topic: summary.topic,
+          cadence: data.cadence ?? "manual",
+          model: summary.model,
+          tokenCount: summary.tokenCount,
+          costUsd: summary.costUsd,
+          qualityScore: summary.qualityScore,
+          sourceCount: uniqueSources.length,
+          failureStep: failureStep ?? "none",
+          source: "booth-demo",
+        },
+        "userland.research"
+      );
+    }
 
     // Act 2's addition in the code view: this event is the durable boundary
     // that lets the scoring/session function attach eval data to this run.
@@ -154,7 +173,7 @@ export const researchAgent = inngest.createFunction(
           ...summary,
           parentRunId: isCloud ? runId : researchRunId,
           sessionId,
-          sources: [...new Set(sources)],
+          sources: uniqueSources,
           source: "booth-demo",
         },
         {

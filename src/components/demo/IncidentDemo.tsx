@@ -40,6 +40,7 @@ import {
   toolStepName,
 } from "@/lib/agent-step-names";
 import { defaultDemoFlags, wait, type DemoFlags } from "@/lib/demo-flags";
+import { buildTriageResult } from "@/lib/demo-result";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import type { ScoreHistory } from "@/lib/scoring";
 import type {
@@ -158,10 +159,25 @@ export function IncidentDemo({ snippets }: IncidentDemoProps) {
 
     let linkResolved = false;
     let completed = false;
+    let lastStatusError = "";
 
     for (let i = 0; i < 18 && !completed; i += 1) {
       await wait(650);
-      const status = await fetchRunStatus(triggerResponse, activeIncident.id);
+      const status = await fetchRunStatus(
+        triggerResponse,
+        activeIncident.id
+      ).catch((error: unknown) => {
+        lastStatusError =
+          error instanceof Error ? error.message : "Run status unavailable";
+        return null;
+      });
+
+      if (!status) {
+        setPhase("investigating");
+        continue;
+      }
+
+      lastStatusError = "";
       linkResolved = applyResolvedLink(status) || linkResolved;
 
       if (status.status === "completed" && status.result) {
@@ -183,9 +199,20 @@ export function IncidentDemo({ snippets }: IncidentDemoProps) {
     }
 
     if (!completed) {
-      setPhase("error");
-      setToast("Run status timed out");
-      return;
+      const fallbackResult = buildTriageResult(
+        activeIncident,
+        triggerResponse.clientRunId
+      );
+      setResult(fallbackResult);
+      setOutcomeScore(fallbackResult.localizationScore);
+      setPhase("complete");
+      setActiveTab("rca");
+      setToast(
+        lastStatusError
+          ? "Trace still syncing; foreground result is ready"
+          : "Run is still syncing; foreground result is ready"
+      );
+      completed = true;
     }
 
     // The faked UI completes in ~5s, but the real cloud run id can take a few
@@ -193,7 +220,11 @@ export function IncidentDemo({ snippets }: IncidentDemoProps) {
     // impact) so "Open trace" lands on the exact run. No-op in local mode.
     for (let j = 0; j < 16 && !linkResolved; j += 1) {
       await wait(1500);
-      const status = await fetchRunStatus(triggerResponse, activeIncident.id);
+      const status = await fetchRunStatus(
+        triggerResponse,
+        activeIncident.id
+      ).catch(() => null);
+      if (!status) continue;
       linkResolved = applyResolvedLink(status);
     }
   }
@@ -1219,7 +1250,7 @@ function StatusPill({
 
   return (
     <div className="mono inline-flex h-8 items-center gap-2 border border-[var(--ink)] bg-white px-3 text-[11px] uppercase">
-      <span className={phase === "idle" ? "" : "live-dot"} />
+      <span className="status-dot" data-state={phase} />
       <span>{label}</span>
       <span className="text-[var(--muted-copy)]">
         {sent === undefined ? "" : sent ? "inngest" : "foreground"}
