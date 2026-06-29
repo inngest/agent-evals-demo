@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Emit a burst of same-account events for the Flow control demo function.
+ * Emit a burst of same-account events for the Customer enrichment queue function.
  *
  * Default behavior is tuned for a short website capture:
  *   - 16 events
@@ -69,7 +69,7 @@ const events = Array.from({ length: count }, (_, index) => {
 
   return {
     name: "demo/flow-control.requested",
-    id: `flow-control-demo:${batchId}:${requestNumber}`,
+    id: `customer-enrichment-queue:${batchId}:${requestNumber}`,
     ts: now + index,
     data: {
       requestId,
@@ -108,7 +108,7 @@ console.log("");
 console.log(
   [
     `Seeded ${events.length} flow-control demo events.`,
-    `Function: Flow control demo`,
+    `Function: Customer enrichment queue`,
     `Event: demo/flow-control.requested`,
     `Account key: ${accountId}`,
     `Batch ID: ${batchId}`,
@@ -147,7 +147,7 @@ async function sendBatch(batch) {
 
 function printPlan() {
   console.log(
-    `${dryRun ? "Dry run: " : ""}flow-control demo seed plan for ${eventApiBase}/e/<INNGEST_EVENT_KEY>`
+    `${dryRun ? "Dry run: " : ""}customer enrichment queue seed plan for ${eventApiBase}/e/<INNGEST_EVENT_KEY>`
   );
   if (inngestEnv) {
     console.log(`Inngest env header: ${inngestEnv}`);

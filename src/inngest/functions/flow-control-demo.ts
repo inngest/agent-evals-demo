@@ -10,7 +10,7 @@ const MAX_WORK_MS = 9000;
 export const flowControlDemo = inngest.createFunction(
   {
     id: "flow-control-demo",
-    name: "Flow control demo",
+    name: "Customer enrichment queue",
     retries: 1,
     throttle: {
       limit: 2,
@@ -28,7 +28,7 @@ export const flowControlDemo = inngest.createFunction(
     const workMs = normalizeWorkMs(data.workMs);
     const startedAt = new Date().toISOString();
 
-    const simulatedApiCall = await step.run("simulate-expensive-api-call", async () => {
+    const customerEnrichment = await step.run("call-customer-enrichment-api", async () => {
       await sleep(workMs);
 
       return {
@@ -44,7 +44,7 @@ export const flowControlDemo = inngest.createFunction(
       accountId: data.accountId,
       requestedAt: data.requestedAt,
       startedAt,
-      ...simulatedApiCall,
+      ...customerEnrichment,
     };
   }
 );
