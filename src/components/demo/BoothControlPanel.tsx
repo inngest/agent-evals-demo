@@ -57,6 +57,16 @@ type BoothControlPanelProps = IncidentDemoProps & {
   initialHistory: ScoreHistory;
 };
 
+type FlowControlBurstResponse = {
+  ok: boolean;
+  sent: boolean;
+  eventsSent: number;
+  batchId: string;
+  accountId: string;
+  eventIds?: string[];
+  error?: string;
+};
+
 type BoothSection = "durable" | "scores" | "experiment";
 type ScoreSignal = "up" | "down" | "saved" | "discarded";
 
@@ -111,6 +121,7 @@ export function BoothControlPanel({
   const [experimentVisible, setExperimentVisible] = React.useState(false);
   const [codeOpen, setCodeOpen] = React.useState(false);
   const [activeCodeId, setActiveCodeId] = React.useState<CodeSnippetId>("act1");
+  const [flowBurstPending, setFlowBurstPending] = React.useState(false);
   const [toast, setToast] = React.useState("");
 
   const activeIncident = getIncident(incidentId) ?? incidents[0];
@@ -300,6 +311,31 @@ export function BoothControlPanel({
     await loadScoreHistory();
   }
 
+  async function triggerFlowControlBurst() {
+    setFlowBurstPending(true);
+    setToast("");
+
+    try {
+      const response = await postJson<FlowControlBurstResponse>(
+        "/api/flow-control/trigger",
+        {
+          count: 8,
+          workMs: 7500,
+        }
+      );
+
+      showToast(
+        `Queued ${response.eventsSent} enrichment events: ${response.batchId}`
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Flow-control burst failed"
+      );
+    } finally {
+      setFlowBurstPending(false);
+    }
+  }
+
   function showToast(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2400);
@@ -335,6 +371,17 @@ export function BoothControlPanel({
                   onOpenChange={setCodeOpen}
                   snippets={snippets}
                 />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 border-[var(--ink)] bg-white px-2 text-xs"
+                  onClick={triggerFlowControlBurst}
+                  disabled={flowBurstPending}
+                  title="Queue customer enrichment burst"
+                >
+                  <Play className="size-3.5" />
+                  <span>Burst</span>
+                </Button>
                 <Button
                   variant="outline"
                   size="icon-sm"
