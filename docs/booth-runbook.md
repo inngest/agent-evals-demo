@@ -193,6 +193,13 @@ After a fresh Cloud seed, allow the durable score runs a few seconds to emit
 `app/query.scored`. `DEMO_CLOUD_READY_SEED=1 npm run demo:cloud-ready` retries
 the Insights check automatically.
 
+## Research Score Heartbeat
+
+The deployed `research-agent-score-heartbeat` cron runs every five minutes to
+keep live score data flowing during the booth. It must use `step.invoke` to run
+the research agent and await the child result, not a fire-and-forget
+`step.sendEvent`, because the score path needs the invoked agent run ID.
+
 ## Seed Research Agent Load
 
 Use this when the Inngest dashboard needs a large history of the current

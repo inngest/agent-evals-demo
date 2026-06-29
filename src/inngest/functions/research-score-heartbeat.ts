@@ -5,13 +5,12 @@ import {
 } from "@/content/research-demo";
 import {
   inngest,
-  researchRunRequested,
   type ResearchFeedbackSignal,
+  type ResearchRunRequestedData,
 } from "@/inngest/client";
-import { researchSessionMeta } from "@/lib/research-session-meta";
+import { researchAgent } from "@/inngest/functions/research-agent";
 
 const SCORE_HEARTBEAT_CRON = "*/5 * * * *";
-const SCORE_HEARTBEAT_SESSION_ID = "sess-research-score-heartbeat";
 export const researchScoreHeartbeat = inngest.createFunction(
   {
     id: "research-agent-score-heartbeat",
@@ -26,33 +25,29 @@ export const researchScoreHeartbeat = inngest.createFunction(
     const model = pickModel(windowId);
     const qualityScore = pickQualityScore(windowId, model, feedbackSignal);
     const researchRunId = `score-heartbeat-${windowId}`;
+    const researchRunData: ResearchRunRequestedData = {
+      researchRunId,
+      topic: defaultResearchTopic,
+      cadence: "score-heartbeat-cron",
+      model,
+      failureStep: "none",
+      latencyMs: 0,
+      seededQualityScore: qualityScore,
+      seededFeedbackSignal: feedbackSignal,
+      seededFeedbackAt: scheduledAt.toISOString(),
+      requestedAt: scheduledAt.toISOString(),
+      source: "booth-demo",
+    };
 
-    await step.sendEvent(
-      "request-research-score-heartbeat-run",
-      researchRunRequested.create(
-        {
-          researchRunId,
-          topic: defaultResearchTopic,
-          cadence: "score-heartbeat-cron",
-          model,
-          failureStep: "none",
-          latencyMs: 0,
-          seededQualityScore: qualityScore,
-          seededFeedbackSignal: feedbackSignal,
-          seededFeedbackAt: scheduledAt.toISOString(),
-          requestedAt: scheduledAt.toISOString(),
-          source: "booth-demo",
-        },
-        {
-          id: `score-heartbeat:${windowId}`,
-          ts: scheduledAt.getTime(),
-          meta: researchSessionMeta(SCORE_HEARTBEAT_SESSION_ID),
-        }
-      )
-    );
+    const agentResult = await step.invoke("invoke-research-agent-heartbeat", {
+      function: researchAgent,
+      data: researchRunData,
+    });
+    const agentRunId = agentResult.parentRunId;
 
     return {
       researchRunId,
+      agentRunId,
       model,
       qualityScore,
       feedbackSignal,
