@@ -27,10 +27,7 @@ export const researchAgent = inngest.createFunction(
     id: "research-agent",
     name: "Research agent",
     retries: 4,
-    triggers: [
-      researchRunRequested,
-      { cron: "TZ=America/Los_Angeles 0 9 */6 * *" },
-    ],
+    triggers: [researchRunRequested],
   },
   async ({ event, step, attempt, runId }): Promise<ResearchAgentResult> => {
     const data = event.data as Partial<ResearchRunRequestedData>;

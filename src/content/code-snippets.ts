@@ -17,10 +17,7 @@ export const researchAgent = inngest.createFunction(
     id: "research-agent",
     retries: 4,
     // @demo-highlight-start
-    triggers: [
-      researchRunRequested,
-      { cron: "TZ=America/Los_Angeles 0 9 */6 * *" },
-    ],
+    triggers: [researchRunRequested],
     // @demo-highlight-end
   },
   async ({ event, step }) => {
