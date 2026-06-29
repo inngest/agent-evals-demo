@@ -10,9 +10,7 @@ import {
 } from "@/inngest/client";
 import { researchAgent } from "@/inngest/functions/research-agent";
 
-const SCORE_HEARTBEAT_CRON = "* * * * *";
-const HEARTBEAT_INTERVAL_SECONDS = 15;
-const HEARTBEAT_SLOTS_PER_CRON = 4;
+const SCORE_HEARTBEAT_CRON = "*/5 * * * *";
 
 export const researchScoreHeartbeat = inngest.createFunction(
   {
@@ -23,47 +21,26 @@ export const researchScoreHeartbeat = inngest.createFunction(
   },
   async ({ event, step }) => {
     const scheduledAt = getScheduledAt(event);
-    const minuteStart = toMinuteStart(scheduledAt);
-    const invocations = [];
+    const {
+      feedbackSignal,
+      model,
+      qualityScore,
+      researchRunData,
+      researchRunId,
+    } = buildResearchRunData(scheduledAt);
 
-    // Keep these sequential: parallel sleeps resume together at the final slot.
-    for (let slot = 0; slot < HEARTBEAT_SLOTS_PER_CRON; slot += 1) {
-      const slotAt = new Date(
-        minuteStart.getTime() + slot * HEARTBEAT_INTERVAL_SECONDS * 1000
-      );
-
-      await step.sleepUntil(`wait-for-heartbeat-slot-${slot}`, slotAt);
-
-      const {
-        feedbackSignal,
-        model,
-        qualityScore,
-        researchRunData,
-        researchRunId,
-      } = buildResearchRunData(slotAt);
-
-      const agentResult = await step.invoke(
-        `invoke-research-agent-heartbeat-${slot}`,
-        {
-          function: researchAgent,
-          data: researchRunData,
-        }
-      );
-
-      invocations.push({
-        researchRunId,
-        agentRunId: agentResult.parentRunId,
-        model,
-        qualityScore,
-        feedbackSignal,
-        scheduledAt: slotAt.toISOString(),
-      });
-    }
+    const agentResult = await step.invoke("invoke-research-agent-heartbeat", {
+      function: researchAgent,
+      data: researchRunData,
+    });
 
     return {
+      researchRunId,
+      agentRunId: agentResult.parentRunId,
+      model,
+      qualityScore,
+      feedbackSignal,
       scheduledAt: scheduledAt.toISOString(),
-      intervalSeconds: HEARTBEAT_INTERVAL_SECONDS,
-      invocations,
     };
   }
 );
@@ -76,13 +53,6 @@ function getScheduledAt(event: { ts?: number | string }): Date {
   }
 
   return new Date();
-}
-
-function toMinuteStart(date: Date): Date {
-  const minuteMs = 60 * 1000;
-  const minuteStart = Math.floor(date.getTime() / minuteMs) * minuteMs;
-
-  return new Date(minuteStart);
 }
 
 function compactTimestamp(date: Date): string {

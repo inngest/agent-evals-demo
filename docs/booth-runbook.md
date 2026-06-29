@@ -195,11 +195,10 @@ the Insights check automatically.
 
 ## Research Score Heartbeat
 
-The deployed `research-agent-score-heartbeat` cron runs every minute. Within
-that single function run, it sleeps until the `:00`, `:15`, `:30`, and `:45`
-slots, then uses `step.invoke` to run the research agent and await each child
-result. Keep this as invokes, not fire-and-forget `step.sendEvent`, because the
-score path needs the invoked agent run ID.
+The deployed `research-agent-score-heartbeat` cron runs every five minutes and
+uses `step.invoke` to run the research agent and await the child result. Keep
+this as an invoke, not fire-and-forget `step.sendEvent`, because the score path
+needs the invoked agent run ID.
 
 ## Seed Research Agent Load
 
