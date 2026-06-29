@@ -24,40 +24,41 @@ export const researchScoreHeartbeat = inngest.createFunction(
   async ({ event, step }) => {
     const scheduledAt = getScheduledAt(event);
     const minuteStart = toMinuteStart(scheduledAt);
-    const invocations = await Promise.all(
-      Array.from({ length: HEARTBEAT_SLOTS_PER_CRON }, async (_, slot) => {
-        const slotAt = new Date(
-          minuteStart.getTime() + slot * HEARTBEAT_INTERVAL_SECONDS * 1000
-        );
+    const invocations = [];
 
-        await step.sleepUntil(`wait-for-heartbeat-slot-${slot}`, slotAt);
+    // Keep these sequential: parallel sleeps resume together at the final slot.
+    for (let slot = 0; slot < HEARTBEAT_SLOTS_PER_CRON; slot += 1) {
+      const slotAt = new Date(
+        minuteStart.getTime() + slot * HEARTBEAT_INTERVAL_SECONDS * 1000
+      );
 
-        const {
-          feedbackSignal,
-          model,
-          qualityScore,
-          researchRunData,
-          researchRunId,
-        } = buildResearchRunData(slotAt);
+      await step.sleepUntil(`wait-for-heartbeat-slot-${slot}`, slotAt);
 
-        const agentResult = await step.invoke(
-          `invoke-research-agent-heartbeat-${slot}`,
-          {
-            function: researchAgent,
-            data: researchRunData,
-          }
-        );
+      const {
+        feedbackSignal,
+        model,
+        qualityScore,
+        researchRunData,
+        researchRunId,
+      } = buildResearchRunData(slotAt);
 
-        return {
-          researchRunId,
-          agentRunId: agentResult.parentRunId,
-          model,
-          qualityScore,
-          feedbackSignal,
-          scheduledAt: slotAt.toISOString(),
-        };
-      })
-    );
+      const agentResult = await step.invoke(
+        `invoke-research-agent-heartbeat-${slot}`,
+        {
+          function: researchAgent,
+          data: researchRunData,
+        }
+      );
+
+      invocations.push({
+        researchRunId,
+        agentRunId: agentResult.parentRunId,
+        model,
+        qualityScore,
+        feedbackSignal,
+        scheduledAt: slotAt.toISOString(),
+      });
+    }
 
     return {
       scheduledAt: scheduledAt.toISOString(),
