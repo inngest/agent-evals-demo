@@ -63,6 +63,8 @@ type FlowControlBurstResponse = {
   eventsSent: number;
   batchId: string;
   accountId: string;
+  retryEvery: number;
+  failEvery: number;
   eventIds?: string[];
   error?: string;
 };
@@ -319,13 +321,15 @@ export function BoothControlPanel({
       const response = await postJson<FlowControlBurstResponse>(
         "/api/flow-control/trigger",
         {
-          count: 8,
-          workMs: 7500,
+          count: 15,
+          workMs: 2500,
+          retryEvery: 3,
+          failEvery: 5,
         }
       );
 
       showToast(
-        `Queued ${response.eventsSent} enrichment events: ${response.batchId}`
+        `Queued ${response.eventsSent} enrichment events with failures: ${response.batchId}`
       );
     } catch (error) {
       showToast(

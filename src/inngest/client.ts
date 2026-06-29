@@ -155,10 +155,12 @@ export const researchExperimentRequested = eventType(
 // ── 10. flow-control website capture demo ─────────────────────────────────
 export type FlowControlDemoRequestedData = {
   requestId: string;
+  requestNumber?: number;
   batchId: string;
   accountId: string;
   accountName?: string;
   workMs?: number;
+  failureMode?: "none" | "retry" | "fail";
   requestedAt: string;
   source: "booth-demo";
 };

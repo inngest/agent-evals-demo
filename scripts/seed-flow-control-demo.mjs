@@ -3,13 +3,14 @@
  * Emit a burst of same-account events for the Customer enrichment queue function.
  *
  * Default behavior is tuned for a short website capture:
- *   - 16 events
- *   - one accountId, so throttle + keyed concurrency both apply
+ *   - 15 events
+ *   - one accountId, so rate limit + keyed concurrency both apply
+ *   - deterministic retry/failure flags, so the dashboard has visible color
  *   - unique event ids per run, so repeated recordings do not dedupe
  *
  * Examples:
  *   node scripts/seed-flow-control-demo.mjs --dry-run
- *   npm run demo:flow-control -- --count 24 --account-id acme
+ *   npm run demo:flow-control -- --count 15 --retry-every 3 --fail-every 5
  */
 
 import fs from "node:fs";
@@ -21,7 +22,7 @@ loadDotEnv(path.join(__dirname, "..", ".env.local"));
 
 const argv = process.argv.slice(2);
 const dryRun = hasFlag("--dry-run") || process.env.DRY_RUN === "1";
-const count = readPositiveInt("--count", "DEMO_FLOW_CONTROL_COUNT", 16);
+const count = readPositiveInt("--count", "DEMO_FLOW_CONTROL_COUNT", 15);
 const batchSize = readPositiveInt("--batch-size", "DEMO_FLOW_CONTROL_BATCH_SIZE", 50);
 const batchDelayMs = readNonNegativeInt(
   "--batch-delay-ms",
@@ -31,7 +32,17 @@ const batchDelayMs = readNonNegativeInt(
 const workMs = readNonNegativeInt(
   "--work-ms",
   "DEMO_FLOW_CONTROL_WORK_MS",
-  7500
+  2500
+);
+const retryEvery = readNonNegativeInt(
+  "--retry-every",
+  "DEMO_FLOW_CONTROL_RETRY_EVERY",
+  3
+);
+const failEvery = readNonNegativeInt(
+  "--fail-every",
+  "DEMO_FLOW_CONTROL_FAIL_EVERY",
+  5
 );
 const accountId =
   readFlag("--account-id") ?? process.env.DEMO_FLOW_CONTROL_ACCOUNT_ID ?? "acme";
@@ -73,10 +84,12 @@ const events = Array.from({ length: count }, (_, index) => {
     ts: now + index,
     data: {
       requestId,
+      requestNumber,
       batchId,
       accountId,
       accountName,
       workMs,
+      failureMode: failureModeForRequest(requestNumber, retryEvery, failEvery),
       requestedAt: new Date(now + index).toISOString(),
       source: "booth-demo",
     },
@@ -112,6 +125,8 @@ console.log(
     `Event: demo/flow-control.requested`,
     `Account key: ${accountId}`,
     `Batch ID: ${batchId}`,
+    `Retries every: ${retryEvery || "off"}`,
+    `Failures every: ${failEvery || "off"}`,
   ].join("\n")
 );
 
@@ -157,11 +172,25 @@ function printPlan() {
       `Events: ${events.length}`,
       `Account key: ${accountId}`,
       `Work per run: ${workMs}ms`,
+      `Retries every: ${retryEvery || "off"}`,
+      `Failures every: ${failEvery || "off"}`,
       `Batch ID: ${batchId}`,
       `First event id: ${events[0]?.id ?? "n/a"}`,
     ].join("\n")
   );
   console.log("");
+}
+
+function failureModeForRequest(requestNumber, retryEvery, failEvery) {
+  if (failEvery > 0 && requestNumber % failEvery === 0) {
+    return "fail";
+  }
+
+  if (retryEvery > 0 && requestNumber % retryEvery === 0) {
+    return "retry";
+  }
+
+  return "none";
 }
 
 function loadDotEnv(filePath) {
