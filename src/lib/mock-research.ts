@@ -1,4 +1,3 @@
-import opentelemetry, { type Tracer } from "@opentelemetry/api";
 import { RetryAfterError } from "inngest";
 import {
   buildResearchRunSummary,
@@ -8,7 +7,7 @@ import {
   type ResearchRunSummary,
   type ResearchStepId,
 } from "@/content/research-demo";
-import { startPostSpan, startGenAISpan, startSpan } from "./otel";
+import { startPostSpan, startGenAISpan } from "./otel";
 
 type ResearchCallOptions = {
   attempt: number;

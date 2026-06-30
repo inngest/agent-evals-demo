@@ -1,13 +1,8 @@
-import { trace, SpanStatusCode, type Span } from "@opentelemetry/api";
+import { trace, type Attributes } from "@opentelemetry/api";
 import {
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
-  ATTR_GEN_AI_RESPONSE_FINISH_REASONS,
-  ATTR_GEN_AI_RESPONSE_ID,
-  ATTR_GEN_AI_RESPONSE_MODEL,
-  ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS,
-  ATTR_GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
   ATTR_GEN_AI_REQUEST_MAX_TOKENS,
@@ -19,14 +14,14 @@ function sleep(duration: number) {
   return new Promise((resolve) => setTimeout(resolve, duration));
 }
 
-export async function startSpan(name: string, attributes: Record<string, any>) {
+export async function startSpan(name: string, attributes: Attributes) {
   return await tracer.startSpan(name, {
     attributes: attributes,
   });
 }
 export async function startGenAISpan(
   name: string,
-  attributes: Record<string, any>,
+  attributes: Attributes,
 ) {
   return await tracer.startSpan(name, {
     attributes: {
@@ -47,7 +42,7 @@ export async function startGenAISpan(
 
 export async function createSpan(
   name: string,
-  attributes: Record<string, any>,
+  attributes: Attributes,
   duration: number,
 ) {
   const span = await tracer.startSpan(name, {
@@ -77,7 +72,7 @@ export async function startPostSpan(url: string) {
   });
 }
 
-export async function get(url: string, duration: number, mockResponse: any) {
+export async function get<T>(url: string, duration: number, mockResponse: T) {
   const urlParts = new URL(url);
   await createSpan(
     "DNS LOOKUP",

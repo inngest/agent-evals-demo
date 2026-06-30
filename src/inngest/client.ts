@@ -1,3 +1,4 @@
+import "@inngest/otel/node";
 import { encryptionMiddleware } from "@inngest/middleware-encryption";
 import { Inngest, eventType, staticSchema } from "inngest";
 import {
@@ -201,7 +202,6 @@ export const flowControlDemoRequested = eventType(
 //     used below.
 const encryptionKey = process.env.INNGEST_ENCRYPTION_KEY;
 
-console.log("client!");
 export const inngest = new Inngest({
   id: "aie-research-agent-booth-demo",
   // cloud ⇒ isDev:false ⇒ the SDK reads INNGEST_EVENT_KEY + INNGEST_SIGNING_KEY

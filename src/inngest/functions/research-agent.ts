@@ -34,7 +34,6 @@ export const researchAgent = inngest.createFunction(
     step,
     attempt,
     runId,
-    tracer,
   }): Promise<ResearchAgentResult> => {
     const data = event.data as Partial<ResearchRunRequestedData>;
     const researchRunId =
