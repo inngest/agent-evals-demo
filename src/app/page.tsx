@@ -1,14 +1,8 @@
-import { BoothControlPanel } from "@/components/demo/BoothControlPanel";
+import { ResearchDemo } from "@/components/demo/ResearchDemo";
 import { getHighlightedCodeSnippets } from "@/lib/highlight";
-import { getScoreHistory } from "@/lib/scoring";
 
 export default async function Home() {
-  const [snippets, initialHistory] = await Promise.all([
-    getHighlightedCodeSnippets(),
-    getScoreHistory(),
-  ]);
+  const snippets = await getHighlightedCodeSnippets();
 
-  return (
-    <BoothControlPanel snippets={snippets} initialHistory={initialHistory} />
-  );
+  return <ResearchDemo snippets={snippets} />;
 }
