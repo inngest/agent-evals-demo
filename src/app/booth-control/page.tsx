@@ -1,18 +1,9 @@
-import { BoothControlPanel } from "@/components/demo/BoothControlPanel";
-import { getHighlightedCodeSnippets } from "@/lib/highlight";
-import { getScoreHistory } from "@/lib/scoring";
+import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Booth Control",
+  title: "Agent Evals Booth Demo",
 };
 
-export default async function BoothControlPage() {
-  const [snippets, initialHistory] = await Promise.all([
-    getHighlightedCodeSnippets(),
-    getScoreHistory(),
-  ]);
-
-  return (
-    <BoothControlPanel snippets={snippets} initialHistory={initialHistory} />
-  );
+export default function BoothControlPage() {
+  redirect("/");
 }
