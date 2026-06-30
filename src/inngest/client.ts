@@ -1,6 +1,10 @@
 import { encryptionMiddleware } from "@inngest/middleware-encryption";
 import { Inngest, eventType, staticSchema } from "inngest";
-import { metadataMiddleware, scoreMiddleware } from "inngest/experimental";
+import {
+  metadataMiddleware,
+  scoreMiddleware,
+  extendedTracesMiddleware,
+} from "inngest/experimental";
 import { isCloud } from "@/lib/demo-target";
 import type { DemoFlags } from "@/lib/demo-flags";
 import type { ResearchModel, ResearchStepId } from "@/content/research-demo";
@@ -142,14 +146,17 @@ export const researchRunRequested = eventType("research/run.requested", {
 export const researchRunCompleted = eventType("research/run.completed", {
   schema: staticSchema<ResearchRunCompletedData>(),
 });
-export const researchFeedbackRecorded = eventType("research/feedback.recorded", {
-  schema: staticSchema<ResearchFeedbackRecordedData>(),
-});
+export const researchFeedbackRecorded = eventType(
+  "research/feedback.recorded",
+  {
+    schema: staticSchema<ResearchFeedbackRecordedData>(),
+  },
+);
 export const researchExperimentRequested = eventType(
   "research/experiment.requested",
   {
     schema: staticSchema<ResearchExperimentRequestedData>(),
-  }
+  },
 );
 
 // ── 10. flow-control website capture demo ─────────────────────────────────
@@ -169,7 +176,7 @@ export const flowControlDemoRequested = eventType(
   "demo/flow-control.requested",
   {
     schema: staticSchema<FlowControlDemoRequestedData>(),
-  }
+  },
 );
 
 // scoreMiddleware() is REQUIRED for ctx.step.score to exist. metadataMiddleware()
@@ -194,6 +201,7 @@ export const flowControlDemoRequested = eventType(
 //     used below.
 const encryptionKey = process.env.INNGEST_ENCRYPTION_KEY;
 
+console.log("client!");
 export const inngest = new Inngest({
   id: "aie-research-agent-booth-demo",
   // cloud ⇒ isDev:false ⇒ the SDK reads INNGEST_EVENT_KEY + INNGEST_SIGNING_KEY
@@ -201,11 +209,11 @@ export const inngest = new Inngest({
   // Derived from the single DEMO_TARGET flag so cloud/dev can't drift. Do NOT
   // also set INNGEST_DEV in cloud mode — let isDev drive it.
   isDev: !isCloud,
+  checkpointing: false,
   middleware: [
+    extendedTracesMiddleware({ behaviour: "extendProvider" }),
     scoreMiddleware(),
     metadataMiddleware(),
-    ...(encryptionKey
-      ? [encryptionMiddleware({ key: encryptionKey })]
-      : []),
+    ...(encryptionKey ? [encryptionMiddleware({ key: encryptionKey })] : []),
   ],
 });

@@ -29,7 +29,13 @@ export const researchAgent = inngest.createFunction(
     retries: 4,
     triggers: [researchRunRequested],
   },
-  async ({ event, step, attempt, runId }): Promise<ResearchAgentResult> => {
+  async ({
+    event,
+    step,
+    attempt,
+    runId,
+    tracer,
+  }): Promise<ResearchAgentResult> => {
     const data = event.data as Partial<ResearchRunRequestedData>;
     const researchRunId =
       data.researchRunId ?? `scheduled-research-${new Date().toISOString()}`;
@@ -37,13 +43,13 @@ export const researchAgent = inngest.createFunction(
     const failureStep =
       data.failureStep === "none"
         ? undefined
-        : data.failureStep ?? "fetch-competitor-changelog";
+        : (data.failureStep ?? "fetch-competitor-changelog");
     const latencyMs = data.latencyMs ?? 0;
     const seededQualityScore = normalizeSeededQualityScore(
-      data.seededQualityScore
+      data.seededQualityScore,
     );
     const seededFeedbackSignal = normalizeSeededFeedbackSignal(
-      data.seededFeedbackSignal
+      data.seededFeedbackSignal,
     );
     const seededFeedbackAt = normalizeSeededFeedbackAt(data.seededFeedbackAt);
     const sessionId =
@@ -58,48 +64,58 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs,
-      })
+      }),
     );
     const llmPlan = await step.run("call-llm-plan-research", () =>
       runResearchCall("call-llm-plan-research", {
         attempt,
         failStep: failureStep,
-        latencyMs,
-      })
+        latencyMs: 400,
+      }),
     );
-    const competitorChangelog = await step.run("fetch-competitor-changelog", () =>
-      runResearchCall("fetch-competitor-changelog", {
-        attempt,
-        failStep: failureStep,
-        latencyMs,
-      })
+    const competitorChangelog = await step.run(
+      "fetch-competitor-changelog",
+      () =>
+        runResearchCall("fetch-competitor-changelog", {
+          attempt,
+          failStep: failureStep,
+          latencyMs,
+        }),
     );
     const marketSources = await step.run("search-market-sources", () =>
       runResearchCall("search-market-sources", {
         attempt,
         failStep: failureStep,
         latencyMs,
-      })
+      }),
     );
     const brief = await step.run("call-llm-synthesize-brief", () =>
       runResearchCall("call-llm-synthesize-brief", {
         attempt,
         failStep: failureStep,
         latencyMs,
-      })
+      }),
     );
     const scoredBrief = await step.run("score-research-quality", () =>
       runResearchCall("score-research-quality", {
         attempt,
         failStep: failureStep,
         latencyMs,
-      })
+      }),
     );
     const published = await step.run("publish-brief", () =>
-      runResearchCall("publish-brief", { attempt, failStep: failureStep, latencyMs })
+      runResearchCall("publish-brief", {
+        attempt,
+        failStep: failureStep,
+        latencyMs,
+      }),
     );
     const notified = await step.run("notify-stakeholders", () =>
-      runResearchCall("notify-stakeholders", { attempt, failStep: failureStep, latencyMs })
+      runResearchCall("notify-stakeholders", {
+        attempt,
+        failStep: failureStep,
+        latencyMs,
+      }),
     );
 
     const summary = summarizeResearchRun({
@@ -133,7 +149,7 @@ export const researchAgent = inngest.createFunction(
           failureStep: failureStep ?? "none",
           source: "booth-demo",
         },
-        "userland.research"
+        "userland.research",
       );
     }
 
@@ -152,8 +168,8 @@ export const researchAgent = inngest.createFunction(
         {
           id: `research-completed:${researchRunId}`,
           meta: researchSessionMeta(sessionId),
-        }
-      )
+        },
+      ),
     );
 
     if (seededFeedbackSignal) {
@@ -172,8 +188,8 @@ export const researchAgent = inngest.createFunction(
             id: `research-feedback:${researchRunId}:${seededFeedbackSignal}`,
             ts: Date.parse(seededFeedbackAt),
             meta: researchSessionMeta(sessionId),
-          }
-        )
+          },
+        ),
       );
     }
 
@@ -181,13 +197,13 @@ export const researchAgent = inngest.createFunction(
       ...summary,
       parentRunId: isCloud ? runId : undefined,
     };
-  }
+  },
 );
 
 export const researchStepCount = researchSteps.length;
 
 function normalizeSeededFeedbackSignal(
-  value: unknown
+  value: unknown,
 ): ResearchFeedbackSignal | undefined {
   if (value === "useful" || value === "missed-context" || value === "saved") {
     return value;

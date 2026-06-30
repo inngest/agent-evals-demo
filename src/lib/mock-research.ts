@@ -1,3 +1,4 @@
+import opentelemetry, { type Tracer } from "@opentelemetry/api";
 import { RetryAfterError } from "inngest";
 import {
   buildResearchRunSummary,
@@ -7,6 +8,7 @@ import {
   type ResearchRunSummary,
   type ResearchStepId,
 } from "@/content/research-demo";
+import { startPostSpan, startGenAISpan, startSpan } from "./otel";
 
 type ResearchCallOptions = {
   attempt: number;
@@ -23,20 +25,31 @@ export function resetResearchCrashState(): void {
 
 export async function runResearchCall(
   id: ResearchStepId,
-  options: ResearchCallOptions
+  options: ResearchCallOptions,
 ) {
   const step = getResearchStep(id);
   const latency = Math.max(0, Math.min(options.latencyMs ?? 0, 2000));
 
+  let span = null;
+  if (id.match(/call-/)) {
+    span = await startGenAISpan("chat claude-opus-4-8", {});
+  } else if (id.match(/fetch-/)) {
+    span = await startPostSpan("POST https://api.acme.com");
+  }
+
   if (latency > 0) {
     await new Promise((resolve) => setTimeout(resolve, latency));
+  }
+
+  if (span) {
+    await span.end();
   }
 
   if (options.failStep === id && options.attempt === 0 && !hasCrashed) {
     hasCrashed = true;
     throw new RetryAfterError(
       `${step.source} returned 503 while reading ${step.label}`,
-      retryAfterDelay
+      retryAfterDelay,
     );
   }
 

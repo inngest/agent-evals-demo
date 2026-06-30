@@ -27,6 +27,11 @@
   "dependencies": {
     "@base-ui/react": "^1.4.1",
     "@inngest/middleware-encryption": "^2.0.0",
+    "@inngest/otel": "^0.2.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/resources": "^2.8.0",
+    "@opentelemetry/sdk-trace-node": "^2.8.0",
+    "@opentelemetry/semantic-conventions": "^1.41.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "inngest": "4.11.0",
