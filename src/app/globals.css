@@ -233,10 +233,9 @@ button {
 }
 
 .code-html .code-line-highlight {
-  background: rgba(76, 111, 255, 0.28);
+  background: rgba(35, 49, 107, 0.28);
   box-shadow:
-    inset 5px 0 0 #7dd3fc,
-    inset 0 0 0 1px rgba(125, 211, 252, 0.22);
+    inset 5px 0 0 #7dd3fc;
 }
 
 .code-html code {
