@@ -53,32 +53,19 @@ export const researchAgent = inngest.createFunction(
       resetResearchCrashState();
     }
 
-    const productContext = await step.run("load-product-context", () =>
-      runResearchCall("load-product-context", { attempt, failStep: failureStep, latencyMs })
+    const researchContext = await step.run("load-research-context", () =>
+      runResearchCall("load-research-context", {
+        attempt,
+        failStep: failureStep,
+        latencyMs,
+      })
     );
-    const notionRoadmap = await step.run("fetch-notion-roadmap", () =>
-      runResearchCall("fetch-notion-roadmap", { attempt, failStep: failureStep, latencyMs })
-    );
-    const confluenceRfps = await step.run("fetch-confluence-rfps", () =>
-      runResearchCall("fetch-confluence-rfps", { attempt, failStep: failureStep, latencyMs })
-    );
-    const googleDocsNotes = await step.run("fetch-google-docs-notes", () =>
-      runResearchCall("fetch-google-docs-notes", { attempt, failStep: failureStep, latencyMs })
-    );
-    const slackWinLoss = await step.run("fetch-slack-win-loss", () =>
-      runResearchCall("fetch-slack-win-loss", { attempt, failStep: failureStep, latencyMs })
-    );
-    const crmDeals = await step.run("fetch-crm-deals", () =>
-      runResearchCall("fetch-crm-deals", { attempt, failStep: failureStep, latencyMs })
-    );
-    const supportTickets = await step.run("fetch-support-tickets", () =>
-      runResearchCall("fetch-support-tickets", { attempt, failStep: failureStep, latencyMs })
-    );
-    const churnReasons = await step.run("fetch-churn-reasons", () =>
-      runResearchCall("fetch-churn-reasons", { attempt, failStep: failureStep, latencyMs })
-    );
-    const pricingPages = await step.run("fetch-pricing-pages", () =>
-      runResearchCall("fetch-pricing-pages", { attempt, failStep: failureStep, latencyMs })
+    const llmPlan = await step.run("call-llm-plan-research", () =>
+      runResearchCall("call-llm-plan-research", {
+        attempt,
+        failStep: failureStep,
+        latencyMs,
+      })
     );
     const competitorChangelog = await step.run("fetch-competitor-changelog", () =>
       runResearchCall("fetch-competitor-changelog", {
@@ -87,34 +74,31 @@ export const researchAgent = inngest.createFunction(
         latencyMs,
       })
     );
-    const webSearch = await step.run("run-parallel-web-search", () =>
-      runResearchCall("run-parallel-web-search", { attempt, failStep: failureStep, latencyMs })
+    const marketSources = await step.run("search-market-sources", () =>
+      runResearchCall("search-market-sources", {
+        attempt,
+        failStep: failureStep,
+        latencyMs,
+      })
     );
-    const aiSearch = await step.run("run-ai-search", () =>
-      runResearchCall("run-ai-search", { attempt, failStep: failureStep, latencyMs })
+    const brief = await step.run("call-llm-synthesize-brief", () =>
+      runResearchCall("call-llm-synthesize-brief", {
+        attempt,
+        failStep: failureStep,
+        latencyMs,
+      })
     );
-    const g2Reviews = await step.run("query-g2-reviews", () =>
-      runResearchCall("query-g2-reviews", { attempt, failStep: failureStep, latencyMs })
-    );
-    const githubIssues = await step.run("query-github-issues", () =>
-      runResearchCall("query-github-issues", { attempt, failStep: failureStep, latencyMs })
-    );
-    const communityForum = await step.run("query-community-forum", () =>
-      runResearchCall("query-community-forum", { attempt, failStep: failureStep, latencyMs })
-    );
-    const normalizedEvidence = await step.run("normalize-evidence", () =>
-      runResearchCall("normalize-evidence", { attempt, failStep: failureStep, latencyMs })
-    );
-    const rankedFindings = await step.run("rank-findings", () =>
-      runResearchCall("rank-findings", { attempt, failStep: failureStep, latencyMs })
-    );
-    const brief = await step.run("synthesize-brief", () =>
-      runResearchCall("synthesize-brief", { attempt, failStep: failureStep, latencyMs })
+    const scoredBrief = await step.run("score-research-quality", () =>
+      runResearchCall("score-research-quality", {
+        attempt,
+        failStep: failureStep,
+        latencyMs,
+      })
     );
     const published = await step.run("publish-brief", () =>
       runResearchCall("publish-brief", { attempt, failStep: failureStep, latencyMs })
     );
-    await step.run("notify-stakeholders", () =>
+    const notified = await step.run("notify-stakeholders", () =>
       runResearchCall("notify-stakeholders", { attempt, failStep: failureStep, latencyMs })
     );
 
@@ -124,25 +108,14 @@ export const researchAgent = inngest.createFunction(
       qualityScore: seededQualityScore,
     });
     const sources = [
-      productContext,
-      notionRoadmap,
-      confluenceRfps,
-      googleDocsNotes,
-      slackWinLoss,
-      crmDeals,
-      supportTickets,
-      churnReasons,
-      pricingPages,
+      researchContext,
+      llmPlan,
       competitorChangelog,
-      webSearch,
-      aiSearch,
-      g2Reviews,
-      githubIssues,
-      communityForum,
-      normalizedEvidence,
-      rankedFindings,
+      marketSources,
       brief,
+      scoredBrief,
       published,
+      notified,
     ].map((item) => item.source);
     const uniqueSources = [...new Set(sources)];
 

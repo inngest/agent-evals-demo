@@ -1,14 +1,17 @@
 import {
   defaultResearchModel,
+  researchSessionId,
   defaultResearchTopic,
   type ResearchModel,
 } from "@/content/research-demo";
 import {
   inngest,
+  type ResearchExperimentCorpusRun,
   type ResearchFeedbackSignal,
   type ResearchRunRequestedData,
 } from "@/inngest/client";
 import { researchAgent } from "@/inngest/functions/research-agent";
+import { researchExperimentBakeoff } from "@/inngest/functions/research-experiment-bakeoff";
 
 const SCORE_HEARTBEAT_CRON = "*/5 * * * *";
 
@@ -27,16 +30,42 @@ export const researchScoreHeartbeat = inngest.createFunction(
       qualityScore,
       researchRunData,
       researchRunId,
+      slotId,
     } = buildResearchRunData(scheduledAt);
 
     const agentResult = await step.invoke("invoke-research-agent-heartbeat", {
       function: researchAgent,
       data: researchRunData,
     });
+    const corpusRun: ResearchExperimentCorpusRun = {
+      researchRunId,
+      parentRunId: agentResult.parentRunId,
+      sessionId: researchSessionId,
+      feedbackSignal,
+      feedbackScore: feedbackSignal === "missed-context" ? 0 : 1,
+      scoredAt: scheduledAt.toISOString(),
+    };
+    const experimentRunId = `experiment-heartbeat-${slotId}`;
+    const experimentResult = await step.invoke(
+      "invoke-research-experiment-heartbeat",
+      {
+        function: researchExperimentBakeoff,
+        data: {
+          experimentRunId,
+          topic: defaultResearchTopic,
+          corpusRunIds: [researchRunId],
+          corpusRuns: [corpusRun],
+          requestedAt: scheduledAt.toISOString(),
+          source: "booth-demo",
+        },
+      }
+    );
 
     return {
       researchRunId,
       agentRunId: agentResult.parentRunId,
+      experimentRunId,
+      experimentVariant: experimentResult.variant,
       model,
       qualityScore,
       feedbackSignal,
@@ -65,6 +94,7 @@ function buildResearchRunData(scheduledAt: Date): {
   qualityScore: number;
   researchRunData: ResearchRunRequestedData;
   researchRunId: string;
+  slotId: string;
 } {
   const slotId = compactTimestamp(scheduledAt);
   const feedbackSignal = pickFeedbackSignal(slotId);
@@ -91,6 +121,7 @@ function buildResearchRunData(scheduledAt: Date): {
     qualityScore,
     researchRunData,
     researchRunId,
+    slotId,
   };
 }
 

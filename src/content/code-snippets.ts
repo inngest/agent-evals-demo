@@ -10,7 +10,7 @@ export type CodeSnippet = {
 };
 
 const act1Code = `import { inngest, researchRunRequested } from "@/inngest/client";
-import { fetchResearchCorpus, synthesizeBrief } from "@/lib/research";
+import { callModel, fetchResearchCorpus, publishBrief, scoreBrief } from "@/lib/research";
 
 export const researchAgent = inngest.createFunction(
   {
@@ -23,10 +23,14 @@ export const researchAgent = inngest.createFunction(
   async ({ event, step }) => {
     // Internal systems: Notion, Confluence, Google Docs, Slack, CRM.
     // @demo-highlight-start
-    const internalContext = await step.run("load-internal-context", () =>
-      fetchResearchCorpus.internal({
-        topic: event.data.topic,
-        sessionId: event.data.sessionId,
+    const context = await step.run("load-research-context", () =>
+      fetchResearchCorpus.internal({ topic: event.data.topic })
+    );
+
+    const plan = await step.run("call-llm-plan-research", () =>
+      callModel("gpt-5.5", {
+        task: "choose evidence targets",
+        context,
       })
     );
     // @demo-highlight-end
@@ -39,14 +43,26 @@ export const researchAgent = inngest.createFunction(
     );
     // @demo-highlight-end
 
-    // ...support tickets, pricing pages, web search, AI search, G2, GitHub...
+    const marketSignals = await step.run("search-market-sources", () =>
+      fetchResearchCorpus.marketSignals(plan.targets)
+    );
 
-    const brief = await step.run("synthesize-brief", () =>
-      synthesizeBrief({
-        model: "gpt-5.5",
-        internalContext,
+    // @demo-highlight-start
+    const brief = await step.run("call-llm-synthesize-brief", () =>
+      callModel("gpt-5.5", {
+        task: "write competitive research brief",
+        context,
         changelog,
+        marketSignals,
       })
+    );
+    // @demo-highlight-end
+
+    await step.run("score-research-quality", () =>
+      scoreBrief({ brief, sources: marketSignals.sources })
+    );
+    await step.run("publish-brief", () =>
+      publishBrief({ workspace: "competitive-intel", brief })
     );
 
     return { researchRunId: event.data.researchRunId, brief };
@@ -63,43 +79,14 @@ import {
   type ResearchBrief,
 } from "@/lib/research";
 
-export const researchAgent = inngest.createFunction(
-  { id: "research-agent", triggers: [researchRunRequested] },
-  async ({ event, step, defer }) => {
-    const internalContext = await step.run("load-internal-context", () =>
-      fetchResearchCorpus.internal({ topic: event.data.topic })
-    );
-
-    const brief = await step.run("synthesize-brief", () =>
-      synthesizeBrief({ model: "gpt-5.5", internalContext })
-    );
-
-    // @demo-highlight-start
-    defer("score-brief-quality", {
-      function: researchQualityScorer,
-      data: {
-        researchRunId: event.data.researchRunId,
-        brief,
-        sources: internalContext.sources,
-      },
-    });
-
-    defer("score-saved-outcome", {
-      function: researchSavedOutcomeScorer,
-      data: { researchRunId: event.data.researchRunId },
-    });
-    // @demo-highlight-end
-
-    return { researchRunId: event.data.researchRunId, brief };
-  }
-);
-
 type QualityInput = {
   researchRunId: string;
   brief: ResearchBrief;
   sources: string[];
 };
 
+// Define scores first: this separate function returns the metric that lands
+// back on the parent agent run.
 // @demo-highlight-start
 export const researchQualityScorer = createScorer(
   inngest,
@@ -125,13 +112,47 @@ export const researchSavedOutcomeScorer = createScorer(
       timeout: "7d",
     });
 
-    return { name: "research_saved", value: Boolean(saved) };
+    return { name: "research_saved", value: saved ? 1 : 0 };
   }
 );
-// @demo-highlight-end`;
+// @demo-highlight-end
+
+export const researchAgent = inngest.createFunction(
+  { id: "research-agent", triggers: [researchRunRequested] },
+  async ({ event, step, defer }) => {
+    const internalContext = await step.run("load-research-context", () =>
+      fetchResearchCorpus.internal({ topic: event.data.topic })
+    );
+
+    const brief = await step.run("call-llm-synthesize-brief", () =>
+      synthesizeBrief({ model: "gpt-5.5", internalContext })
+    );
+
+    // defer() starts the scorer after this run finalizes. The SDK attributes
+    // each returned score to this parent run automatically.
+    // @demo-highlight-start
+    defer("score-brief-quality", {
+      function: researchQualityScorer,
+      data: {
+        researchRunId: event.data.researchRunId,
+        brief,
+        sources: internalContext.sources,
+      },
+    });
+
+    defer("score-saved-outcome", {
+      function: researchSavedOutcomeScorer,
+      data: { researchRunId: event.data.researchRunId },
+    });
+    // @demo-highlight-end
+
+    return { researchRunId: event.data.researchRunId, brief };
+  }
+);`;
 
 const act3Code = `import { experiment } from "inngest";
 import { inngest, researchRunRequested } from "@/inngest/client";
+import { researchExperimentBakeoff } from "@/inngest/functions/research-experiment-bakeoff";
 import { researchQualityScorer } from "@/inngest/scorers/research-quality-scorer";
 import { fetchResearchCorpus, synthesizeBrief } from "@/lib/research";
 
@@ -150,11 +171,11 @@ export const researchAgent = inngest.createFunction(
       {
         variants: {
           "gpt-5.5": () =>
-            step.run("synthesize-gpt-5.5", () =>
+            step.run("call-llm-synthesize-gpt-5.5", () =>
               synthesizeBrief({ model: "gpt-5.5", evidence })
             ),
           "claude-opus-4.8": () =>
-            step.run("synthesize-claude-opus-4.8", () =>
+            step.run("call-llm-synthesize-claude-opus-4.8", () =>
               synthesizeBrief({ model: "claude-opus-4.8", evidence })
             ),
         },
@@ -186,6 +207,31 @@ export const researchAgent = inngest.createFunction(
     // @demo-highlight-end
 
     return { researchRunId: event.data.researchRunId, variant, brief };
+  }
+);
+
+export const researchScoreHeartbeat = inngest.createFunction(
+  { id: "research-agent-score-heartbeat", triggers: [{ cron: "*/5 * * * *" }] },
+  async ({ step }) => {
+    const topic = "Competitive research brief";
+    const run = await step.invoke("invoke-research-agent-heartbeat", {
+      function: researchAgent,
+      data: { researchRunId: "heartbeat-run", topic, failureStep: "none" },
+    });
+
+    // @demo-highlight-start
+    await step.invoke("invoke-research-experiment-heartbeat", {
+      function: researchExperimentBakeoff,
+      data: {
+        experimentRunId: "heartbeat-experiment",
+        topic,
+        corpusRunIds: [run.researchRunId],
+        corpusRuns: [
+          { researchRunId: run.researchRunId, parentRunId: run.parentRunId },
+        ],
+      },
+    });
+    // @demo-highlight-end
   }
 );`;
 
