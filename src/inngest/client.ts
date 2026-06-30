@@ -209,7 +209,6 @@ export const inngest = new Inngest({
   // Derived from the single DEMO_TARGET flag so cloud/dev can't drift. Do NOT
   // also set INNGEST_DEV in cloud mode — let isDev drive it.
   isDev: !isCloud,
-  checkpointing: false,
   middleware: [
     extendedTracesMiddleware({ behaviour: "extendProvider" }),
     scoreMiddleware(),
