@@ -33,7 +33,7 @@ export async function runResearchCall(
   if (id.match(/call-/)) {
     span = await startGenAISpan("chat claude-opus-4-8", {});
   } else if (id.match(/fetch-/)) {
-    span = await startPostSpan("POST https://api.acme.com");
+    span = await startPostSpan("https://api.acme.com");
   }
 
   if (latency > 0) {
@@ -41,6 +41,9 @@ export async function runResearchCall(
   }
 
   if (span) {
+    if (options.failStep === id && options.attempt === 0 && !hasCrashed) {
+      span.setAttribute("http.response.status_code", 503);
+    }
     await span.end();
   }
 
