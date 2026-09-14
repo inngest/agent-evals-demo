@@ -170,6 +170,12 @@ The app is wired for Inngest Cloud the same way the swag-store apps are:
 
 - `INNGEST_EVENT_KEY` sends events from API routes.
 - `INNGEST_SIGNING_KEY` authenticates the `/api/inngest` serve endpoint.
+- `OPENROUTER_API_KEY` is optional. When set, the research agent's two LLM
+  steps (`call-llm-plan-research`, `call-llm-synthesize-brief`) call
+  [OpenRouter](https://openrouter.ai) for real (real text, real token counts);
+  unset, they stay mocked. `OPENROUTER_MODEL` overrides the default
+  (`openai/gpt-5.5`), and `OPENROUTER_BASE_URL` retargets the API. The 503
+  failure-injection beat and memoized replays behave identically either way.
 - `INNGEST_ENCRYPTION_KEY` is optional. When present, the app enables
   `@inngest/middleware-encryption` for encrypted Inngest payload storage.
 - `INNGEST_ENV` is optional for targeting a non-default Cloud environment.

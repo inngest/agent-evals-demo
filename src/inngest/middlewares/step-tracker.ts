@@ -16,6 +16,12 @@ export type TimelineStep = {
   memoized: boolean;
   startedAt: number;
   durationMs?: number;
+  /** Serialized step input, recorded explicitly by the function (if any) */
+  input?: string;
+  /** Serialized step output, captured automatically on completion */
+  output?: string;
+  /** Error message for the failed attempt (retrying/errored steps) */
+  errorMessage?: string;
 };
 
 export type RunTimeline = {
@@ -32,6 +38,45 @@ type TrackedRun = RunTimeline & { lastTouchedAt: number };
 
 const MAX_TRACKED_RUNS = 20;
 const MAX_RUNS_PER_KEY = 8;
+const MAX_PAYLOAD_CHARS = 2000;
+
+function serializePayload(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+
+  let text: string;
+  try {
+    text = JSON.stringify(value) ?? String(value);
+  } catch {
+    text = String(value);
+  }
+
+  return text.length > MAX_PAYLOAD_CHARS
+    ? `${text.slice(0, MAX_PAYLOAD_CHARS)}… [truncated]`
+    : text;
+}
+
+/**
+ * Records a step's input payload against its timeline entry. Middleware
+ * cannot see closure inputs inside `step.run`, so functions report the
+ * meaningful payload themselves (the demo's research agent does this via
+ * `runResearchCall`). No-op when the run or step is not being tracked.
+ */
+export function recordStepInput(
+  runId: string,
+  displayName: string,
+  input: unknown,
+): void {
+  const run = timelines.get(runId);
+  if (!run) return;
+
+  const step = run.steps.find(
+    (step) => step.displayName === displayName && step.input === undefined,
+  );
+  if (!step) return;
+
+  const serialized = serializePayload(input);
+  if (serialized !== undefined) step.input = serialized;
+}
 
 const globalStepStore = globalThis as typeof globalThis & {
   __stepTimelines?: Map<string, TrackedRun>;
@@ -217,29 +262,45 @@ export const stepTrackerMiddleware = () => {
       };
 
       if (previous >= 0) {
+        // Carry the last failure forward: a step that 503'd and recovered
+        // keeps the error visible in the timeline for the full story.
+        step.errorMessage = run.steps[previous].errorMessage;
         run.steps[previous] = step;
       } else {
         run.steps.push(step);
       }
     }
 
-    onStepComplete({ ctx, fn, stepInfo }: Middleware.OnStepCompleteArgs) {
+    onStepComplete({
+      ctx,
+      fn,
+      output,
+      stepInfo,
+    }: Middleware.OnStepCompleteArgs) {
       const run = trackedRun(ctx, fn);
       const step = run.steps.find((step) => step.id === stepInfo.hashedId);
 
       if (step && step.status === "running") {
         step.status = "completed";
         step.durationMs = Date.now() - step.startedAt;
+        step.output = serializePayload(output);
       }
     }
 
-    onStepError({ ctx, fn, stepInfo, isFinalAttempt }: Middleware.OnStepErrorArgs) {
+    onStepError({
+      ctx,
+      fn,
+      error,
+      stepInfo,
+      isFinalAttempt,
+    }: Middleware.OnStepErrorArgs) {
       const run = trackedRun(ctx, fn);
       const step = run.steps.find((step) => step.id === stepInfo.hashedId);
 
       if (step) {
         step.status = isFinalAttempt ? "errored" : "retrying";
         step.durationMs = Date.now() - step.startedAt;
+        step.errorMessage = error instanceof Error ? error.message : String(error);
       }
     }
 

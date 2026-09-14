@@ -8,11 +8,21 @@ import {
   type ResearchStepId,
 } from "@/content/research-demo";
 import { startPostSpan, startGenAISpan } from "./otel";
+import { recordStepInput } from "@/inngest/middlewares/step-tracker";
+import {
+  completeChat,
+  isOpenRouterConfigured,
+  OPENROUTER_MODEL,
+} from "@/lib/openrouter";
 
 type ResearchCallOptions = {
   attempt: number;
   failStep?: ResearchStepId;
   latencyMs?: number;
+  /** Executor run id, used to record the step input on the live timeline */
+  runId?: string;
+  /** Meaningful input payload for this step, shown in the demo timeline */
+  input?: unknown;
 };
 
 let hasCrashed = false;
@@ -29,14 +39,23 @@ export async function runResearchCall(
   const step = getResearchStep(id);
   const latency = Math.max(0, Math.min(options.latencyMs ?? 0, 2000));
 
+  if (options.runId && options.input !== undefined) {
+    recordStepInput(options.runId, id, options.input);
+  }
+
+  const useOpenRouter = id.match(/call-/) && isOpenRouterConfigured();
+
   let span = null;
   if (id.match(/call-/)) {
-    span = await startGenAISpan("chat claude-opus-4-8", {});
+    span = await startGenAISpan(
+      useOpenRouter ? `chat ${OPENROUTER_MODEL}` : "chat claude-opus-4-8",
+      {},
+    );
   } else if (id.match(/fetch-/)) {
     span = await startPostSpan("https://api.acme.com");
   }
 
-  if (latency > 0) {
+  if (latency > 0 && !useOpenRouter) {
     await new Promise((resolve) => setTimeout(resolve, latency));
   }
 
@@ -55,6 +74,10 @@ export async function runResearchCall(
     );
   }
 
+  if (useOpenRouter) {
+    return runRealModelCall(id, step.label, options);
+  }
+
   return {
     id,
     label: step.label,
@@ -62,6 +85,48 @@ export async function runResearchCall(
     detail: step.detail,
     output: step.output,
     tokens: step.tokens,
+  };
+}
+
+const modelCallIntents: Partial<Record<ResearchStepId, { system: string }>> = {
+  "call-llm-plan-research": {
+    system:
+      "You are a competitive research planner. Given a research topic, list the 3-5 most valuable evidence targets to check next and the rubric dimensions to grade. Be terse and concrete.",
+  },
+  "call-llm-synthesize-brief": {
+    system:
+      "You are a competitive intelligence analyst. Write a 3-paragraph executive brief: what changed, why it matters, and the recommended response. Be decisive and concrete.",
+  },
+};
+
+async function runRealModelCall(
+  id: ResearchStepId,
+  label: string,
+  options: ResearchCallOptions,
+) {
+  const intent = modelCallIntents[id] ?? {
+    system: "You are a helpful research assistant. Be terse and concrete.",
+  };
+  const input = (options.input ?? {}) as Record<string, unknown>;
+  const prompt =
+    Object.entries(input)
+      .map(([key, value]) =>
+        `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
+      )
+      .join("\n") || "Research topic: competitive intelligence";
+  const completion = await completeChat({
+    system: intent.system,
+    prompt,
+    maxTokens: 512,
+  });
+
+  return {
+    id,
+    label,
+    source: `openrouter · ${completion.model}`,
+    detail: `Real model call via OpenRouter (${completion.usage.totalTokens} tokens).`,
+    output: completion.text,
+    tokens: completion.usage.totalTokens,
   };
 }
 

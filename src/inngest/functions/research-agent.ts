@@ -68,6 +68,7 @@ export const researchAgent = inngest.createFunction(
     const data = event.data as Partial<ResearchRunRequestedData>;
     const researchRunId =
       data.researchRunId ?? `scheduled-research-${new Date().toISOString()}`;
+    const topic = data.topic ?? "Competitive research brief";
     const model = data.model ?? "gpt-5.5";
     const failureStep =
       data.failureStep === "none"
@@ -94,6 +95,8 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: { topic, model },
       }),
     );
     const llmPlan = await step.run("call-llm-plan-research", () =>
@@ -101,6 +104,8 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs: 400,
+        runId,
+        input: { topic, model },
       }),
     );
     const competitorChangelog = await step.run(
@@ -110,6 +115,8 @@ export const researchAgent = inngest.createFunction(
           attempt,
           failStep: failureStep,
           latencyMs,
+          runId,
+          input: { topic, source: "public changelog APIs" },
         }),
     );
 
@@ -138,6 +145,8 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: { topic, sources: ["Parallel", "G2", "GitHub"] },
       }),
     );
     const brief = await step.run("call-llm-synthesize-brief", () =>
@@ -145,6 +154,12 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: {
+          topic,
+          model,
+          evidence: [competitorChangelog.label, marketSources.label],
+        },
       }),
     );
     const scoredBrief = await step.run("score-research-quality", () =>
@@ -152,6 +167,8 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: { model, rubric: ["coverage", "citations", "specificity"] },
       }),
     );
     const published = await step.run("publish-brief", () =>
@@ -159,6 +176,8 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: { destination: "competitive intelligence workspace" },
       }),
     );
     const notified = await step.run("notify-stakeholders", () =>
@@ -166,6 +185,8 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: { channels: ["product", "sales", "DevRel"] },
       }),
     );
 
