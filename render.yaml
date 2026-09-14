@@ -5,8 +5,8 @@ services:
     plan: starter
     region: oregon
     autoDeploy: true
-    buildCommand: npm ci && npm run build
-    startCommand: npm run start
+    buildCommand: npm ci && npm run build && cp -r .next/static .next/standalone/.next/static
+    startCommand: node .next/standalone/server.js
     healthCheckPath: /api/demo/status
     envVars:
       - key: NODE_VERSION
@@ -16,7 +16,7 @@ services:
       - key: INNGEST_API_BASE_URL
         value: https://api.inngest.com
       - key: NEXT_PUBLIC_INNGEST_DASHBOARD_URL
-        value: https://app.inngest.com/env/production
+        value: https://app.inngest.com/env/ai-conf-2026-demo-f615cff3
       - key: INNGEST_EVENT_KEY
         sync: false
       - key: INNGEST_SIGNING_KEY

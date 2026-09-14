@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "INNGEST_DEV=${INNGEST_DEV:-1} next dev",
+    "dev": "INNGEST_DEV=${INNGEST_DEV:-1} NEXT_PUBLIC_INNGEST_DASHBOARD_URL=${NEXT_PUBLIC_INNGEST_DASHBOARD_URL:-http://localhost:8288} next dev",
     "dev:cloud": "INNGEST_DEV=false next dev",
     "build": "next build",
     "start": "next start",
