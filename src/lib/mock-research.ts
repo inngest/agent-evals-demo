@@ -117,7 +117,6 @@ async function runRealModelCall(
   const completion = await completeChat({
     system: intent.system,
     prompt,
-    maxTokens: 512,
   });
 
   return {

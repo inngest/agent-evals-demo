@@ -40,7 +40,9 @@ export async function completeChat(args: {
     },
     body: JSON.stringify({
       model: OPENROUTER_MODEL,
-      max_tokens: args.maxTokens ?? 512,
+      // Reasoning models burn budget on hidden reasoning before any visible
+      // content; a small cap yields empty completions (finish_reason=length).
+      max_tokens: args.maxTokens ?? 2048,
       messages: [
         { role: "system", content: args.system },
         { role: "user", content: args.prompt },
@@ -57,7 +59,10 @@ export async function completeChat(args: {
 
   const payload = (await response.json()) as {
     model?: string;
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{
+      message?: { content?: string | null; reasoning?: string | null };
+      finish_reason?: string | null;
+    }>;
     usage?: {
       prompt_tokens?: number;
       completion_tokens?: number;
@@ -65,19 +70,35 @@ export async function completeChat(args: {
     };
   };
 
-  const text = payload.choices?.[0]?.message?.content ?? "";
+  const choice = payload.choices?.[0];
+  const text = choice?.message?.content?.trim() ?? "";
+  const usage = {
+    promptTokens: payload.usage?.prompt_tokens ?? 0,
+    completionTokens: payload.usage?.completion_tokens ?? 0,
+    totalTokens: payload.usage?.total_tokens ?? 0,
+  };
 
   if (!text) {
-    throw new Error("OpenRouter returned an empty completion");
+    // Never fail silently: name the likely cause so the retry error in the
+    // Inngest trace is actionable (length = raise max_tokens, content_filter
+    // = prompt issue, reasoning-only = reasoning model with a small budget).
+    const details = [
+      choice?.finish_reason ? `finish_reason=${choice.finish_reason}` : null,
+      choice?.message?.reasoning ? "reasoning-only response" : null,
+      `tokens=${usage.totalTokens}`,
+      `model=${payload.model ?? OPENROUTER_MODEL}`,
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    throw new Error(
+      `OpenRouter returned an empty completion (${details || "no choices returned"})`,
+    );
   }
 
   return {
     text,
     model: payload.model ?? OPENROUTER_MODEL,
-    usage: {
-      promptTokens: payload.usage?.prompt_tokens ?? 0,
-      completionTokens: payload.usage?.completion_tokens ?? 0,
-      totalTokens: payload.usage?.total_tokens ?? 0,
-    },
+    usage,
   };
 }
