@@ -121,6 +121,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
   const traceUrl = trigger?.traceUrl ?? getDeepLink("runTrace");
   const scoresUrl = getDeepLink("scoresOnTrace", { runId: trigger?.runId });
   const insightsUrl = getDeepLink("insights");
+  const brief = extractBriefOutput(timeline);
   const experimentUrl =
     experiment?.experimentUrl ??
     getDeepLink("experiment", {
@@ -459,6 +460,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
           <div className="min-h-0 overflow-auto p-3 xl:p-4">
             {activeStage === "run" ? (
               <RunControls
+                brief={brief}
                 failureArmed={failureArmed}
                 isRunning={isRunning}
                 phase={phase}
@@ -481,6 +483,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
             ) : null}
             {activeStage === "evaluate" ? (
               <EvaluateControls
+                brief={brief}
                 experimentUrl={experimentUrl}
                 scoresUrl={scoresUrl}
                 selectedSignal={lastFeedback?.signal ?? null}
@@ -550,6 +553,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
 }
 
 function RunControls({
+  brief,
   failureArmed,
   isRunning,
   phase,
@@ -562,6 +566,7 @@ function RunControls({
   onRun,
   onSandboxArmedChange,
 }: {
+  brief: BriefOutput | null;
   failureArmed: boolean;
   isRunning: boolean;
   phase: RunPhase;
@@ -653,6 +658,26 @@ function RunControls({
         </div>
       ) : null}
       <StepTimeline timeline={timeline} isRunning={isRunning} />
+      {brief ? (
+        <div className="border border-[var(--ink)] bg-white">
+          <div className="flex items-center justify-between gap-2 px-2.5 py-2">
+            <span className="mono text-[10px] uppercase text-[var(--muted-copy)]">
+              research output
+            </span>
+            <span className="mono truncate text-[10px] uppercase">
+              {brief.source}
+              {brief.tokens > 0 ? (
+                <span className="ml-1.5 text-[var(--muted-copy)]">
+                  {brief.tokens.toLocaleString()} tokens
+                </span>
+              ) : null}
+            </span>
+          </div>
+          <div className="max-h-56 overflow-y-auto border-t border-[var(--rule-soft)] bg-[var(--bone)] px-2.5 py-2 text-[13px] leading-5 whitespace-pre-wrap">
+            {brief.text}
+          </div>
+        </div>
+      ) : null}
       {sandbox ? (
         <div className="border border-[var(--ink)] bg-white">
           <div className="flex items-center justify-between gap-2 px-2.5 py-2">
@@ -746,12 +771,14 @@ function ObserveControls({
 }
 
 function EvaluateControls({
+  brief,
   experimentUrl,
   scoresUrl,
   selectedSignal,
   onRunExperiment,
   onSignal,
 }: {
+  brief: BriefOutput | null;
   experimentUrl: string;
   scoresUrl: string;
   selectedSignal: ResearchFeedbackSignal | null;
@@ -776,10 +803,16 @@ function EvaluateControls({
           <div className="mono text-[10px] uppercase text-[var(--muted-copy)]">
             research brief
           </div>
-          <p className="mt-1 text-[13px] font-medium leading-5">
-            Score this run now with product signals, or weeks later when the
-            outcome lands. Same scorers, same run history.
-          </p>
+          {brief ? (
+            <p className="mt-1 max-h-40 overflow-y-auto text-[13px] font-medium leading-5 whitespace-pre-wrap">
+              {brief.text}
+            </p>
+          ) : (
+            <p className="mt-1 text-[13px] font-medium leading-5">
+              Score this run now with product signals, or weeks later when the
+              outcome lands. Same scorers, same run history.
+            </p>
+          )}
         </div>
         <div className="grid grid-cols-4 gap-1.5 border-t border-[var(--rule-soft)] bg-[var(--bone)] p-1.5">
           <Button
@@ -921,4 +954,40 @@ async function fetchStatus(trigger: TriggerResponse): Promise<StatusResponse> {
 
 function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+type BriefOutput = { text: string; source: string; tokens: number };
+
+/**
+ * Pulls the synthesized research brief out of the live timeline: the
+ * `call-llm-synthesize-brief` step's captured output. In OpenRouter mode
+ * this is the real model text; in mock mode the canned brief. Appears as
+ * soon as the step completes, even before the run finishes.
+ */
+function extractBriefOutput(timeline: RunTimeline | null): BriefOutput | null {
+  if (!timeline) return null;
+
+  const step = timeline.steps.find(
+    (step) => step.displayName === "call-llm-synthesize-brief",
+  );
+
+  if (!step?.output) return null;
+
+  try {
+    const parsed = JSON.parse(step.output) as {
+      output?: string;
+      source?: string;
+      tokens?: number;
+    };
+
+    if (!parsed.output) return null;
+
+    return {
+      text: parsed.output,
+      source: parsed.source ?? "model",
+      tokens: parsed.tokens ?? 0,
+    };
+  } catch {
+    return null;
+  }
 }
