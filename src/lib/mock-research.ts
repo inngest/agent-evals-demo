@@ -130,20 +130,20 @@ async function runRealModelCall(
 }
 
 export function evaluateResearchQuality(args: {
-  model: ResearchModel;
+  model: string;
   sources: string[];
   tokenCount: number;
 }): number {
   const sourceCoverage = Math.min(1, args.sources.length / 12);
   const tokenPenalty = args.tokenCount > 15000 ? 0.04 : 0;
-  const modelLift = args.model === "gpt-5.5" ? 0.08 : 0.02;
+  const modelLift = args.model.includes("gpt") ? 0.08 : 0.02;
 
   return clamp01(0.74 + sourceCoverage * 0.12 + modelLift - tokenPenalty);
 }
 
 export function summarizeResearchRun(args: {
   researchRunId: string;
-  model: ResearchModel;
+  model: string;
   completedAt?: string;
   qualityScore?: number;
 }): ResearchRunSummary {
@@ -163,10 +163,10 @@ export function summarizeResearchRun(args: {
   });
 }
 
-export function modelExperimentResult(model: ResearchModel) {
-  if (model === "gpt-5.5") {
+export function modelExperimentResult(model: string) {
+  if (model.includes("gpt")) {
     return {
-      model,
+      model: "gpt-5.5" as const,
       qualityScore: 0.89,
       tokenCount: 13180,
       costUsd: 0.41,
@@ -175,7 +175,7 @@ export function modelExperimentResult(model: ResearchModel) {
   }
 
   return {
-    model,
+    model: "claude-opus-4.8" as const,
     qualityScore: 0.83,
     tokenCount: 16840,
     costUsd: 0.56,

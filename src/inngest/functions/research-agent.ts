@@ -19,6 +19,7 @@ import {
   type SandboxRunMode,
 } from "@/lib/sandbox";
 import { isCloud } from "@/lib/demo-target";
+import { isOpenRouterConfigured, OPENROUTER_MODEL } from "@/lib/openrouter";
 import {
   researchSessionKey,
   researchSessionMeta,
@@ -69,7 +70,13 @@ export const researchAgent = inngest.createFunction(
     const researchRunId =
       data.researchRunId ?? `scheduled-research-${new Date().toISOString()}`;
     const topic = data.topic ?? "Competitive research brief";
-    const model = data.model ?? "gpt-5.5";
+    // With OpenRouter configured, the real model id is the honest narrative:
+    // it is what actually executes the LLM steps (visible in step inputs,
+    // the completed event, and the run summary). The payload's model only
+    // drives the mock-mode story.
+    const model = isOpenRouterConfigured()
+      ? OPENROUTER_MODEL
+      : (data.model ?? "gpt-5.5");
     const failureStep =
       data.failureStep === "none"
         ? undefined

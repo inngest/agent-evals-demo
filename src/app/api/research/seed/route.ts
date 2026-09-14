@@ -28,7 +28,7 @@ export async function POST(request: Request) {
         researchRunId: run.researchRunId,
         topic: defaultResearchTopic,
         cadence: "seeded",
-        model: run.model,
+        model: run.model === "claude-opus-4.8" ? "claude-opus-4.8" : "gpt-5.5",
         failureStep: index % 2 === 0 ? "fetch-competitor-changelog" : undefined,
         latencyMs: 0,
         requestedAt: new Date(ts).toISOString(),

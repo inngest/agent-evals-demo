@@ -103,7 +103,8 @@ export type ResearchRunCompletedData = {
   parentRunId?: string;
   sessionId: string;
   topic: string;
-  model: ResearchModel;
+  // Narrative model in mock mode, real OpenRouter model id when configured
+  model: string;
   qualityScore: number;
   tokenCount: number;
   costUsd: number;

@@ -23,7 +23,9 @@ export type ResearchRunSummary = {
   researchRunId: string;
   sessionId: string;
   topic: string;
-  model: ResearchModel;
+  // Narrative models ("gpt-5.5") in mock mode, real OpenRouter model ids
+  // ("openai/gpt-5.5") when the key is configured.
+  model: string;
   qualityScore: number;
   tokenCount: number;
   costUsd: number;
@@ -175,7 +177,7 @@ export function getResearchStep(id: ResearchStepId): ResearchStep {
 
 export function buildResearchRunSummary(args: {
   researchRunId: string;
-  model?: ResearchModel;
+  model?: string;
   completedAt?: string;
   qualityScore?: number;
 }): ResearchRunSummary {
