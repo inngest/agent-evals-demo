@@ -1,8 +1,14 @@
-import { ResearchDemo } from "@/components/demo/ResearchDemo";
-import { getHighlightedCodeSnippets } from "@/lib/highlight";
+import { LoopDemo } from "@/components/demo/LoopDemo";
+import {
+  getHighlightedLoopSnippets,
+  getHighlightedPrimitives,
+} from "@/lib/highlight";
 
 export default async function Home() {
-  const snippets = await getHighlightedCodeSnippets();
+  const [snippets, primitives] = await Promise.all([
+    getHighlightedLoopSnippets(),
+    getHighlightedPrimitives(),
+  ]);
 
-  return <ResearchDemo snippets={snippets} />;
+  return <LoopDemo snippets={snippets} primitives={primitives} />;
 }

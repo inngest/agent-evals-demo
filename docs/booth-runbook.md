@@ -1,4 +1,4 @@
-# AIEWF Booth Demo Runbook
+# Booth Demo Runbook
 
 For the driver script and stakeholder dry-run criteria, use
 `docs/demo-talk-track.md`.
@@ -16,13 +16,28 @@ For the production Cloud handoff, use `docs/cloud-auth-request.md` first, then
 
 ## Event Context
 
-- Event: AI Engineer World's Fair 2026.
-- Booth: `U-G26`.
-- Booth opens: Monday, June 29, 2026 at 4 PM.
-- June 29 is also the evals soft-launch booth day in Slack planning, so the
-  demo should be ready before that first shift rather than during the week.
-- Core booth story: one encompassing Insights-agent demo covering durability,
-  observability, and optimization.
+- Event: [EVENT NAME], [DATES].
+- Booth: [BOOTH #].
+- Core booth story: Unbreakable agents, invisible infra. One loop demo
+  (Run / Observe / Evaluate) at `/` covering durability, observability,
+  evaluation, and Sandboxes (beta).
+- Booth surfaces: `/` is the loop demo. Legacy demos remain at `/research`
+  (acts demo), `/booth-story`, and `/booth-control` for rehearsal and
+  comparison only.
+
+## Sandbox Beta Notes
+
+- Sandboxes require `inngest >= 4.20.0` (pinned in `package.json`) and are
+  cloud-only, access-gated.
+- The demo probes entitlement at `/api/demo/status` under `sandbox.mode`:
+  - `sandbox`: cloud mode with the beta enabled for the environment. Real
+    durable sandbox steps run (`create-analysis-sandbox`,
+    `run-generated-analysis`, `destroy-analysis-sandbox`).
+  - `simulated`: local dev server or beta unavailable. The beat runs as a
+    labeled simulated step so the trace story stays intact.
+- If cloud returns 403 `access_denied`, ask the Inngest team to enable the
+  beta for the demo environment before the event.
+- The agent's `onFailure` handler destroys leaked sandboxes by name.
 
 ## Preflight
 
@@ -202,8 +217,8 @@ needs the invoked agent run ID.
 
 ## Seed Research Agent Load
 
-Use this when the Inngest dashboard needs a large history of the current
-research-agent demo across all acts:
+Use this when the Inngest dashboard needs a large history of the research
+agent demo (this is the loop demo's agent):
 
 ```bash
 npm run demo:seed-research-load -- --count 250 --experiments 200
@@ -244,29 +259,31 @@ durable retry attempt and a short retry delay.
 
 ## Walkthrough
 
-1. Click `Seed 14 runs` locally, or run the Cloud seed command above.
+1. Seed research history locally or with the Cloud command above.
 2. Open Inngest Runs on the right side.
-3. In the demo app, click `Ask agent`.
-4. Point at the generated SQL and result rows.
-5. Open the corresponding Inngest run/trace on the right.
-6. Click `Save`.
-7. Open `Scores` in the demo app and show the saved behavior signal.
-8. In Inngest, show the seeded run history and score-signal events.
+3. In the loop demo at `/`, stay on the Run stage with both toggles armed.
+4. Click `Run research agent`.
+5. Narrate the 503 retry, then the sandbox result card.
+6. Open the corresponding Inngest run/trace on the right; show the retried
+   boundary and the sandbox steps.
+7. Observe stage: open the trace link, then `Open Insights`.
+8. Evaluate stage: click `Good`, open `Scores`; run the model bakeoff and
+   open the Experiment view.
 
 Start each live conversation with:
 
-> What are you using today to know if your agents are actually working in
-> production?
+> How are you keeping your agents reliable today, while the models and
+> prompts keep changing underneath them?
 
-Use the answer to route the demo: eval-savvy visitors see Scores and Insights
-history sooner; durability questions get the `Opus offline` retry path;
-observability questions spend more time in Inngest Runs and Trace.
+Use the answer to route the demo: reliability pain stays in Run;
+observability questions get the trace and Insights; evals-savvy visitors go
+straight to Evaluate.
 
-If the visitor is qualified or explicitly comparing eval/observability options,
-end with the Patrick handoff from `docs/demo-talk-track.md` instead of adding
-more screens. Use the event page calendar for the handoff:
-`https://www.inngest.com/events/ai-engineer-worlds-fair-2026`. The goal is a
-useful follow-up, not a longer booth monologue.
+If the visitor is qualified or explicitly comparing eval/observability
+options, end with the Patrick handoff from `docs/demo-talk-track.md` instead
+of adding more screens. Use the event page calendar for the handoff:
+[EVENT PAGE URL]. The goal is a useful follow-up, not a longer booth
+monologue.
 
 ## Booth QA
 
@@ -292,6 +309,9 @@ MAR-166.
 
 - If the app works but Inngest has no new runs, check the deployment env vars
   and re-sync `/api/inngest`.
+- If the cloud sandbox beat fails (403 `access_denied`, capacity), check
+  `/api/demo/status` `sandbox.mode`. The demo falls back to the labeled
+  simulated beat; narrate the beta caveat and keep the walkthrough moving.
 - If production seeding returns 401/403, confirm `DEMO_SEED_TOKEN` is set in
   Vercel and in the local shell running `npm run demo:seed`.
 - If production reset returns 401/403 from a browser interaction, that is

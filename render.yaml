@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: agent-evals-demo
+    runtime: node
+    plan: starter
+    region: oregon
+    autoDeploy: true
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/demo/status
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DEMO_TARGET
+        value: cloud
+      - key: INNGEST_API_BASE_URL
+        value: https://api.inngest.com
+      - key: NEXT_PUBLIC_INNGEST_DASHBOARD_URL
+        value: https://app.inngest.com/env/production
+      - key: INNGEST_EVENT_KEY
+        sync: false
+      - key: INNGEST_SIGNING_KEY
+        sync: false
+      - key: INNGEST_ENCRYPTION_KEY
+        sync: false
+      - key: INNGEST_ENV
+        sync: false
+      - key: INNGEST_API_KEY
+        sync: false
+      - key: INNGEST_INSIGHTS_SCORE_QUERY
+        sync: false
+      - key: DEMO_SEED_TOKEN
+        sync: false
+      - key: NEXT_PUBLIC_INNGEST_RUNS_URL
+        sync: false
+      - key: NEXT_PUBLIC_INNGEST_INSIGHTS_URL
+        sync: false

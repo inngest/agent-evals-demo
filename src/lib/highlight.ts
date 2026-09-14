@@ -1,15 +1,59 @@
 import { codeToHtml, type ShikiTransformer } from "shiki";
 import { codeSnippets, type CodeSnippet } from "@/content/code-snippets";
+import {
+  loopSnippets,
+  type LoopSnippet,
+} from "@/content/loop-snippets";
+import {
+  primitiveCards,
+  type PrimitiveCard,
+} from "@/content/primitives-reference";
+
+// Any snippet shape the CodeView can render. Legacy CodeSnippet (act ids)
+// and LoopSnippet (stage ids) both satisfy this structurally.
+export type AnySnippet = {
+  id: string;
+  label: string;
+  eyebrow: string;
+  description: string;
+  code: string;
+};
 
 export type HighlightedCodeSnippet = CodeSnippet & {
+  html: string;
+};
+
+export type HighlightedLoopSnippet = LoopSnippet & {
+  html: string;
+};
+
+export type HighlightedPrimitiveCard = PrimitiveCard & {
   html: string;
 };
 
 export async function getHighlightedCodeSnippets(): Promise<
   HighlightedCodeSnippet[]
 > {
+  return highlightSnippets<CodeSnippet>(codeSnippets);
+}
+
+export async function getHighlightedLoopSnippets(): Promise<
+  HighlightedLoopSnippet[]
+> {
+  return highlightSnippets<LoopSnippet>(loopSnippets);
+}
+
+export async function getHighlightedPrimitives(): Promise<
+  HighlightedPrimitiveCard[]
+> {
+  return highlightSnippets<PrimitiveCard>(primitiveCards);
+}
+
+async function highlightSnippets<T extends { code: string }>(
+  snippets: T[]
+): Promise<Array<T & { html: string }>> {
   return Promise.all(
-    codeSnippets.map(async (snippet) => ({
+    snippets.map(async (snippet) => ({
       ...snippet,
       html: await codeToHtml(snippet.code, {
         lang: "ts",

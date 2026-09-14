@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import { getScoreHistory } from "@/lib/scoring";
+import { checkSandboxAccess } from "@/lib/sandbox";
 import { incidents } from "@/content/incidents";
 import { seededExperiment, seededSessions } from "@/content/seed-data";
 
 export async function GET() {
   const history = await getScoreHistory();
+  const sandbox = await checkSandboxAccess();
   const isDevMode = process.env.INNGEST_DEV === "1";
   const isProductionRuntime = process.env.NODE_ENV === "production";
   const hasEventKey = Boolean(process.env.INNGEST_EVENT_KEY);
@@ -51,6 +53,7 @@ export async function GET() {
       sessionsSeeded: seededSessions.length >= 1,
       experimentSeeded: seededExperiment.cells.length > 0,
     },
+    sandbox,
     scoreHistory: {
       source: history.source,
       points: history.points.length,

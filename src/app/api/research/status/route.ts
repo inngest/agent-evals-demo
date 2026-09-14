@@ -5,6 +5,7 @@ import {
 } from "@/content/research-demo";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import { isCloud } from "@/lib/demo-target";
+import { getTimelineForDemo } from "@/inngest/middlewares/step-tracker";
 
 type StoredResearchRun = {
   researchRunId: string;
@@ -43,17 +44,77 @@ export async function POST(request: Request) {
 
 async function buildStatus(params: URLSearchParams) {
   const researchRunId = params.get("researchRunId") ?? "demo-research-run";
+  const useSandbox = params.get("useSandbox") === "true";
   const stored = researchRunStore.get(researchRunId);
   const requestedAt = stored?.requestedAt ?? new Date().toISOString();
   const elapsed = Date.now() - new Date(requestedAt).getTime();
-  const completionMs = 7600;
+  const totalSteps = researchSteps.length + (useSandbox ? 1 : 0);
+  // The sandbox beat (simulated locally, real in cloud) adds a beat of work.
+  const completionMs = useSandbox ? 8800 : 7600;
   const retryAtMs = 3100;
-  const cloudRunId = await resolveCloudRunId(
-    params.get("inngestEventId") ?? undefined,
-    stored
-  );
+  const eventIdParam = params.get("inngestEventId") ?? undefined;
+  const cloudRunId = await resolveCloudRunId(eventIdParam, stored);
   const runId = cloudRunId ?? researchRunId;
   const traceUrl = getDeepLink("runTrace", { runId });
+
+  // Real step data captured by stepTrackerMiddleware. When present it is
+  // authoritative (honest step names, retries, memoized replays); the
+  // timing simulation below is the fallback when no run has been observed.
+  const timeline = getTimelineForDemo(
+    eventIdParam ?? stored?.inngestEventId,
+    researchRunId,
+  );
+
+  if (timeline) {
+    const completedSteps = timeline.steps.filter(
+      (step) => step.status === "completed",
+    ).length;
+    const hadRetry = timeline.steps.some(
+      (step) => step.memoized || step.status === "retrying",
+    );
+
+    if (timeline.status === "failed") {
+      return {
+        ok: true,
+        status: "failed",
+        hadRetry,
+        completedSteps,
+        totalSteps: timeline.steps.length,
+        runId: timeline.runId,
+        traceUrl: getDeepLink("runTrace", { runId: timeline.runId }),
+        result: null,
+        error: "Run failed after exhausting retries",
+        timeline,
+      };
+    }
+
+    if (timeline.status === "completed") {
+      return {
+        ok: true,
+        status: "completed",
+        hadRetry,
+        completedSteps: timeline.steps.length,
+        totalSteps: timeline.steps.length,
+        runId: timeline.runId,
+        traceUrl: getDeepLink("runTrace", { runId: timeline.runId }),
+        result: completedResult(researchRunId, useSandbox),
+        timeline,
+      };
+    }
+
+    return {
+      ok: true,
+      status: "running",
+      hadRetry,
+      completedSteps,
+      totalSteps: timeline.steps.length,
+      runId: timeline.runId,
+      traceUrl: getDeepLink("runTrace", { runId: timeline.runId }),
+      result: null,
+      error: stored?.error,
+      timeline,
+    };
+  }
 
   if (elapsed < 400) {
     return {
@@ -61,7 +122,7 @@ async function buildStatus(params: URLSearchParams) {
       status: "queued",
       hadRetry: false,
       completedSteps: 0,
-      totalSteps: researchSteps.length,
+      totalSteps,
       runId,
       traceUrl,
       result: null,
@@ -72,10 +133,7 @@ async function buildStatus(params: URLSearchParams) {
   if (elapsed < completionMs) {
     const completedSteps = Math.max(
       1,
-      Math.min(
-        researchSteps.length - 1,
-        Math.floor((elapsed / completionMs) * researchSteps.length)
-      )
+      Math.min(totalSteps - 1, Math.floor((elapsed / completionMs) * totalSteps))
     );
 
     return {
@@ -83,7 +141,7 @@ async function buildStatus(params: URLSearchParams) {
       status: "running",
       hadRetry: elapsed > retryAtMs,
       completedSteps,
-      totalSteps: researchSteps.length,
+      totalSteps,
       runId,
       traceUrl,
       result: null,
@@ -91,16 +149,38 @@ async function buildStatus(params: URLSearchParams) {
     };
   }
 
+  const result = completedResult(researchRunId, useSandbox);
+
   return {
     ok: true,
     status: "completed",
     hadRetry: true,
-    completedSteps: researchSteps.length,
-    totalSteps: researchSteps.length,
+    completedSteps: totalSteps,
+    totalSteps,
     runId,
     traceUrl,
-    result: buildResearchRunSummary({ researchRunId }),
+    result,
     error: stored?.error,
+  };
+}
+
+function completedResult(researchRunId: string, useSandbox: boolean) {
+  const result = buildResearchRunSummary({ researchRunId });
+
+  return {
+    ...result,
+    ...(useSandbox
+      ? {
+          sandbox: {
+            mode: isCloud ? "sandbox" : "simulated",
+            sandboxId: `sbx-${isCloud ? "cloud" : "simulated"}-${researchRunId.slice(0, 8)}`,
+            exitCode: 0,
+            totalLaunches: 7,
+            competitorCount: 3,
+            topThemes: ["evals", "queues", "workflows"],
+          },
+        }
+      : {}),
   };
 }
 

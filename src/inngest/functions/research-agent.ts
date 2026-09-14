@@ -12,14 +12,30 @@ import {
   runResearchCall,
   summarizeResearchRun,
 } from "@/lib/mock-research";
+import {
+  destroySandboxesNamed,
+  runSandboxAnalysis,
+  sandboxNameForRun,
+  type SandboxRunMode,
+} from "@/lib/sandbox";
 import { isCloud } from "@/lib/demo-target";
 import {
   researchSessionKey,
   researchSessionMeta,
 } from "@/lib/research-session-meta";
 
+export type SandboxRunSummary = {
+  mode: SandboxRunMode;
+  sandboxId: string;
+  exitCode: number;
+  totalLaunches: number;
+  competitorCount: number;
+  topThemes: string[];
+};
+
 export type ResearchAgentResult = ReturnType<typeof summarizeResearchRun> & {
   parentRunId?: string;
+  sandbox?: SandboxRunSummary;
 };
 
 export const researchAgent = inngest.createFunction(
@@ -28,6 +44,20 @@ export const researchAgent = inngest.createFunction(
     name: "Research agent",
     retries: 4,
     triggers: [researchRunRequested],
+    // If the run dies with a sandbox in flight, destroy it by name.
+    onFailure: async ({ event, step }) => {
+      const data = event.data as Partial<ResearchRunRequestedData>;
+
+      if (!data.useSandbox) return;
+
+      await step.run("cleanup-analysis-sandbox", async () => {
+        const destroyed = await destroySandboxesNamed(
+          sandboxNameForRun(data.researchRunId ?? "unknown"),
+        );
+
+        return { destroyed };
+      });
+    },
   },
   async ({
     event,
@@ -51,6 +81,7 @@ export const researchAgent = inngest.createFunction(
       data.seededFeedbackSignal,
     );
     const seededFeedbackAt = normalizeSeededFeedbackAt(data.seededFeedbackAt);
+    const useSandbox = data.useSandbox === true;
     const sessionId =
       event.meta?.sessions?.[researchSessionKey] ?? researchSessionId;
 
@@ -81,6 +112,27 @@ export const researchAgent = inngest.createFunction(
           latencyMs,
         }),
     );
+
+    // The model generated an analysis script for this changelog. With the
+    // sandbox flag on, it executes isolated: real step.sandbox in cloud,
+    // simulated beat on the local dev server.
+    let sandboxSummary: SandboxRunSummary | undefined;
+
+    if (useSandbox) {
+      const sandboxResult = await runSandboxAnalysis({
+        step,
+        researchRunId,
+      });
+
+      sandboxSummary = {
+        mode: sandboxResult.mode,
+        sandboxId: sandboxResult.sandboxId,
+        exitCode: sandboxResult.exitCode,
+        totalLaunches: sandboxResult.analysis.total_launches,
+        competitorCount: sandboxResult.analysis.competitors.length,
+        topThemes: sandboxResult.analysis.top_themes,
+      };
+    }
     const marketSources = await step.run("search-market-sources", () =>
       runResearchCall("search-market-sources", {
         attempt,
@@ -146,6 +198,7 @@ export const researchAgent = inngest.createFunction(
           qualityScore: summary.qualityScore,
           sourceCount: uniqueSources.length,
           failureStep: failureStep ?? "none",
+          sandboxUsed: useSandbox ? sandboxSummary?.mode : "off",
           source: "booth-demo",
         },
         "userland.research",
@@ -195,6 +248,7 @@ export const researchAgent = inngest.createFunction(
     return {
       ...summary,
       parentRunId: isCloud ? runId : undefined,
+      ...(sandboxSummary ? { sandbox: sandboxSummary } : {}),
     };
   },
 );

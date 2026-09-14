@@ -5,8 +5,10 @@ import {
   metadataMiddleware,
   scoreMiddleware,
   extendedTracesMiddleware,
+  sandboxMiddleware,
 } from "inngest/experimental";
 import { isCloud } from "@/lib/demo-target";
+import { stepTrackerMiddleware } from "@/inngest/middlewares/step-tracker";
 import type { DemoFlags } from "@/lib/demo-flags";
 import type { ResearchModel, ResearchStepId } from "@/content/research-demo";
 
@@ -86,6 +88,7 @@ export type ResearchRunRequestedData = {
     | "seeded";
   model: ResearchModel;
   failureStep?: ResearchStepId | "none";
+  useSandbox?: boolean;
   latencyMs?: number;
   seededQualityScore?: number;
   seededFeedbackSignal?: ResearchFeedbackSignal;
@@ -213,6 +216,13 @@ export const inngest = new Inngest({
     extendedTracesMiddleware({ behaviour: "extendProvider" }),
     scoreMiddleware(),
     metadataMiddleware(),
+    // Enables the durable step.sandbox surface (Sandboxes beta). Safe in
+    // both modes: the local (faked) path never calls the Cloud-only
+    // sandbox branches.
+    sandboxMiddleware(),
+    // Records real step executions for the demo's live step timeline.
+    // Purely observational; see src/inngest/middlewares/step-tracker.ts.
+    stepTrackerMiddleware(),
     ...(encryptionKey ? [encryptionMiddleware({ key: encryptionKey })] : []),
   ],
 });

@@ -40,6 +40,7 @@ export async function POST(request: Request) {
   const model = normalizeModel(body.model);
   const failureStep = normalizeFailureStep(body.failureStep);
   const latencyMs = normalizeLatency(body.latencyMs);
+  const useSandbox = body.useSandbox === true;
   const eventId = `research:${researchRunId}`;
   const dashboardUrl = getDeepLink("envDashboard");
   const traceUrl = getDeepLink("runTrace", { runId: researchRunId });
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
     cadence: "manual",
     model,
     failureStep,
+    useSandbox,
     latencyMs,
     requestedAt,
     source: "booth-demo",

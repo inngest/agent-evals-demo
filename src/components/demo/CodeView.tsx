@@ -2,25 +2,30 @@
 
 import * as React from "react";
 import { Code2, Minus, Plus } from "lucide-react";
-import type { HighlightedCodeSnippet } from "@/lib/highlight";
+import type { AnySnippet } from "@/lib/highlight";
+
+type Highlighted<T extends AnySnippet> = T & { html: string };
 
 export function CodeView({
   snippets,
   activeId: controlledId,
   variant = "full",
+  defaultFontSize,
 }: {
-  snippets: HighlightedCodeSnippet[];
-  // Optional: let the shell sync the visible snippet to the current act.
-  activeId?: HighlightedCodeSnippet["id"];
+  snippets: Array<Highlighted<AnySnippet>>;
+  // Optional: let the shell sync the visible snippet to the current act/stage.
+  activeId?: string;
   variant?: "full" | "rail" | "minimal";
+  // Optional: override the starting zoom level (booth legibility).
+  defaultFontSize?: number;
 }) {
-  const [internalId, setInternalId] = React.useState<
-    HighlightedCodeSnippet["id"]
-  >(snippets[0]?.id);
+  const [internalId, setInternalId] = React.useState<string | undefined>(
+    snippets[0]?.id
+  );
   const isControlled = controlledId !== undefined;
   const activeId = controlledId ?? internalId;
   const [codeFontSize, setCodeFontSize] = React.useState(
-    variant === "rail" || variant === "minimal" ? 13 : 15
+    defaultFontSize ?? (variant === "rail" || variant === "minimal" ? 13 : 15)
   );
   const active = snippets.find((snippet) => snippet.id === activeId) ?? snippets[0];
   const canZoomOut = codeFontSize > 12;
