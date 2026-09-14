@@ -25,12 +25,11 @@ type ResearchCallOptions = {
   input?: unknown;
 };
 
-let hasCrashed = false;
-const retryAfterDelay = "16s";
-
-export function resetResearchCrashState(): void {
-  hasCrashed = false;
-}
+// The 503 beat fires exactly once per executor run id. Keying by runId (not a
+// module flag with an attempt-based reset) is stable across the function
+// re-executions Inngest performs to retry the failed step, in both local dev
+// and cloud mode: the same run never re-fails, the next run fails fresh.
+const crashedRuns = new Set<string>();
 
 export async function runResearchCall(
   id: ResearchStepId,
@@ -59,18 +58,27 @@ export async function runResearchCall(
     await new Promise((resolve) => setTimeout(resolve, latency));
   }
 
+  // Fire the beat once per run, regardless of how the executor reports
+  // attempts across step-retry re-invocations.
+  const beatKey = options.runId ?? "anonymous";
+  const fireFailureBeat =
+    options.failStep === id &&
+    options.attempt === 0 &&
+    !crashedRuns.has(beatKey);
+
   if (span) {
-    if (options.failStep === id && options.attempt === 0 && !hasCrashed) {
+    if (fireFailureBeat) {
       span.setAttribute("http.response.status_code", 503);
     }
     await span.end();
   }
 
-  if (options.failStep === id && options.attempt === 0 && !hasCrashed) {
-    hasCrashed = true;
+  if (fireFailureBeat) {
+    if (crashedRuns.size > 500) crashedRuns.clear();
+    crashedRuns.add(beatKey);
     throw new RetryAfterError(
       `${step.source} returned 503 while reading ${step.label}`,
-      retryAfterDelay,
+      "16s",
     );
   }
 

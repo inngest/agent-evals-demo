@@ -22,8 +22,8 @@ import { PrimitivesReference } from "@/components/demo/PrimitivesReference";
 import { StepTimeline } from "@/components/demo/StepTimeline";
 import { Button } from "@/components/ui/button";
 import {
-  buildResearchRunSummary,
   defaultResearchTopic,
+  type ResearchStepId,
   type ResearchRunSummary,
 } from "@/content/research-demo";
 import {
@@ -220,8 +220,13 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
       let completed = false;
       let lastStatusError = "";
 
-      for (let i = 0; i < 20 && !completed; i += 1) {
-        await wait(650);
+      // Cloud runs (real model calls + retry backoff + memoized replays) can
+      // take a minute or more. Poll to a terminal state or a generous
+      // deadline; never fabricate a result on timeout.
+      const pollDeadline = Date.now() + 180_000;
+
+      while (Date.now() < pollDeadline && !completed) {
+        await wait(800);
         const status = await fetchStatus(response).catch((error: unknown) => {
           lastStatusError =
             error instanceof Error ? error.message : "Run status unavailable";
@@ -248,14 +253,11 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
       }
 
       if (!completed) {
-        setResult(
-          buildResearchRunSummary({ researchRunId: response.researchRunId }),
-        );
-        setPhase("complete");
+        setPhase("idle");
         showToast(
           lastStatusError
-            ? "Trace still syncing; research brief is ready"
-            : "Run is still syncing; research brief is ready",
+            ? "Status unavailable; the run is still executing in Inngest"
+            : "Still executing in Inngest; open the trace to watch it finish",
         );
       }
     } catch (error) {

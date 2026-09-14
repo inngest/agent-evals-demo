@@ -8,7 +8,6 @@ import {
   type ResearchRunRequestedData,
 } from "@/inngest/client";
 import {
-  resetResearchCrashState,
   runResearchCall,
   summarizeResearchRun,
 } from "@/lib/mock-research";
@@ -92,10 +91,6 @@ export const researchAgent = inngest.createFunction(
     const useSandbox = data.useSandbox === true;
     const sessionId =
       event.meta?.sessions?.[researchSessionKey] ?? researchSessionId;
-
-    if (attempt === 0) {
-      resetResearchCrashState();
-    }
 
     const researchContext = await step.run("load-research-context", () =>
       runResearchCall("load-research-context", {
