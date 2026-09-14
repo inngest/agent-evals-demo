@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isCloud, DEMO_TARGET } from "@/lib/demo-target";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import { getScoreHistory } from "@/lib/scoring";
 import { checkSandboxAccess } from "@/lib/sandbox";
@@ -8,7 +9,12 @@ import { seededExperiment, seededSessions } from "@/content/seed-data";
 export async function GET() {
   const history = await getScoreHistory();
   const sandbox = await checkSandboxAccess();
+  // The client's actual mode comes from DEMO_TARGET (client.ts: isDev = !isCloud),
+  // not from INNGEST_DEV. Report both so a DEMO_TARGET-less production deploy
+  // (client silently in dev mode) is visible instead of masked as "cloud".
   const isDevMode = process.env.INNGEST_DEV === "1";
+  const clientInDevMode = !isCloud;
+  const modeConflict = isCloud && isDevMode;
   const isProductionRuntime = process.env.NODE_ENV === "production";
   const hasEventKey = Boolean(process.env.INNGEST_EVENT_KEY);
   const hasSigningKey = Boolean(process.env.INNGEST_SIGNING_KEY);
@@ -27,7 +33,13 @@ export async function GET() {
     ok: true,
     runtime: {
       nodeEnv: process.env.NODE_ENV ?? "unknown",
-      inngestMode: isDevMode ? "dev" : "cloud",
+      demoTarget: DEMO_TARGET,
+      // Truthful client mode (DEMO_TARGET-derived). Scripts key off this to
+      // flag dev-mode deployments; the old INNGEST_DEV-only check masked a
+      // DEMO_TARGET-less production deploy as "cloud".
+      inngestMode: clientInDevMode ? "dev" : "cloud",
+      inngestDevEnvVarSet: isDevMode,
+      modeConflict,
       dashboardUrl,
       runsUrl,
     },
