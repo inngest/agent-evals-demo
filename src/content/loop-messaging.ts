@@ -80,6 +80,58 @@ export const loopStages: LoopStage[] = [
   },
 ];
 
+/**
+ * Every user-facing string in the Evaluate stage. Kept here rather than inline
+ * in the component so the vocabulary can be changed in one place - the stage's
+ * naming is expected to change, and a rewrite of LoopDemo.tsx should not be the
+ * cost of that.
+ */
+export const evaluateCopy = {
+  scorecard: {
+    eyebrow: "run scorecard",
+    empty: "Run the agent first, then score it here.",
+    tiles: {
+      quality: "quality",
+      human: "human",
+      outcome: "outcome",
+      variant: "winner",
+    },
+  },
+  scoreNow: {
+    eyebrow: "score it now",
+    detail:
+      "A product signal becomes a durable score on this run, attached by a real step.",
+    attachedTo: "attached to run",
+    pendingStep: "waiting for the scoring run…",
+    localNote: "local mode: scorer ran, attach is cloud-only",
+    cloudNote: "attached via step.score",
+  },
+  scoreLater: {
+    eyebrow: "score it later",
+    detail:
+      "The outcome lands weeks after the run finished. defer() scores the same run whenever it arrives.",
+    shipped: "Recommendation shipped",
+    wrong: "Was wrong",
+    daysLaterSuffix: "days later",
+    viaDefer: "via defer()",
+  },
+  compare: {
+    eyebrow: "compare models",
+    detail:
+      "One click splits real traffic across both models and scores every variant.",
+    run: "Run model bakeoff",
+    running: "Running bakeoff…",
+    progress: (done: number, total: number) => `${done} of ${total} complete`,
+    winner: "winner",
+    runsLabel: "runs",
+    simulated: "simulated — Inngest unreachable",
+  },
+  loopBack: {
+    label: (model: string) => `Run again with ${model}`,
+    hint: "The loop closes: the next run starts from what you just learned.",
+  },
+} as const;
+
 export function getLoopStage(id: LoopStageId): LoopStage {
   return loopStages.find((stage) => stage.id === id) ?? loopStages[0];
 }

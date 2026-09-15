@@ -5,7 +5,10 @@ import {
 } from "@/content/research-demo";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import { isCloud } from "@/lib/demo-target";
-import { getTimelineForDemo } from "@/inngest/middlewares/step-tracker";
+import {
+  getTimelineForDemo,
+  getTimelinesForKey,
+} from "@/inngest/middlewares/step-tracker";
 import {
   buildOfflineTimeline,
   offlineTimelineTotalMs,
@@ -66,10 +69,49 @@ async function buildStatus(params: URLSearchParams) {
   // Real step data captured by stepTrackerMiddleware. When present it is
   // authoritative (honest step names, retries, memoized replays). When absent
   // we fall through to the labeled offline timeline below.
+  // The Evaluate stage asks for the SCORING function's timeline by name, to
+  // show the durable step that attached a score. Defaults to the agent run.
+  const functionName = params.get("functionName") ?? "research-agent";
   const timeline = getTimelineForDemo(
     eventIdParam ?? stored?.inngestEventId,
     researchRunId,
+    functionName,
   );
+
+  // A scoring run has no offline rehearsal equivalent: either the step was
+  // captured or it was not. Report it plainly instead of falling through to
+  // the research-agent fallback below, which would be the wrong shape.
+  if (functionName !== "research-agent") {
+    // One researchRunId maps to SEVERAL scoring runs - the feedback signal and
+    // the deferred outcome both trigger research-agent-score-run. Searching
+    // every run under the key, rather than the newest, is what stops the first
+    // score's step from being masked by the second's run.
+    const scoringRuns = getTimelinesForKey(researchRunId, functionName);
+    const stepName = params.get("stepName") ?? undefined;
+    const matched = stepName
+      ? scoringRuns.find((run) =>
+          run.steps.some(
+            (step) =>
+              step.displayName === stepName && step.status === "completed",
+          ),
+        )
+      : scoringRuns[scoringRuns.length - 1];
+    const resolved = matched ?? timeline ?? null;
+
+    return {
+      ok: true,
+      status: resolved?.status ?? "running",
+      hadRetry: false,
+      completedSteps:
+        resolved?.steps.filter((step) => step.status === "completed").length ??
+        0,
+      totalSteps: resolved?.steps.length ?? 0,
+      runId: resolved?.runId ?? runId,
+      traceUrl: getDeepLink("runTrace", { runId: resolved?.runId ?? runId }),
+      result: null,
+      timeline: resolved,
+    };
+  }
 
   if (timeline) {
     const completedSteps = timeline.steps.filter(

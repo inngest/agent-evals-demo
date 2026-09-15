@@ -18,8 +18,10 @@ import {
 } from "lucide-react";
 import { CodeView } from "@/components/demo/CodeView";
 import { DashboardLink } from "@/components/demo/DashboardLink";
+import { EvaluateScorecard, type ScoreRow } from "@/components/demo/EvaluateScorecard";
 import { PrimitivesReference } from "@/components/demo/PrimitivesReference";
 import { StepTimeline } from "@/components/demo/StepTimeline";
+import { VariantComparison } from "@/components/demo/VariantComparison";
 import { Button } from "@/components/ui/button";
 import {
   BRIEF_STEP_ID,
@@ -29,11 +31,13 @@ import {
 } from "@/content/research-demo";
 import {
   LOOP_TAGLINE,
+  evaluateCopy,
   getLoopStage,
   loopPillars,
   loopStages,
   type LoopStageId,
 } from "@/content/loop-messaging";
+import type { ExperimentAggregate } from "@/lib/experiment-results";
 import type { SandboxRunSummary } from "@/inngest/functions/research-agent";
 import type { RunTimeline } from "@/inngest/middlewares/step-tracker";
 import { getDeepLink } from "@/lib/inngest-dashboard";
@@ -101,6 +105,25 @@ type FeedbackState = {
   feedbackAt: string;
 };
 
+type OutcomeState = {
+  outcome: "shipped" | "wrong";
+  score: number;
+  observedAt: string;
+  daysLater: number;
+};
+
+type ExperimentState = {
+  batchId: string;
+  runCount: number;
+  sent: boolean;
+  experimentUrl: string;
+};
+
+type ExperimentResults = ExperimentAggregate & { simulated?: boolean };
+
+/** A durable step observed on the scoring function's own run. */
+type ScorerStep = { name: string; durationMs?: number };
+
 type SandboxAccess = {
   mode: "sandbox" | "simulated";
   reason: string;
@@ -129,11 +152,19 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
   const [experimentPending, setExperimentPending] = React.useState(false);
   const toastTimer = React.useRef<number | null>(null);
   const [topPaneHeight, setTopPaneHeight] = React.useState(360);
-  const [experiment, setExperiment] = React.useState<{
-    sent: boolean;
-    experimentRunId: string;
-    experimentUrl: string;
-  } | null>(null);
+  const [experiment, setExperiment] = React.useState<ExperimentState | null>(
+    null,
+  );
+  const [experimentResults, setExperimentResults] =
+    React.useState<ExperimentResults | null>(null);
+  const [lastOutcome, setLastOutcome] = React.useState<OutcomeState | null>(
+    null,
+  );
+  const [outcomePending, setOutcomePending] = React.useState(false);
+  const [scorerSteps, setScorerSteps] = React.useState<
+    Record<string, ScorerStep>
+  >({});
+  const [runModel, setRunModel] = React.useState<string>("gpt-5.5");
 
   const isRunning =
     phase === "sending" || phase === "running" || phase === "retrying";
@@ -149,6 +180,13 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
     getDeepLink("experiment", {
       experimentId: "research-agent-model-bakeoff",
     });
+  const scorecardRunId = trigger?.runId ?? trigger?.researchRunId;
+  const scoreRows = buildScoreRows({
+    feedback: lastFeedback,
+    outcome: lastOutcome,
+    runId: scorecardRunId,
+    scorerSteps,
+  });
 
   React.useEffect(() => {
     let cancelled = false;
@@ -217,7 +255,12 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
     resizeFrom(touch.clientY, topPaneHeight);
   }
 
-  async function runResearch() {
+  async function runResearch(model?: string) {
+    // Guard the arg: this is also referenced from click handlers, where React
+    // would otherwise pass the event object through as the model.
+    const nextModel = typeof model === "string" && model.length > 0 ? model : runModel;
+
+    setRunModel(nextModel);
     setActiveStage("run");
     setNotice(null);
     setPhase("sending");
@@ -225,6 +268,9 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
     setResult(null);
     setTimeline(null);
     setLastFeedback(null);
+    setLastOutcome(null);
+    setScorerSteps({});
+    setExperimentResults(null);
     setToast("");
 
     try {
@@ -232,7 +278,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
         topic: defaultResearchTopic,
         failureStep: failureArmed ? "fetch-competitor-changelog" : "none",
         useSandbox: sandboxArmed,
-        model: "gpt-5.5",
+        model: nextModel,
       });
 
       setTrigger(response);
@@ -307,6 +353,24 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
     }
   }
 
+  /**
+   * Polls the SCORING function's own timeline for the step that attached the
+   * score. This is the receipt: the demo claims a durable step ran, so it shows
+   * the step. Gives up quietly - a missing receipt must not break the stage.
+   */
+  async function trackScorerStep(researchRunId: string, stepName: string) {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await wait(800);
+
+      const found = await fetchScorerStep(researchRunId, stepName);
+
+      if (found) {
+        setScorerSteps((current) => ({ ...current, [stepName]: found }));
+        return;
+      }
+    }
+  }
+
   async function sendSignal(signal: ResearchFeedbackSignal) {
     if (signalPending) return;
 
@@ -344,6 +408,13 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
             ? "Positive score captured"
             : "Score captured",
       );
+
+      if (trigger?.researchRunId) {
+        void trackScorerStep(
+          trigger.researchRunId,
+          "attach-research-human-feedback-score",
+        );
+      }
     } catch (error) {
       // The route already swallows Inngest errors and returns 200, so reaching
       // here means the transport itself failed: dev server down, or a
@@ -359,6 +430,50 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
       });
     } finally {
       setSignalPending(false);
+    }
+  }
+
+  async function sendOutcome(outcome: "shipped" | "wrong") {
+    if (outcomePending) return;
+
+    setActiveStage("evaluate");
+    setNotice(null);
+    setOutcomePending(true);
+
+    try {
+      const response = await postJson<{
+        ok: boolean;
+        outcome: "shipped" | "wrong";
+        score: number;
+        observedAt: string;
+        daysLater: number;
+      }>("/api/research/outcome", {
+        researchRunId: trigger?.researchRunId,
+        parentRunId: trigger?.runId,
+        outcome,
+      });
+
+      setLastOutcome({
+        outcome: response.outcome,
+        score: response.score,
+        observedAt: response.observedAt,
+        daysLater: response.daysLater,
+      });
+      showToast(`Outcome recorded ${response.daysLater} days later`);
+
+      if (trigger?.researchRunId) {
+        void trackScorerStep(trigger.researchRunId, "score-research-outcome");
+      }
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? `Could not record the outcome: ${error.message}`
+            : "Could not record the outcome; the app is not reachable",
+      });
+    } finally {
+      setOutcomePending(false);
     }
   }
 
@@ -381,22 +496,52 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
         ]
       : undefined;
     setExperimentPending(true);
+    setExperimentResults(null);
+
+    const runCount = EXPERIMENT_RUN_COUNT;
 
     try {
       const response = await postJson<{
         ok: boolean;
         sent: boolean;
-        experimentRunId: string;
+        batchId: string;
+        runCount: number;
         experimentUrl: string;
       }>("/api/research/experiment", {
         topic: defaultResearchTopic,
         corpusRuns,
+        count: runCount,
       });
 
-      setExperiment(response);
+      setExperiment({
+        batchId: response.batchId,
+        runCount: response.runCount ?? runCount,
+        sent: response.sent,
+        experimentUrl: response.experimentUrl,
+      });
       showToast(
-        response.sent ? "Experiment event sent" : "Experiment queued locally",
+        response.sent
+          ? `Bakeoff started across ${response.runCount ?? runCount} runs`
+          : "Bakeoff queued locally",
       );
+
+      // Poll the aggregate so the comparison fills in live rather than the
+      // driver having to leave the demo to see whether anything happened.
+      const deadline = 40;
+      for (let attempt = 0; attempt < deadline; attempt += 1) {
+        await wait(800);
+
+        const results = await fetchExperimentResults(
+          response.batchId,
+          response.runCount ?? runCount,
+        );
+
+        if (!results) continue;
+
+        setExperimentResults(results);
+
+        if (results.completedRuns >= results.totalRuns) break;
+      }
     } catch (error) {
       setNotice({
         tone: "error",
@@ -410,6 +555,14 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
     }
   }
 
+  function runWithWinner() {
+    const winner = experimentResults?.winner;
+
+    if (!winner) return;
+
+    void runResearch(winner);
+  }
+
   function resetDemo() {
     setActiveStage("run");
     setPhase("idle");
@@ -418,6 +571,9 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
     setTimeline(null);
     setLastFeedback(null);
     setExperiment(null);
+    setExperimentResults(null);
+    setLastOutcome(null);
+    setScorerSteps({});
     setNotice(null);
     setToast("");
   }
@@ -595,7 +751,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
                 timeline={timeline}
                 traceUrl={traceUrl}
                 onFailureArmedChange={setFailureArmed}
-                onRun={runResearch}
+                onRun={() => runResearch()}
                 onSandboxArmedChange={setSandboxArmed}
               />
             ) : null}
@@ -608,13 +764,20 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
             ) : null}
             {activeStage === "evaluate" ? (
               <EvaluateControls
-                brief={brief}
                 experimentPending={experimentPending}
+                experimentResults={experimentResults}
                 experimentUrl={experimentUrl}
+                lastOutcome={lastOutcome}
+                outcomePending={outcomePending}
+                qualityScore={result?.qualityScore ?? null}
+                runId={scorecardRunId}
+                scoreRows={scoreRows}
                 scoresUrl={scoresUrl}
                 selectedSignal={lastFeedback?.signal ?? null}
                 signalPending={signalPending}
                 onRunExperiment={runExperiment}
+                onRunWithWinner={runWithWinner}
+                onOutcome={sendOutcome}
                 onSignal={sendSignal}
               />
             ) : null}
@@ -901,29 +1064,48 @@ function ObserveControls({
 }
 
 function EvaluateControls({
-  brief,
   experimentPending,
+  experimentResults,
   experimentUrl,
+  lastOutcome,
+  outcomePending,
+  qualityScore,
+  runId,
+  scoreRows,
   scoresUrl,
   selectedSignal,
   signalPending,
   onRunExperiment,
+  onRunWithWinner,
+  onOutcome,
   onSignal,
 }: {
-  brief: BriefOutput | null;
   experimentPending: boolean;
+  experimentResults: ExperimentResults | null;
   experimentUrl: string;
+  lastOutcome: OutcomeState | null;
+  outcomePending: boolean;
+  qualityScore: number | null;
+  runId?: string;
+  scoreRows: ScoreRow[];
   scoresUrl: string;
   selectedSignal: ResearchFeedbackSignal | null;
   signalPending: boolean;
   onRunExperiment: () => void;
+  onRunWithWinner: () => void;
+  onOutcome: (outcome: "shipped" | "wrong") => void;
   onSignal: (signal: "useful" | "missed-context" | "saved") => void;
 }) {
   const stage = getLoopStage("evaluate");
+  const copy = evaluateCopy;
   const actionButtonClass =
     "demo-segment-button inline-flex h-8 w-full min-w-0 items-center justify-center gap-1 rounded-none px-1.5 text-[11px] disabled:pointer-events-none disabled:opacity-55";
   const isOtherSignal = (signal: ResearchFeedbackSignal) =>
     (selectedSignal !== null && selectedSignal !== signal) || signalPending;
+  const humanScore =
+    scoreRows.find((row) => row.name === "research_human_feedback")?.value ??
+    null;
+  const winner = experimentResults?.winner ?? null;
 
   return (
     <div className="grid gap-3">
@@ -932,21 +1114,25 @@ function EvaluateControls({
         title={stage.title}
         detail={stage.detail}
       />
+
+      <EvaluateScorecard
+        quality={qualityScore}
+        human={humanScore}
+        outcome={lastOutcome?.score ?? null}
+        winner={winner}
+        runId={runId}
+        rows={scoreRows}
+      />
+
+      {/* Score it now: a product signal becomes a durable score on this run. */}
       <div className="border border-[var(--ink)] bg-white">
-        <div className="px-3 py-2">
+        <div className="px-2.5 py-2">
           <div className="mono text-[10px] uppercase text-[var(--muted-copy)]">
-            research brief
+            {copy.scoreNow.eyebrow}
           </div>
-          {brief ? (
-            <p className="mt-1 max-h-40 overflow-y-auto text-[13px] font-medium leading-5 whitespace-pre-wrap">
-              {brief.text}
-            </p>
-          ) : (
-            <p className="mt-1 text-[13px] font-medium leading-5">
-              Score this run now with product signals, or weeks later when the
-              outcome lands. Same scorers, same run history.
-            </p>
-          )}
+          <p className="mt-1 text-xs leading-5 text-[var(--muted-copy)]">
+            {copy.scoreNow.detail}
+          </p>
         </div>
         <div className="grid grid-cols-4 gap-1.5 border-t border-[var(--rule-soft)] bg-[var(--bone)] p-1.5">
           <Button
@@ -993,6 +1179,56 @@ function EvaluateControls({
           </DashboardLink>
         </div>
       </div>
+
+      {/* Score it later: the same run, scored weeks after it finished. */}
+      <div className="border border-[var(--ink)] bg-white">
+        <div className="flex items-start justify-between gap-2 px-2.5 py-2">
+          <div className="min-w-0">
+            <div className="mono text-[10px] uppercase text-[var(--muted-copy)]">
+              {copy.scoreLater.eyebrow}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-[var(--muted-copy)]">
+              {copy.scoreLater.detail}
+            </p>
+          </div>
+          {lastOutcome ? (
+            <span className="mono shrink-0 text-[10px] uppercase text-[var(--teal)]">
+              +{lastOutcome.daysLater}d
+            </span>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-2 gap-1.5 border-t border-[var(--rule-soft)] bg-[var(--bone)] p-1.5">
+          <Button
+            variant="outline"
+            className={actionButtonClass}
+            onClick={() => onOutcome("shipped")}
+            disabled={outcomePending || lastOutcome?.outcome === "wrong"}
+            data-active={lastOutcome?.outcome === "shipped" ? "true" : undefined}
+          >
+            <Check className="size-4" />
+            <span className="truncate">{copy.scoreLater.shipped}</span>
+          </Button>
+          <Button
+            variant="outline"
+            className={actionButtonClass}
+            onClick={() => onOutcome("wrong")}
+            disabled={outcomePending || lastOutcome?.outcome === "shipped"}
+            data-active={lastOutcome?.outcome === "wrong" ? "true" : undefined}
+          >
+            <TriangleAlert className="size-4" />
+            <span className="truncate">{copy.scoreLater.wrong}</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Compare models: a real traffic split, rendered here not deep-linked. */}
+      {experimentResults ? (
+        <VariantComparison
+          aggregate={experimentResults}
+          pending={experimentPending}
+        />
+      ) : null}
+
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <Button
           variant="outline"
@@ -1002,7 +1238,7 @@ function EvaluateControls({
         >
           <FlaskConical className="size-4" />
           <span className="truncate">
-            {experimentPending ? "Starting bakeoff…" : "Run model bakeoff"}
+            {experimentPending ? copy.compare.running : copy.compare.run}
           </span>
         </Button>
         <DashboardLink
@@ -1013,6 +1249,17 @@ function EvaluateControls({
           <span className="truncate">Experiment</span>
         </DashboardLink>
       </div>
+
+      {winner ? (
+        <Button
+          variant="outline"
+          className="demo-segment-button h-10 w-full min-w-0 rounded-none text-sm"
+          onClick={onRunWithWinner}
+        >
+          <Repeat className="size-4" />
+          <span className="truncate">{copy.loopBack.label(winner)}</span>
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -1070,6 +1317,104 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   }
 
   return json as T;
+}
+
+/** One bakeoff click. Enough runs that both variants appear ~99% of the time. */
+const EXPERIMENT_RUN_COUNT = 8;
+
+async function fetchExperimentResults(
+  batchId: string,
+  count: number,
+): Promise<ExperimentResults | null> {
+  try {
+    const response = await fetch(
+      `/api/research/experiment/status?batchId=${encodeURIComponent(batchId)}&count=${count}`,
+      { cache: "no-store" },
+    );
+
+    if (!response.ok) return null;
+
+    return (await response.json()) as ExperimentResults;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchScorerStep(
+  researchRunId: string,
+  stepName: string,
+): Promise<ScorerStep | null> {
+  try {
+    const params = new URLSearchParams({
+      researchRunId,
+      functionName: "research-agent-score-run",
+      // Names the step we are waiting for: several scoring runs share this
+      // researchRunId, and only one of them holds this step.
+      stepName,
+    });
+    const response = await fetch(`/api/research/status?${params}`, {
+      cache: "no-store",
+    });
+
+    if (!response.ok) return null;
+
+    const body = (await response.json()) as StatusResponse;
+    const step = body.timeline?.steps.find(
+      (step) => step.displayName === stepName && step.status === "completed",
+    );
+
+    if (!step) return null;
+
+    return { name: step.displayName, durationMs: step.durationMs };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Assembles the scorecard's score rows. Both rows deliberately carry the same
+ * run id: that repetition is the deferred-scoring argument made visually.
+ */
+function buildScoreRows({
+  feedback,
+  outcome,
+  runId,
+  scorerSteps,
+}: {
+  feedback: FeedbackState | null;
+  outcome: OutcomeState | null;
+  runId?: string;
+  scorerSteps: Record<string, ScorerStep>;
+}): ScoreRow[] {
+  const rows: ScoreRow[] = [];
+
+  if (feedback) {
+    const step = scorerSteps["attach-research-human-feedback-score"];
+    rows.push({
+      name: "research_human_feedback",
+      value: feedback.score,
+      runId,
+      at: feedback.feedbackAt,
+      note: step
+        ? `step ${step.name}${step.durationMs !== undefined ? ` ${Math.round(step.durationMs)}ms` : ""}`
+        : evaluateCopy.scoreNow.pendingStep,
+    });
+  }
+
+  if (outcome) {
+    const step = scorerSteps["score-research-outcome"];
+    rows.push({
+      name: "research_deferred_outcome",
+      value: outcome.score,
+      runId,
+      at: outcome.observedAt,
+      note: `${outcome.daysLater} ${evaluateCopy.scoreLater.daysLaterSuffix} · ${
+        step ? `step ${step.name}` : evaluateCopy.scoreLater.viaDefer
+      }`,
+    });
+  }
+
+  return rows;
 }
 
 async function fetchStatus(
