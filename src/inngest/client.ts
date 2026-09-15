@@ -135,12 +135,34 @@ export type ResearchExperimentCorpusRun = {
   scoredAt?: string;
 };
 
+// ── 8b. delayed real-world outcome → deferred scorer attaches it later ────
+/**
+ * The outcome of a research brief as observed well after the run finished:
+ * did the recommendation actually ship, or turn out wrong? This is the event
+ * behind the "score it weeks later" beat. `daysLater` is narrative - it is how
+ * far in the future the demo claims the observation landed - while
+ * `observedAt` is the timestamp rendered next to the score.
+ */
+export type ResearchOutcomeRecordedData = {
+  researchRunId: string;
+  parentRunId?: string;
+  sessionId: string;
+  outcome: ResearchOutcome;
+  daysLater: number;
+  observedAt: string;
+  source: "booth-demo";
+};
+
+export type ResearchOutcome = "shipped" | "wrong";
+
 // ── 9. Act 3 model bakeoff → group.experiment over historic research runs ─
 export type ResearchExperimentRequestedData = {
   experimentRunId: string;
   topic: string;
   corpusRunIds: string[];
   corpusRuns?: ResearchExperimentCorpusRun[];
+  /** Groups the runs of one bakeoff click so results can be aggregated. */
+  batchId?: string;
   requestedAt: string;
   source: "booth-demo";
 };
@@ -155,6 +177,12 @@ export const researchFeedbackRecorded = eventType(
   "research/feedback.recorded",
   {
     schema: staticSchema<ResearchFeedbackRecordedData>(),
+  },
+);
+export const researchOutcomeRecorded = eventType(
+  "research/outcome.recorded",
+  {
+    schema: staticSchema<ResearchOutcomeRecordedData>(),
   },
 );
 export const researchExperimentRequested = eventType(

@@ -201,6 +201,43 @@ function indexRun(run: TrackedRun, keys: Array<string | undefined>) {
  * deployed instance is the visible symptom of a restart having wiped the store,
  * which is why it is worth reporting rather than inferring.
  */
+/**
+ * Every tracked run indexed under `key`, oldest first, optionally narrowed to
+ * one function. Unlike getTimelineForDemo (which returns the single newest
+ * match) this is for fan-outs, where one key intentionally maps to many runs.
+ */
+export function getTimelinesForKey(
+  key: string | undefined,
+  functionName?: string,
+): RunTimeline[] {
+  if (!key) return [];
+
+  const runIds = keyIndex.get(key);
+
+  if (!runIds) return [];
+
+  const found: RunTimeline[] = [];
+
+  for (const runId of runIds) {
+    const run = timelines.get(runId);
+
+    if (!run) continue;
+    if (functionName && run.functionName !== functionName) continue;
+
+    found.push({
+      runId: run.runId,
+      eventId: run.eventId,
+      functionName: run.functionName,
+      status: run.status,
+      startedAt: run.startedAt,
+      durationMs: run.durationMs,
+      steps: run.steps,
+    });
+  }
+
+  return found;
+}
+
 export function getTimelineStoreStats(): {
   trackedRuns: number;
   indexedKeys: number;
@@ -237,9 +274,17 @@ function trackedRun(
   },
   fn: { id(prefix?: string): string },
 ): TrackedRun {
+  const data = ctx.event?.data;
   const correlationId =
-    typeof ctx.event?.data?.researchRunId === "string"
-      ? (ctx.event.data.researchRunId as string)
+    typeof data?.researchRunId === "string"
+      ? (data.researchRunId as string)
+      : undefined;
+  // The experiment fan-out sends N events sharing one batchId. Indexing it
+  // lets the results endpoint collect every variant run from a single click.
+  const batchId = typeof data?.batchId === "string" ? data.batchId : undefined;
+  const experimentRunId =
+    typeof data?.experimentRunId === "string"
+      ? (data.experimentRunId as string)
       : undefined;
 
   const existing = timelines.get(ctx.runId);
@@ -260,7 +305,7 @@ function trackedRun(
   };
 
   timelines.set(run.runId, run);
-  indexRun(run, [run.eventId, correlationId]);
+  indexRun(run, [run.eventId, correlationId, batchId, experimentRunId]);
   prune();
 
   return run;
