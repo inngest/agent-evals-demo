@@ -13,8 +13,21 @@ import {
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import { researchSessionMeta } from "@/lib/research-session-meta";
 
+/**
+ * Default fan-out for one bakeoff click. group.experiment selects a variant per
+ * run, so a single run demonstrates nothing: a traffic split needs several.
+ * Eight keeps both variants present with ~99% probability at a 50/50 weight.
+ */
+const DEFAULT_RUN_COUNT = 8;
+const MAX_RUN_COUNT = 24;
+
 export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
+  const runCount = normalizeCount(body.count);
+  const batchId =
+    typeof body.batchId === "string" && body.batchId.length > 0
+      ? body.batchId
+      : crypto.randomUUID();
   const experimentRunId =
     typeof body.experimentRunId === "string" && body.experimentRunId.length > 0
       ? body.experimentRunId
@@ -34,31 +47,40 @@ export async function POST(request: Request) {
       : corpusRuns.map((run) => run.researchRunId);
   const sessionId = corpusRuns[0]?.sessionId ?? researchSessionId;
 
+  const topic =
+    typeof body.topic === "string" && body.topic.length > 0
+      ? body.topic
+      : defaultResearchTopic;
+
+  // One array send rather than N calls: an unreachable Inngest then fails once,
+  // cleanly, instead of leaving a partial fan-out half-queued.
+  const events = Array.from({ length: runCount }, (_, index) =>
+    researchExperimentRequested.create(
+      {
+        experimentRunId: `${experimentRunId}-${index}`,
+        topic,
+        corpusRunIds,
+        corpusRuns,
+        batchId,
+        requestedAt,
+        source: "booth-demo",
+      },
+      {
+        id: `research-experiment:${batchId}:${index}`,
+        meta: researchSessionMeta(sessionId),
+      }
+    )
+  );
+
   try {
-    const result = await inngest.send(
-      researchExperimentRequested.create(
-        {
-          experimentRunId,
-          topic:
-            typeof body.topic === "string" && body.topic.length > 0
-              ? body.topic
-              : defaultResearchTopic,
-          corpusRunIds,
-          corpusRuns,
-          requestedAt,
-          source: "booth-demo",
-        },
-        {
-          id: `research-experiment:${experimentRunId}`,
-          meta: researchSessionMeta(sessionId),
-        }
-      )
-    );
+    const result = await inngest.send(events);
 
     return NextResponse.json({
       ok: true,
       sent: true,
+      batchId,
       experimentRunId,
+      runCount,
       eventIds: (result as { ids?: string[] } | undefined)?.ids ?? [],
       experimentUrl: getDeepLink("experiment", {
         experimentId: "research-agent-model-bakeoff",
@@ -69,7 +91,9 @@ export async function POST(request: Request) {
       {
         ok: true,
         sent: false,
+        batchId,
         experimentRunId,
+        runCount,
         experimentUrl: getDeepLink("experiment", {
           experimentId: "research-agent-model-bakeoff",
         }),
@@ -79,6 +103,14 @@ export async function POST(request: Request) {
       { status: 202 }
     );
   }
+}
+
+function normalizeCount(value: unknown): number {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_RUN_COUNT;
+
+  return Math.min(MAX_RUN_COUNT, Math.round(parsed));
 }
 
 function normalizeCorpusRunIds(value: unknown): string[] {

@@ -1,6 +1,6 @@
 # Booth QA Checklist
 
-Use this checklist for DEV-425 sign-off. The goal is to prove the split-screen
+Use this checklist for booth sign-off. The goal is to prove the split-screen
 demo works on the actual presentation setups, not only in a local browser.
 
 ## Event Constraint
@@ -8,6 +8,23 @@ demo works on the actual presentation setups, not only in a local browser.
 The live booth is `U-G26` and opens Monday, June 29, 2026 at 4 PM. Complete
 Cloud readiness, hardware display QA, and driver sign-off before that first
 booth shift.
+
+## A/B Test Stage Sign-off
+
+Run once per display before the shift. Each line has an observable result.
+
+- [ ] `Good` adds a `research_human_feedback` row showing the run id, then a
+      `step attach-research-human-feedback-score` receipt within ~10s.
+- [ ] `Recommendation shipped` adds a `research_deferred_outcome` row with a
+      `+21d` badge and **the same run id as the first row**. If the ids differ,
+      stop: the deferred-scoring beat is the one claim that must be exact.
+- [ ] `Run model A/B test` reaches `8 of 8 complete`, lists both variants with
+      non-zero runs, and badges a winner.
+- [ ] Quality bars are distinguishable from ~2m away.
+- [ ] `Run again with <winner>` returns to the Run stage and starts a new run.
+- [ ] The code pane follows each click: `Good` shows step.score, `shipped`
+      shows defer(), `bakeoff` shows group.experiment.
+- [ ] No `SIMULATED` banner anywhere while Inngest is reachable.
 
 ## Required Setups
 
@@ -51,14 +68,13 @@ scaling, mirrored/projector behavior, and right-side Inngest Cloud dashboard.
    ```
 
    Run from a shell that also has `INNGEST_API_KEY` and
-   `INNGEST_INSIGHTS_SCORE_QUERY` exported.
+   Cloud keys exported.
 
    Run the individual checks only while debugging:
 
    ```bash
    DEMO_BASE_URL=<demo-url> npm run demo:preflight
-   DEMO_BASE_URL=<demo-url> npm run demo:smoke
-   DEMO_BASE_URL=<demo-url> npm run demo:viewport
+   DEMO_BASE_URL=<demo-url> npm run demo:smoke-loop
    ```
 
    The viewport QA script captures screenshots and a JSON report under
@@ -67,7 +83,6 @@ scaling, mirrored/projector behavior, and right-side Inngest Cloud dashboard.
 4. Seed history:
 
    ```bash
-   DEMO_BASE_URL=<demo-url> DEMO_SEED_TOKEN=<token> npm run demo:seed
    ```
 
 5. Open Inngest Runs filtered to the demo app/environment.
@@ -78,7 +93,7 @@ scaling, mirrored/projector behavior, and right-side Inngest Cloud dashboard.
 Pass means there is no awkward clipping, overlap, hidden primary action, or
 horizontal page scroll.
 
-- Header shows `Agent Evals Booth Demo`, status, `Inngest`, and
+- Header shows `Inngest Booth Demo`, status, `Inngest`, and
   `Demo Controls`.
 - `Ask agent`, `Run again`, and `Use sample query` fit in the agent card.
 - `Run query` and `Save` remain visible above the SQL editor.
@@ -100,7 +115,7 @@ horizontal page scroll.
 - Filters are set to the correct app/environment.
 - Opening a run shows step-level detail for `generate-sql` and `run-query`.
 - Retry demo shows the failure and recovery clearly enough to narrate.
-- Score/eval event or Insights view is ready before the live walkthrough.
+- Metric event or Insights view is ready before the live walkthrough.
 
 ## Walkthrough Checks
 
@@ -109,7 +124,7 @@ Run both scripts from `docs/demo-talk-track.md`:
 - 90-second loop completes without improvising missing screens.
 - 2-3 minute walkthrough completes without resetting or changing windows.
 - `Opus offline` retry path is visible and recovers.
-- Save produces a score/eval signal.
+- Save produces a metric signal.
 - Reset clears local demo score state during rehearsal.
 - The right-side Inngest view is used for trace/history/scoring context.
 
@@ -119,7 +134,7 @@ Before a driver is cleared for booth duty:
 
 - Driver starts with "What are you using today to know if your agents are
   actually working in production?"
-- Driver can route an evals-savvy visitor to Scores/Insights quickly.
+- Driver can route an evaluation-savvy visitor to Scores/Insights quickly.
 - Driver can route a durability question to the retry recovery path.
 - Driver can route an observability question to Inngest Runs and Trace.
 - Driver can explain local seeded fallback versus Insights-backed history.

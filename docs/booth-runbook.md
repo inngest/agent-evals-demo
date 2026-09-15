@@ -1,4 +1,4 @@
-# AIEWF Booth Demo Runbook
+# Booth Demo Runbook
 
 For the driver script and stakeholder dry-run criteria, use
 `docs/demo-talk-track.md`.
@@ -9,33 +9,42 @@ For display sign-off, use `docs/booth-qa-checklist.md`. For fallback video
 capture, use `docs/contingency-recording.md`.
 
 For the strict requirement-by-requirement status, use
-`docs/demo-readiness-audit.md`.
+`docs/booth-qa-checklist.md`.
 
-For the production Cloud handoff, use `docs/cloud-auth-request.md` first, then
-`docs/cloud-handoff.md`.
 
 ## Event Context
 
-- Event: AI Engineer World's Fair 2026.
-- Booth: `U-G26`.
-- Booth opens: Monday, June 29, 2026 at 4 PM.
-- June 29 is also the evals soft-launch booth day in Slack planning, so the
-  demo should be ready before that first shift rather than during the week.
-- Core booth story: one encompassing Insights-agent demo covering durability,
-  observability, and optimization.
+- Event: [EVENT NAME], [DATES].
+- Booth: [BOOTH #].
+- Core booth story: Unbreakable agents, invisible infra. One loop demo
+  (Run / Observe / A/B Test) at `/` covering durability, observability,
+  A/B testing, and Sandboxes (beta).
+- Booth surfaces: `/` is the loop demo. Legacy demos remain at `/research`
+
+## Sandbox Beta Notes
+
+- Sandboxes require `inngest >= 4.20.0` (pinned in `package.json`) and are
+  cloud-only, access-gated.
+- The demo probes entitlement at `/api/demo/status` under `sandbox.mode`:
+  - `sandbox`: cloud mode with the beta enabled for the environment. Real
+    durable sandbox steps run (`create-analysis-sandbox`,
+    `run-generated-analysis`, `destroy-analysis-sandbox`).
+  - `simulated`: local dev server or beta unavailable. The beat runs as a
+    labeled simulated step so the trace story stays intact.
+- If cloud returns 403 `access_denied`, ask the Inngest team to enable the
+  beta for the demo environment before the event.
+- The agent's `onFailure` handler destroys leaked sandboxes by name.
 
 ## Preflight
 
 Run these before a dry run or booth shift:
 
 ```bash
-npm run demo:doctor
 npm run lint
 npm run build
 npm run demo:preflight
-npm run demo:smoke
-npm run demo:viewport
-npm run demo:cloud-handoff
+npm run demo:smoke-loop
+npm run demo:cloud-ready
 ```
 
 Open the demo app and Inngest dashboard side by side. The left side is the
@@ -60,7 +69,6 @@ runs at `http://localhost:8288`.
 If a browser tab is on the wrong port, let the repo find the live app:
 
 ```bash
-npm run demo:doctor
 ```
 
 Check the local app surface:
@@ -69,11 +77,17 @@ Check the local app surface:
 DEMO_BASE_URL=http://localhost:3001 npm run demo:local-ready
 ```
 
-`demo:local-ready` runs lint, build, preflight, smoke, a small seeded smoke
-pass, and viewport QA. The smoke checks verify the foreground golden path and,
-on localhost, confirm the reset endpoint clears local score state for
-back-to-back rehearsals. Use the individual scripts only when debugging a
-failed step.
+`demo:local-ready` runs lint, build, preflight, smoke, loop smoke, a small
+seeded smoke pass, and viewport QA. Use the individual scripts only when
+debugging a failed step.
+
+**`demo:smoke-loop` is the gate that tests the demo you are actually giving.**
+It fails if the run fell back to the simulated timeline, if no memoized replay
+happened, or if the synthesis step's output does not parse - that last check is
+what catches the research output card silently disappearing.
+
+`demo:preflight` is the configuration check: app up, Inngest serve endpoint
+answering, keys and mode correct. It deliberately does not run the demo.
 
 For a quick JSON view of the same non-secret readiness state:
 
@@ -83,9 +97,8 @@ curl http://localhost:3001/api/demo/status
 
 ## Cloud Setup
 
-Use `docs/cloud-auth-request.md` for the human credential ask, then
-`docs/cloud-handoff.md` for the detailed env/deploy/sync flow and the
-`npm run demo:cloud-handoff` checker.
+Use `npm run demo:cloud-ready` to confirm the deployed serve endpoint is
+synced, then `npm run demo:preflight` against the deployed URL.
 
 Set these Vercel production environment variables before deploying:
 
@@ -95,8 +108,6 @@ INNGEST_SIGNING_KEY
 INNGEST_ENCRYPTION_KEY
 INNGEST_ENV
 INNGEST_API_KEY
-INNGEST_INSIGHTS_SCORE_QUERY
-DEMO_SEED_TOKEN
 NEXT_PUBLIC_INNGEST_DASHBOARD_URL
 NEXT_PUBLIC_INNGEST_RUNS_URL
 ```
@@ -106,12 +117,8 @@ Notes:
 - Leave `INNGEST_DEV` unset in production.
 - `INNGEST_ENV` is optional when using the default production environment.
 - `INNGEST_INSIGHTS_SCORE_QUERY` should return rows with `runId`, `signal`,
-  `score`, and `scoredAt`. See `docs/insights-score-query.md`.
 - Add `INNGEST_INSIGHTS_SCORE_QUERY` after Cloud score events exist and the
   query has been generated and validated.
-- `DEMO_SEED_TOKEN` protects the production seed and reset endpoints. Do not
-  commit it. Local dev ignores the token so copied Cloud env vars do not break
-  the in-app seed/reset controls during rehearsal.
 - `NEXT_PUBLIC_INNGEST_RUNS_URL` is optional but recommended. Set it to the
   filtered Inngest Runs URL for the conference app/environment so the app's
   `Inngest`, `Open Inngest`, and `View trace` links go directly to the right
@@ -132,18 +139,11 @@ npm run demo:cloud-ready
 ```
 
 `demo:cloud-ready` first runs deploy-phase handoff checks, then syncs the
-deployed `/api/inngest` endpoint. It optionally seeds Cloud history when
-`DEMO_CLOUD_READY_SEED=1`, validates the Insights score query, then runs the
-final Cloud handoff, preflight, smoke, and viewport QA. It fails if score
-history is still using seeded/local fallback data instead of
-`INNGEST_INSIGHTS_SCORE_QUERY`. Use `docs/insights-score-query.md` to generate
-and validate that query.
+deployed `/api/inngest` endpoint.
 
-The smoke command checks the foreground golden path: trigger agent, run query,
-save query, score, and local reset. It only seeds history when
-`DEMO_SMOKE_SEED=1` is set.
-The viewport command captures browser screenshots and checks for missing core
-controls or page-level horizontal overflow across booth-style split panes.
+`demo:smoke-loop` runs a real agent against the deployed URL and asserts on the
+captured timeline, so it is the check that proves the demo works rather than
+merely that the app booted.
 
 To sync the deployed serve endpoint manually before a seed-only dry run:
 
@@ -152,46 +152,6 @@ npx inngest-cli@latest api --prod sync-app \
   --app-id <cloud-app-id> \
   --url https://<vercel-domain>/api/inngest
 ```
-
-## Seed Cloud History
-
-Seed the deployed app before dry runs and booth shifts:
-
-```bash
-DEMO_BASE_URL=https://<vercel-domain> \
-DEMO_SEED_TOKEN=<token> \
-npm run demo:seed
-```
-
-For deployed URLs, `demo:seed` fails before sending anything unless the URL is
-HTTPS and `DEMO_SEED_TOKEN` is present.
-
-Optional:
-
-```bash
-DEMO_SEED_COUNT=24 npm run demo:seed
-```
-
-Before seeding manually, make sure the deployed `/api/inngest` endpoint has
-been synced in Cloud; `demo:cloud-ready` does this automatically before its
-optional seed step.
-
-The seed route sends `app/query.requested` events plus `app/query.saved`
-signals. The durable `score-query-signal` function emits the downstream
-`app/query.scored` events that power the Scores/Insights story. The local UI
-button is intentionally convenient for dev-server rehearsals; production
-seeding should use the tokenized command.
-
-`npm run demo:seed` should print the number of demo runs, happy-path runs,
-retry-demo runs, saved score signals, discarded score signals, total events
-sent, dashboard URL, serve endpoint, and the exact preflight/smoke commands to
-run next. Treat malformed output, zero score signals, missing retry-demo runs,
-or missing saved/discarded signal variety as a failed seed, not as a partial
-success.
-
-After a fresh Cloud seed, allow the durable score runs a few seconds to emit
-`app/query.scored`. `DEMO_CLOUD_READY_SEED=1 npm run demo:cloud-ready` retries
-the Insights check automatically.
 
 ## Research Score Heartbeat
 
@@ -202,11 +162,10 @@ needs the invoked agent run ID.
 
 ## Seed Research Agent Load
 
-Use this when the Inngest dashboard needs a large history of the current
-research-agent demo across all acts:
+Use this when the Inngest dashboard needs a large history of the research
+agent demo (this is the loop demo's agent):
 
 ```bash
-npm run demo:seed-research-load -- --count 250 --experiments 200
 ```
 
 The command loads `.env.local`, sends directly to the Inngest Cloud Event API,
@@ -216,7 +175,7 @@ and emits:
 - seeded feedback instructions that the agent turns into
   `research/feedback.recorded` events after it knows the real Cloud run ID, so
   Act 2 positive/negative scores attach to the durable run.
-- `research/experiment.requested` events for Act 3 model bakeoff data. Each
+- `research/experiment.requested` events for Act 3 model A/B test data. Each
   experiment event carries a `corpusRuns` window with the Act 2 feedback signal
   and score from the same seeded batch, so the experiment output can point back
   to scored research-agent runs.
@@ -224,13 +183,11 @@ and emits:
 Preview the exact pattern without sending anything:
 
 ```bash
-npm run demo:seed-research-load -- --dry-run --count 40 --experiments 20
 ```
 
 Useful knobs:
 
 ```bash
-npm run demo:seed-research-load -- \
   --count 500 \
   --experiments 500 \
   --failure-rate 0.12 \
@@ -244,29 +201,31 @@ durable retry attempt and a short retry delay.
 
 ## Walkthrough
 
-1. Click `Seed 14 runs` locally, or run the Cloud seed command above.
+1. Seed research history locally or with the Cloud command above.
 2. Open Inngest Runs on the right side.
-3. In the demo app, click `Ask agent`.
-4. Point at the generated SQL and result rows.
-5. Open the corresponding Inngest run/trace on the right.
-6. Click `Save`.
-7. Open `Scores` in the demo app and show the saved behavior signal.
-8. In Inngest, show the seeded run history and score-signal events.
+3. In the loop demo at `/`, stay on the Run stage with both toggles armed.
+4. Click `Run research agent`.
+5. Narrate the 503 retry, then the sandbox result card.
+6. Open the corresponding Inngest run/trace on the right; show the retried
+   boundary and the sandbox steps.
+7. Observe stage: open the trace link, then `Open Insights`.
+8. A/B Test stage: click `Good`, open `Scores`; run the model A/B test and
+   open the Experiment view.
 
 Start each live conversation with:
 
-> What are you using today to know if your agents are actually working in
-> production?
+> How are you keeping your agents reliable today, while the models and
+> prompts keep changing underneath them?
 
-Use the answer to route the demo: eval-savvy visitors see Scores and Insights
-history sooner; durability questions get the `Opus offline` retry path;
-observability questions spend more time in Inngest Runs and Trace.
+Use the answer to route the demo: reliability pain stays in Run;
+observability questions get the trace and Insights; evaluation-savvy visitors go
+straight to A/B Test.
 
-If the visitor is qualified or explicitly comparing eval/observability options,
-end with the Patrick handoff from `docs/demo-talk-track.md` instead of adding
-more screens. Use the event page calendar for the handoff:
-`https://www.inngest.com/events/ai-engineer-worlds-fair-2026`. The goal is a
-useful follow-up, not a longer booth monologue.
+If the visitor is qualified or explicitly comparing evaluation/observability
+options, end with the Patrick handoff from `docs/demo-talk-track.md` instead
+of adding more screens. Use the event page calendar for the handoff:
+[EVENT PAGE URL]. The goal is a useful follow-up, not a longer booth
+monologue.
 
 ## Booth QA
 
@@ -292,8 +251,9 @@ MAR-166.
 
 - If the app works but Inngest has no new runs, check the deployment env vars
   and re-sync `/api/inngest`.
-- If production seeding returns 401/403, confirm `DEMO_SEED_TOKEN` is set in
-  Vercel and in the local shell running `npm run demo:seed`.
+- If the cloud sandbox beat fails (403 `access_denied`, capacity), check
+  `/api/demo/status` `sandbox.mode`. The demo falls back to the labeled
+  simulated beat; narrate the beta caveat and keep the walkthrough moving.
 - If production reset returns 401/403 from a browser interaction, that is
   expected. Use the local controls to reset the presenter state; server-side
   demo history reset is intentionally protected in production.

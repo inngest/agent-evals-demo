@@ -1,4 +1,8 @@
-import { researchSteps, researchSessionId } from "@/content/research-demo";
+import {
+  BRIEF_STEP_ID,
+  researchSteps,
+  researchSessionId,
+} from "@/content/research-demo";
 import {
   inngest,
   researchFeedbackRecorded,
@@ -8,18 +12,35 @@ import {
   type ResearchRunRequestedData,
 } from "@/inngest/client";
 import {
-  resetResearchCrashState,
   runResearchCall,
   summarizeResearchRun,
 } from "@/lib/mock-research";
+import {
+  destroySandboxesNamed,
+  runSandboxAnalysis,
+  sandboxNameForRun,
+  type SandboxRunMode,
+} from "@/lib/sandbox";
 import { isCloud } from "@/lib/demo-target";
+import { SANDBOX_ENABLED } from "@/lib/feature-flags";
+import { isOpenRouterConfigured, OPENROUTER_MODEL } from "@/lib/openrouter";
 import {
   researchSessionKey,
   researchSessionMeta,
 } from "@/lib/research-session-meta";
 
+export type SandboxRunSummary = {
+  mode: SandboxRunMode;
+  sandboxId: string;
+  exitCode: number;
+  totalLaunches: number;
+  competitorCount: number;
+  topThemes: string[];
+};
+
 export type ResearchAgentResult = ReturnType<typeof summarizeResearchRun> & {
   parentRunId?: string;
+  sandbox?: SandboxRunSummary;
 };
 
 export const researchAgent = inngest.createFunction(
@@ -28,6 +49,20 @@ export const researchAgent = inngest.createFunction(
     name: "Research agent",
     retries: 4,
     triggers: [researchRunRequested],
+    // If the run dies with a sandbox in flight, destroy it by name.
+    onFailure: async ({ event, step }) => {
+      const data = event.data as Partial<ResearchRunRequestedData>;
+
+      if (!data.useSandbox) return;
+
+      await step.run("cleanup-analysis-sandbox", async () => {
+        const destroyed = await destroySandboxesNamed(
+          sandboxNameForRun(data.researchRunId ?? "unknown"),
+        );
+
+        return { destroyed };
+      });
+    },
   },
   async ({
     event,
@@ -38,7 +73,14 @@ export const researchAgent = inngest.createFunction(
     const data = event.data as Partial<ResearchRunRequestedData>;
     const researchRunId =
       data.researchRunId ?? `scheduled-research-${new Date().toISOString()}`;
-    const model = data.model ?? "gpt-5.5";
+    const topic = data.topic ?? "Competitive research brief";
+    // With OpenRouter configured, the real model id is the honest narrative:
+    // it is what actually executes the LLM steps (visible in step inputs,
+    // the completed event, and the run summary). The payload's model only
+    // drives the mock-mode story.
+    const model = isOpenRouterConfigured()
+      ? OPENROUTER_MODEL
+      : (data.model ?? "gpt-5.5");
     const failureStep =
       data.failureStep === "none"
         ? undefined
@@ -51,18 +93,17 @@ export const researchAgent = inngest.createFunction(
       data.seededFeedbackSignal,
     );
     const seededFeedbackAt = normalizeSeededFeedbackAt(data.seededFeedbackAt);
+    const useSandbox = data.useSandbox === true;
     const sessionId =
       event.meta?.sessions?.[researchSessionKey] ?? researchSessionId;
-
-    if (attempt === 0) {
-      resetResearchCrashState();
-    }
 
     const researchContext = await step.run("load-research-context", () =>
       runResearchCall("load-research-context", {
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: { topic, model },
       }),
     );
     const llmPlan = await step.run("call-llm-plan-research", () =>
@@ -70,6 +111,8 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs: 400,
+        runId,
+        input: { topic, model },
       }),
     );
     const competitorChangelog = await step.run(
@@ -79,20 +122,51 @@ export const researchAgent = inngest.createFunction(
           attempt,
           failStep: failureStep,
           latencyMs,
+          runId,
+          input: { topic, source: "public changelog APIs" },
         }),
     );
+
+    // The model generated an analysis script for this changelog. With the
+    // sandbox flag on, it executes isolated: real step.sandbox in cloud,
+    // simulated beat on the local dev server.
+    let sandboxSummary: SandboxRunSummary | undefined;
+
+    if (useSandbox && SANDBOX_ENABLED) {
+      const sandboxResult = await runSandboxAnalysis({
+        step,
+        researchRunId,
+      });
+
+      sandboxSummary = {
+        mode: sandboxResult.mode,
+        sandboxId: sandboxResult.sandboxId,
+        exitCode: sandboxResult.exitCode,
+        totalLaunches: sandboxResult.analysis.total_launches,
+        competitorCount: sandboxResult.analysis.competitors.length,
+        topThemes: sandboxResult.analysis.top_themes,
+      };
+    }
     const marketSources = await step.run("search-market-sources", () =>
       runResearchCall("search-market-sources", {
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: { topic, sources: ["Parallel", "G2", "GitHub"] },
       }),
     );
-    const brief = await step.run("call-llm-synthesize-brief", () =>
-      runResearchCall("call-llm-synthesize-brief", {
+    const brief = await step.run(BRIEF_STEP_ID, () =>
+      runResearchCall(BRIEF_STEP_ID, {
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: {
+          topic,
+          model,
+          evidence: [competitorChangelog.label, marketSources.label],
+        },
       }),
     );
     const scoredBrief = await step.run("score-research-quality", () =>
@@ -100,6 +174,8 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: { model, rubric: ["coverage", "citations", "specificity"] },
       }),
     );
     const published = await step.run("publish-brief", () =>
@@ -107,6 +183,8 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: { destination: "competitive intelligence workspace" },
       }),
     );
     const notified = await step.run("notify-stakeholders", () =>
@@ -114,6 +192,8 @@ export const researchAgent = inngest.createFunction(
         attempt,
         failStep: failureStep,
         latencyMs,
+        runId,
+        input: { channels: ["product", "sales", "DevRel"] },
       }),
     );
 
@@ -146,6 +226,7 @@ export const researchAgent = inngest.createFunction(
           qualityScore: summary.qualityScore,
           sourceCount: uniqueSources.length,
           failureStep: failureStep ?? "none",
+          sandboxUsed: useSandbox ? sandboxSummary?.mode : "off",
           source: "booth-demo",
         },
         "userland.research",
@@ -153,7 +234,7 @@ export const researchAgent = inngest.createFunction(
     }
 
     // Act 2's addition in the code view: this event is the durable boundary
-    // that lets the scoring/session function attach eval data to this run.
+    // that lets the scoring/session function attach metrics to this run.
     await step.sendEvent(
       "emit-research-run-completed",
       researchRunCompleted.create(
@@ -195,6 +276,7 @@ export const researchAgent = inngest.createFunction(
     return {
       ...summary,
       parentRunId: isCloud ? runId : undefined,
+      ...(sandboxSummary ? { sandbox: sandboxSummary } : {}),
     };
   },
 );

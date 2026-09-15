@@ -1,18 +1,44 @@
-# Agent Evals Booth Demo
+# Inngest Booth Demo — Unbreakable agents, invisible infra.
 
-This demo follows `PRD.md`: a Next.js App Router app with a real Inngest v4 workflow and mocked LLM, query, and scoring surfaces.
+This repo holds the booth demo for [EVENT NAME] ([DATES], booth [BOOTH #]).
+The story is a loop: **Run -> Observe -> A/B Test**.
 
-For dry-run and booth ops, use `docs/booth-runbook.md`. For the Lauren/Riley
-stakeholder walkthrough and booth driver script, use `docs/demo-talk-track.md`.
-For the experimental split-screen booth-control pivot, use
-`docs/split-screen-control-panel-prd.md`.
-For the printable booth driver card, use `docs/driver-card.md`.
-For display sign-off and fallback capture, use
-`docs/booth-qa-checklist.md` and `docs/contingency-recording.md`. For the
-strict requirement-by-requirement status, use `docs/demo-readiness-audit.md`.
-For the production Cloud handoff, use `docs/cloud-auth-request.md` and
-`docs/cloud-handoff.md`. For the publish/review handoff, use
-`docs/review-handoff.md`.
+`/` is the only demo surface: a real Inngest v4 research agent with durable
+steps, retry and replay, live traces, and per-stage code snippets. The earlier
+incident-triage and three-act surfaces were retired; they are in git history if
+they are ever needed again.
+
+The research corpus is mocked, and the model is mocked unless OpenRouter is
+configured. The live pieces are the Inngest function, its captured step
+timeline, and (in cloud mode) the real score, experiment and defer primitives.
+
+## Sandboxes (beta) are off by default
+
+Set `NEXT_PUBLIC_DEMO_SANDBOX=1` to enable them. The beta is access-gated per
+Inngest environment, so with the flag off the feature is absent entirely: no
+toggle, no pillar, no `step.sandbox` in the code pane, and no sandbox beat in
+the run. `/api/demo/status` reports `sandboxEnabled` separately from the
+entitlement probe, so "turned off" and "not entitled" stay distinguishable.
+
+## Sandboxes (beta)
+
+The Run stage can execute a model-generated analysis script inside a real
+Inngest Sandbox. Sandboxes are cloud-only and access-gated, and require
+`inngest >= 4.20.0` (pinned). The seam is `src/lib/sandbox.ts`:
+
+- `DEMO_TARGET=cloud` plus a beta-enabled environment runs real durable
+  sandbox steps (`create-analysis-sandbox`, `run-generated-analysis`,
+  `destroy-analysis-sandbox`) inside `research-agent`.
+- The local dev server runs a labeled simulated beat so the trace story is
+  identical offline.
+- `/api/demo/status` exposes the entitlement probe as `sandbox.mode`
+  (`sandbox` or `simulated`) plus the reason.
+- If Create returns 403 `access_denied`, ask the Inngest team to enable the
+  beta for the demo environment.
+
+For dry-run and booth ops, use `docs/booth-runbook.md`. For the driver
+walkthrough and booth script, use `docs/demo-talk-track.md`. For the printable
+booth driver card, use `docs/driver-card.md`.
 
 ## Design System Source
 
@@ -27,7 +53,17 @@ The app-specific layout mirrors the simplified Insights surface described in the
 
 ## Local Development
 
-Run the Next app and the local Inngest dev server in separate terminals:
+The one-command booth path kills any stale demo processes, starts both
+servers, waits for health, and prints the split-screen URLs:
+
+```bash
+npm run demo:booth
+```
+
+On macOS it also opens both panes in your browser (`--no-open` to skip).
+`Ctrl+C` stops both servers.
+
+To run the pieces manually in separate terminals instead:
 
 ```bash
 npm run dev
@@ -44,21 +80,10 @@ at that app URL:
 APP_URL=http://localhost:3001 npm run inngest:dev
 ```
 
-If you are unsure which port is the current demo app, run:
-
-```bash
-npm run demo:doctor
-```
-
-It scans the common local ports, reports the detected app URL, confirms the
-local Inngest dev server, and shows the exact preflight/local-ready commands to
-run next. It also prints the missing Cloud handoff exports so the production
-setup can resume without hunting through the docs.
-
-For the booth split-screen, keep the demo app on one side and open the Inngest
-dev server at `http://localhost:8288` on the other. The app's **Seed 14 runs**
-button sends real `write-query` and score-signal events so the Runs list has
-history to show.
+For the booth split-screen, keep the loop demo at `/` on one side and open
+the Inngest dev server at `http://localhost:8288` on the other. The Run
+stage's `Run research agent` button sends a real `research/run.requested`
+event so the Runs list shows live history.
 
 ## Cloud mode (`DEMO_TARGET`)
 
@@ -68,8 +93,8 @@ in exactly one place, `src/lib/demo-target.ts`, which exports `DEMO_TARGET` and
 
 | `DEMO_TARGET` | Behavior |
 |---------------|----------|
-| `local` (default, or unset) | Faked/seeded path. Scores, sessions, and experiments come from `src/content/seed-data.ts` and the local history store. Offline-safe, deterministic, dev-server only. Behaviorally identical to the booth build. No real eval primitive fires. |
-| `cloud` | Emits the **real** Inngest eval primitives so scores and experiments land in the Inngest Cloud dashboard. Registers against Cloud (`isDev=false`, keys from env). |
+| `local` (default, or unset) | Faked/seeded path. Scores, sessions, and experiments come from `src/content/seed-data.ts` and the local history store. Offline-safe, deterministic, dev-server only. Behaviorally identical to the booth build. No real scoring primitive fires. |
+| `cloud` | Emits the **real** Inngest scoring primitives so scores and experiments land in the Inngest Cloud dashboard. Registers against Cloud (`isDev=false`, keys from env). |
 
 In `cloud` mode the app emits real primitives at three call sites:
 
@@ -107,20 +132,20 @@ keep reading seed data in both modes. There is no `if (isCloud)` branch for sess
 
 ### SDK pin for cloud mode
 
-Real primitives require `inngest@pr-1521` (`npm i inngest@pr-1521`, resolves to
-`4.4.1-pr-1521.15`). The default `^4.5.0` pin has none of these primitives. Installing
-the pin is a separate step (it is not run as part of this docs pass).
+Real primitives (scores, experiments, sandboxes) require `inngest >= 4.20.0`
+(pinned in `package.json`). The old `inngest@pr-1521` pin is obsolete;
+4.20.0 ships the scoring primitives plus the sandbox middleware.
 
 ### Running cloud mode
 
 1. Set `DEMO_TARGET=cloud`, `INNGEST_EVENT_KEY`, and `INNGEST_SIGNING_KEY`. Leave
    `INNGEST_DEV` unset/false.
-2. Deploy to Vercel (see "Production Inngest" below) and sync the `/api/inngest`
+2. Deploy to Render (see "Production Inngest" below) and sync the `/api/inngest`
    serve endpoint with Inngest Cloud.
 3. Seed the Cloud corpus of real runs, scores, and experiments:
 
    ```bash
-   DEMO_TARGET=cloud npm run demo:seed-cloud
+   DEMO_TARGET=cloud npm run demo:smoke-loop
    ```
 
    The seeder is idempotent (deterministic event ids dedupe re-runs) and refuses to run
@@ -137,6 +162,12 @@ The app is wired for Inngest Cloud the same way the swag-store apps are:
 
 - `INNGEST_EVENT_KEY` sends events from API routes.
 - `INNGEST_SIGNING_KEY` authenticates the `/api/inngest` serve endpoint.
+- `OPENROUTER_API_KEY` is optional. When set, the research agent's two LLM
+  steps (`call-llm-plan-research`, `call-llm-synthesize-brief`) call
+  [OpenRouter](https://openrouter.ai) for real (real text, real token counts);
+  unset, they stay mocked. `OPENROUTER_MODEL` overrides the default
+  (`openai/gpt-5.5`), and `OPENROUTER_BASE_URL` retargets the API. The 503
+  failure-injection beat and memoized replays behave identically either way.
 - `INNGEST_ENCRYPTION_KEY` is optional. When present, the app enables
   `@inngest/middleware-encryption` for encrypted Inngest payload storage.
 - `INNGEST_ENV` is optional for targeting a non-default Cloud environment.
@@ -147,85 +178,97 @@ The app is wired for Inngest Cloud the same way the swag-store apps are:
 - `NEXT_PUBLIC_INNGEST_INSIGHTS_URL` optionally points every "Open Insights"
   button at a saved Cloud Insights query. If omitted, the app opens the generic
   Insights route for the configured dashboard environment.
-- `INNGEST_API_KEY` + `INNGEST_INSIGHTS_SCORE_QUERY` are optional. When both
-  are present, `/api/score` reads the Scores panel from Inngest Insights.
-  Without them, the panel uses deterministic seeded demo signals. See
-  `docs/insights-score-query.md` for the event contract and Cloud query setup.
-- `DEMO_SEED_TOKEN` protects `/api/demo/seed` and `/api/demo/reset` in
-  production. Local dev can use the in-app controls without a token; deployed
-  seeding should use the runbook command. The token is ignored outside
-  production so copied Cloud env vars do not break local rehearsals.
 
-For Vercel production, set these environment variables on the project and leave
-`INNGEST_DEV` unset. To emit the real eval primitives, also set `DEMO_TARGET=cloud`
-(omit it or set `local` to keep the faked path):
+## Deploy to Render
+
+The repo ships a Render blueprint (`render.yaml` at the repo root) that
+creates the Web Service with everything below preconfigured: Node runtime,
+`npm ci && npm run build` build, `npm run start` start command, and
+`/api/health` as the health check. The production env vars are split
+between blueprint defaults (`DEMO_TARGET=cloud`, the Inngest API base, the
+dashboard URL) and prompted secrets.
+
+### Create the service (blueprint)
+
+1. Push this repo to GitHub.
+2. In the Render dashboard: **New → Blueprint**, select the repo. Render
+   reads `render.yaml` and prompts for the secret values:
+   - `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` (required, from your Inngest
+     Cloud environment's "Keys" page)
+   - The rest are optional (`INNGEST_ENCRYPTION_KEY`, `INNGEST_ENV`,
+     `INNGEST_API_KEY`,
+     `NEXT_PUBLIC_INNGEST_RUNS_URL`, `NEXT_PUBLIC_INNGEST_INSIGHTS_URL`) —
+     leave blank to skip.
+3. Apply. First build takes a few minutes; the service goes live once
+   `/api/health` passes the health check.
+
+### Create the service (manual, without the blueprint)
+
+**New → Web Service**, connect the repo, then:
+
+- Runtime: Node
+- Build command: `npm ci && npm run build`
+- Start command: `npm run start`
+- Health check path: `/api/health` (a static, zero-I/O liveness route). Do
+  **not** point it at `/api/demo/status`: that endpoint calls the Inngest API,
+  so a slow uplink would fail the check, restart the instance, and wipe the
+  in-memory step timelines mid-demo.
+- Instance type: Starter or higher. Avoid the free tier — it spins down
+  between requests, and a cold start mid-booth ruins the timing.
+- Environment: set the env vars from the blueprint or the list above
+  (`NODE_VERSION=22`, `DEMO_TARGET=cloud`, and the keys).
+
+### Register the app with Inngest Cloud
+
+After the first deploy, add the serve endpoint in the Inngest dashboard
+(**Apps → Add App** or the environment's Apps page) with your Render URL:
 
 ```txt
-DEMO_TARGET=cloud
-INNGEST_EVENT_KEY=
-INNGEST_SIGNING_KEY=
-INNGEST_ENCRYPTION_KEY=
-INNGEST_ENV=
-INNGEST_API_KEY=
-INNGEST_API_BASE_URL=https://api.inngest.com
-INNGEST_INSIGHTS_SCORE_QUERY=
-DEMO_SEED_TOKEN=
-NEXT_PUBLIC_INNGEST_DASHBOARD_URL=https://app.inngest.com/env/production
-NEXT_PUBLIC_INNGEST_RUNS_URL=
-NEXT_PUBLIC_INNGEST_INSIGHTS_URL=
+https://<render-domain>/api/inngest
 ```
 
-The original POC URL, `https://agent-evals-demo.vercel.app`, is live but is not
-the current demo build until it is redeployed from this worktree. As of June 12,
-2026, `demo:preflight` fails against that URL because the new status/seed APIs
-are absent and the Inngest serve endpoint is missing production env.
+Inngest syncs the functions, and the `/api/inngest` handler authenticates
+with `INNGEST_SIGNING_KEY`. Leave `INNGEST_DEV` unset in Render —
+`DEMO_TARGET=cloud` drives `isDev` (see "Cloud mode" above).
 
-After deploy, sync/register the Inngest app in Cloud with:
+### Post-deploy checks
 
-```txt
-https://<vercel-domain>/api/inngest
-```
-
-Preflight the deployed app with:
+Preflight the deployed app:
 
 ```bash
-DEMO_BASE_URL=https://<vercel-domain> npm run demo:preflight
+DEMO_BASE_URL=https://<render-domain> npm run demo:preflight
 ```
 
-Smoke-test the foreground golden path with:
+Smoke-test the foreground golden path:
 
 ```bash
-DEMO_BASE_URL=https://<vercel-domain> npm run demo:smoke
-```
-
-Check booth split-screen pane sizes with:
-
-```bash
-DEMO_BASE_URL=https://<vercel-domain> npm run demo:viewport
+DEMO_BASE_URL=https://<render-domain> npm run demo:smoke-loop
 ```
 
 For non-secret deployment diagnostics, inspect:
 
 ```txt
-https://<vercel-domain>/api/demo/status
+https://<render-domain>/api/demo/status
 ```
 
-To see the current production handoff blockers and the exact Vercel env
-commands to run next, use:
+To see the current production handoff blockers, use:
 
 ```bash
-npm run demo:cloud-handoff
+npm run demo:cloud-ready
 ```
 
-Seed the deployed app with:
-
-```bash
-DEMO_BASE_URL=https://<vercel-domain> DEMO_SEED_TOKEN=<token> npm run demo:seed
-```
-
-To smoke-test Cloud auth from localhost, export the same Cloud keys locally and
-run:
+To smoke-test Cloud auth from localhost, export the same Cloud keys locally
+and run:
 
 ```bash
 npm run dev:cloud
 ```
+
+### Booth split-screen on Cloud
+
+Point the right pane at a pre-filtered Runs view by setting
+`NEXT_PUBLIC_INNGEST_RUNS_URL` on Render (for example, the Runs URL filtered
+to the research agent's app/environment). Every "open in Inngest" link and
+the dashboard pane then land on just the demo's runs. Locally this is
+unnecessary — `npm run demo:booth` opens `http://localhost:8288/runs`, which
+only ever shows this app's functions.

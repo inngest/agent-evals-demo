@@ -18,7 +18,8 @@ const SCORE_HEARTBEAT_CRON = "*/5 * * * *";
 export const researchScoreHeartbeat = inngest.createFunction(
   {
     id: "research-agent-score-heartbeat",
-    name: "Research agent score heartbeat",
+    // Display name only; `id` above is the wire key and must not change.
+    name: "Research agent metrics heartbeat",
     retries: 2,
     triggers: [{ cron: SCORE_HEARTBEAT_CRON }],
   },

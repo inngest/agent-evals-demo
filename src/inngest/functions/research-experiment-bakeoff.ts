@@ -1,18 +1,20 @@
 import { experiment } from "inngest";
+import { inngest, researchExperimentRequested } from "@/inngest/client";
 import {
-  inngest,
-  researchExperimentRequested,
-  type ResearchExperimentCorpusRun,
-} from "@/inngest/client";
-import { modelExperimentResult } from "@/lib/mock-research";
-import type { ResearchModel } from "@/content/research-demo";
+  EXPERIMENT_MODELS,
+  normalizeCorpusRuns,
+  scoreModelAgainstCorpus,
+  summarizeCorpus,
+  variantStepName,
+} from "@/lib/experiment-results";
 
-const MODELS = ["gpt-5.5", "claude-opus-4.8"] as const satisfies readonly ResearchModel[];
+const MODELS = EXPERIMENT_MODELS;
 
 export const researchExperimentBakeoff = inngest.createFunction(
   {
     id: "research-agent-model-bakeoff",
-    name: "Research agent model bakeoff",
+    // Display name only; `id` above is the wire key and must not change.
+    name: "Research agent model A/B test",
     retries: 2,
     triggers: [researchExperimentRequested],
   },
@@ -27,12 +29,15 @@ export const researchExperimentBakeoff = inngest.createFunction(
       "research-agent-model-bakeoff",
       {
         variants: {
+          // Step names are memoization keys and are read back by
+          // aggregateExperimentTimelines to recover the selected variant.
+          // variantStepName() keeps both sides on one definition.
           "gpt-5.5": () =>
-            step.run("evaluate-research-brief-gpt-5.5", async () => {
+            step.run(variantStepName("gpt-5.5"), async () => {
               return scoreModelAgainstCorpus("gpt-5.5", corpusSummary);
             }),
           "claude-opus-4.8": () =>
-            step.run("evaluate-research-brief-claude-opus-4.8", async () => {
+            step.run(variantStepName("claude-opus-4.8"), async () => {
               return scoreModelAgainstCorpus("claude-opus-4.8", corpusSummary);
             }),
         },
@@ -60,6 +65,7 @@ export const researchExperimentBakeoff = inngest.createFunction(
 
     return {
       experimentRunId: event.data.experimentRunId,
+      batchId: event.data.batchId,
       topic: event.data.topic,
       corpusRunIds: event.data.corpusRunIds,
       corpusRuns,
@@ -70,73 +76,3 @@ export const researchExperimentBakeoff = inngest.createFunction(
     };
   }
 );
-
-type CorpusSummary = {
-  runCount: number;
-  scoredRunCount: number;
-  positiveSignals: number;
-  negativeSignals: number;
-  averageFeedbackScore: number;
-};
-
-function normalizeCorpusRuns(
-  corpusRuns: ResearchExperimentCorpusRun[] | undefined,
-  corpusRunIds: string[]
-): ResearchExperimentCorpusRun[] {
-  if (Array.isArray(corpusRuns) && corpusRuns.length > 0) {
-    return corpusRuns;
-  }
-
-  return corpusRunIds.map((researchRunId) => ({ researchRunId }));
-}
-
-function summarizeCorpus(corpusRuns: ResearchExperimentCorpusRun[]): CorpusSummary {
-  const scoredRuns = corpusRuns.filter((run) =>
-    Number.isFinite(run.feedbackScore)
-  );
-  const positiveSignals = scoredRuns.filter(
-    (run) => run.feedbackSignal === "useful" || run.feedbackSignal === "saved"
-  ).length;
-  const negativeSignals = scoredRuns.filter(
-    (run) => run.feedbackSignal === "missed-context"
-  ).length;
-  const totalScore = scoredRuns.reduce((sum, run) => {
-    return sum + (run.feedbackScore ?? 0);
-  }, 0);
-
-  return {
-    runCount: corpusRuns.length,
-    scoredRunCount: scoredRuns.length,
-    positiveSignals,
-    negativeSignals,
-    averageFeedbackScore:
-      scoredRuns.length > 0 ? round(totalScore / scoredRuns.length, 3) : 0.5,
-  };
-}
-
-function scoreModelAgainstCorpus(
-  model: ResearchModel,
-  corpusSummary: CorpusSummary
-) {
-  const base = modelExperimentResult(model);
-  const feedbackLift = (corpusSummary.averageFeedbackScore - 0.5) * 0.08;
-  const corpusSizeLift = Math.min(0.03, corpusSummary.runCount / 5000);
-
-  return {
-    ...base,
-    qualityScore: clamp01(
-      round(base.qualityScore + feedbackLift + corpusSizeLift, 3)
-    ),
-  };
-}
-
-function round(value: number, digits: number): number {
-  const factor = 10 ** digits;
-  return Math.round(value * factor) / factor;
-}
-
-function clamp01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-
-  return Math.max(0, Math.min(1, value));
-}

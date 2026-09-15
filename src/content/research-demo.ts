@@ -10,6 +10,14 @@ export type ResearchStepId =
   | "publish-brief"
   | "notify-stakeholders";
 
+/**
+ * The synthesis step id. The loop demo string-matches this to pull the brief
+ * out of the captured timeline, so both sides import it from here rather than
+ * repeating the literal: renaming the step in one place only would silently
+ * remove the research output card.
+ */
+export const BRIEF_STEP_ID = "call-llm-synthesize-brief" satisfies ResearchStepId;
+
 export type ResearchStep = {
   id: ResearchStepId;
   label: string;
@@ -23,7 +31,9 @@ export type ResearchRunSummary = {
   researchRunId: string;
   sessionId: string;
   topic: string;
-  model: ResearchModel;
+  // Narrative models ("gpt-5.5") in mock mode, real OpenRouter model ids
+  // ("openai/gpt-5.5") when the key is configured.
+  model: string;
   qualityScore: number;
   tokenCount: number;
   costUsd: number;
@@ -175,7 +185,7 @@ export function getResearchStep(id: ResearchStepId): ResearchStep {
 
 export function buildResearchRunSummary(args: {
   researchRunId: string;
-  model?: ResearchModel;
+  model?: string;
   completedAt?: string;
   qualityScore?: number;
 }): ResearchRunSummary {

@@ -12,6 +12,7 @@ import {
 } from "@/content/research-demo";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import { researchSessionMeta } from "@/lib/research-session-meta";
+import { SANDBOX_ENABLED } from "@/lib/feature-flags";
 
 type StoredResearchRun = {
   researchRunId: string;
@@ -40,6 +41,9 @@ export async function POST(request: Request) {
   const model = normalizeModel(body.model);
   const failureStep = normalizeFailureStep(body.failureStep);
   const latencyMs = normalizeLatency(body.latencyMs);
+  // The flag is authoritative: a stale client or a hand-rolled event must not
+  // be able to switch the beta on in an environment that has it disabled.
+  const useSandbox = SANDBOX_ENABLED && body.useSandbox === true;
   const eventId = `research:${researchRunId}`;
   const dashboardUrl = getDeepLink("envDashboard");
   const traceUrl = getDeepLink("runTrace", { runId: researchRunId });
@@ -53,6 +57,7 @@ export async function POST(request: Request) {
     cadence: "manual",
     model,
     failureStep,
+    useSandbox,
     latencyMs,
     requestedAt,
     source: "booth-demo",
