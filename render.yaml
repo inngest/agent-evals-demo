@@ -40,6 +40,10 @@ services:
         sync: false
       - key: OPENROUTER_BASE_URL
         sync: false
+      # Sandboxes (beta) are off unless explicitly enabled. Only set this to
+      # "1" for an environment confirmed to have the beta entitlement.
+      - key: NEXT_PUBLIC_DEMO_SANDBOX
+        value: "0"
       - key: NEXT_PUBLIC_INNGEST_RUNS_URL
         sync: false
       - key: NEXT_PUBLIC_INNGEST_INSIGHTS_URL

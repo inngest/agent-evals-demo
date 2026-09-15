@@ -3,6 +3,7 @@ import { isCloud, DEMO_TARGET } from "@/lib/demo-target";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import { getScoreHistory } from "@/lib/scoring";
 import { checkSandboxAccess } from "@/lib/sandbox";
+import { SANDBOX_ENABLED } from "@/lib/feature-flags";
 import { isOpenRouterConfigured, OPENROUTER_MODEL } from "@/lib/openrouter";
 import { getTimelineStoreStats } from "@/inngest/middlewares/step-tracker";
 import { incidents } from "@/content/incidents";
@@ -68,6 +69,9 @@ export async function GET() {
       experimentSeeded: seededExperiment.cells.length > 0,
     },
     sandbox,
+    // Whether the Sandboxes beat is offered at all, independent of whether
+    // the environment is entitled to the beta.
+    sandboxEnabled: SANDBOX_ENABLED,
     // Which model actually narrates the run. The booth talk track differs
     // between a real completion and the canned brief, so this must not be
     // inferred from the UI.

@@ -12,7 +12,7 @@ import {
 /**
  * Aggregated results for one bakeoff batch.
  *
- * The previous Evaluate stage fired the experiment and offered a dashboard
+ * The previous A/B Test stage fired the experiment and offered a dashboard
  * link, so the outcome of the comparison never appeared in the demo itself.
  * This reads back the captured variant steps for the batch and returns the
  * per-variant rows the UI renders.

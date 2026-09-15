@@ -69,7 +69,7 @@ async function buildStatus(params: URLSearchParams) {
   // Real step data captured by stepTrackerMiddleware. When present it is
   // authoritative (honest step names, retries, memoized replays). When absent
   // we fall through to the labeled offline timeline below.
-  // The Evaluate stage asks for the SCORING function's timeline by name, to
+  // The A/B Test stage asks for the SCORING function's timeline by name, to
   // show the durable step that attached a score. Defaults to the agent run.
   const functionName = params.get("functionName") ?? "research-agent";
   const timeline = getTimelineForDemo(

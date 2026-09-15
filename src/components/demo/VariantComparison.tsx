@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import { TriangleAlert } from "lucide-react";
-import { evaluateCopy } from "@/content/loop-messaging";
+import { abTestCopy } from "@/content/loop-messaging";
 import type { ExperimentAggregate } from "@/lib/experiment-results";
 
 /**
- * Per-variant results of a model bakeoff, rendered in the demo rather than
+ * Per-variant results of a model A/B test, rendered in the demo rather than
  * deep-linked.
  *
  * Bars are sized against the best score rather than against zero: at a booth
@@ -20,7 +20,7 @@ export function VariantComparison({
   aggregate: ExperimentAggregate & { simulated?: boolean };
   pending: boolean;
 }) {
-  const copy = evaluateCopy.compare;
+  const copy = abTestCopy.compare;
   const best = Math.max(...aggregate.variants.map((v) => v.qualityScore), 0.01);
 
   return (

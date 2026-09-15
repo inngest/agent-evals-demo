@@ -17,7 +17,8 @@ import {
 export const researchScoreRun = inngest.createFunction(
   {
     id: "research-agent-score-run",
-    name: "Research agent score run",
+    // Display name only; `id` above is the wire key and must not change.
+    name: "Research agent metrics",
     retries: 2,
     triggers: [
       researchRunCompleted,

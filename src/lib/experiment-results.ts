@@ -193,6 +193,9 @@ export function aggregateExperimentTimelines(
   };
 }
 
+// Kept verbatim: Inngest step names are memoization keys, and renaming one
+// re-executes it for in-flight runs and orphans historical trace rows. The
+// product vocabulary changed; the wire identifier deliberately did not.
 const VARIANT_STEP_PREFIX = "evaluate-research-brief-";
 
 export function variantStepName(variant: string): string {

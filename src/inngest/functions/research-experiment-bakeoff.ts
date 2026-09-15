@@ -13,7 +13,8 @@ const MODELS = EXPERIMENT_MODELS;
 export const researchExperimentBakeoff = inngest.createFunction(
   {
     id: "research-agent-model-bakeoff",
-    name: "Research agent model bakeoff",
+    // Display name only; `id` above is the wire key and must not change.
+    name: "Research agent model A/B test",
     retries: 2,
     triggers: [researchExperimentRequested],
   },

@@ -97,7 +97,7 @@ export type ResearchRunRequestedData = {
   source: "booth-demo";
 };
 
-// ── 7. research agent finished → score/session function attaches eval data ─
+// ── 7. research agent finished → score/session function attaches metrics ──
 export type ResearchRunCompletedData = {
   researchRunId: string;
   parentRunId?: string;

@@ -137,7 +137,7 @@ async function runRealModelCall(
   };
 }
 
-export function evaluateResearchQuality(args: {
+export function measureResearchQuality(args: {
   model: string;
   sources: string[];
   tokenCount: number;
@@ -157,7 +157,7 @@ export function summarizeResearchRun(args: {
 }): ResearchRunSummary {
   const sources = [...new Set(researchSteps.map((step) => step.source))];
   const tokenCount = researchSteps.reduce((sum, step) => sum + step.tokens, 0);
-  const qualityScore = evaluateResearchQuality({
+  const qualityScore = measureResearchQuality({
     model: args.model,
     sources,
     tokenCount,

@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { evaluateCopy } from "@/content/loop-messaging";
+import { abTestCopy } from "@/content/loop-messaging";
 
-export type ScoreRow = {
-  /** The score's name as it appears in Inngest, e.g. research_human_feedback. */
+export type MetricRow = {
+  /** The metric's name as it appears in Inngest, e.g. research_human_feedback. */
   name: string;
   value: number;
   /** The run the score attaches to. Rendered so two rows can be seen sharing one. */
@@ -16,14 +16,14 @@ export type ScoreRow = {
 };
 
 /**
- * The Evaluate stage's persistent readout.
+ * The A/B Test stage's persistent readout.
  *
  * The stage used to hand off to the dashboard for every result, so nothing the
  * driver did produced a visible effect in the demo. These tiles fill in as
- * scores land, and the score rows deliberately repeat the run id: the whole
- * deferred-scoring argument is two scores, weeks apart, on the same run.
+ * metrics land, and the rows deliberately repeat the run id: the whole
+ * delayed-conversion argument is two metrics, weeks apart, on the same run.
  */
-export function EvaluateScorecard({
+export function AbTestScorecard({
   quality,
   human,
   outcome,
@@ -36,15 +36,15 @@ export function EvaluateScorecard({
   outcome: number | null;
   winner: string | null;
   runId?: string;
-  rows: ScoreRow[];
+  rows: MetricRow[];
 }) {
-  const tiles = evaluateCopy.scorecard.tiles;
+  const tiles = abTestCopy.scorecard.tiles;
 
   return (
     <div className="border border-[var(--ink)] bg-white">
       <div className="flex items-center justify-between gap-2 px-2.5 py-2">
         <span className="mono text-[10px] uppercase text-[var(--muted-copy)]">
-          {evaluateCopy.scorecard.eyebrow}
+          {abTestCopy.scorecard.eyebrow}
         </span>
         {runId ? (
           <span className="mono truncate text-[10px] uppercase text-[var(--muted-copy)]">
@@ -70,7 +70,7 @@ export function EvaluateScorecard({
               </div>
               <div className="mono mt-0.5 truncate text-[9px] uppercase text-[var(--muted-copy)]">
                 {row.runId
-                  ? `${evaluateCopy.scoreNow.attachedTo} ${shortRunId(row.runId)}`
+                  ? `${abTestCopy.measureNow.attachedTo} ${shortRunId(row.runId)}`
                   : null}
                 {row.note ? (
                   <span className="ml-1.5 text-[var(--teal)]">{row.note}</span>

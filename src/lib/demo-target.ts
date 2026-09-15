@@ -2,9 +2,9 @@
  * DEMO_TARGET flag — the single source of truth for which demo path runs.
  *
  *   local (default) → faked/seeded/offline path. Dev server, deterministic,
- *                     no real Inngest eval primitives fire. Behaviorally
+ *                     no real Inngest scoring primitives fire. Behaviorally
  *                     identical to today.
- *   cloud           → emit the REAL Inngest eval primitives (run-level
+ *   cloud           → emit the REAL Inngest scoring primitives (run-level
  *                     step.score, createScorer/createDefer deferred outcome
  *                     scorer, group.experiment) against Inngest Cloud.
  *

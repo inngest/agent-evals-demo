@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { CodeView } from "@/components/demo/CodeView";
 import { DashboardLink } from "@/components/demo/DashboardLink";
-import { EvaluateScorecard, type ScoreRow } from "@/components/demo/EvaluateScorecard";
+import { AbTestScorecard, type MetricRow } from "@/components/demo/AbTestScorecard";
 import { PrimitivesReference } from "@/components/demo/PrimitivesReference";
 import { StepTimeline } from "@/components/demo/StepTimeline";
 import { VariantComparison } from "@/components/demo/VariantComparison";
@@ -31,7 +31,7 @@ import {
 } from "@/content/research-demo";
 import {
   LOOP_TAGLINE,
-  evaluateCopy,
+  abTestCopy,
   getLoopStage,
   loopPillars,
   loopStages,
@@ -40,6 +40,7 @@ import {
 import type { ExperimentAggregate } from "@/lib/experiment-results";
 import type { SandboxRunSummary } from "@/inngest/functions/research-agent";
 import type { RunTimeline } from "@/inngest/middlewares/step-tracker";
+import { SANDBOX_ENABLED } from "@/lib/feature-flags";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import type { LoopSnippetId } from "@/content/loop-snippets";
 import type {
@@ -132,7 +133,7 @@ type SandboxAccess = {
 const stageIcons: Record<LoopStageId, React.ComponentType<{ className?: string }>> = {
   run: Play,
   observe: Eye,
-  evaluate: FlaskConical,
+  abtest: FlaskConical,
 };
 
 export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
@@ -143,7 +144,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
   const [result, setResult] = React.useState<LoopRunResult | null>(null);
   const [timeline, setTimeline] = React.useState<RunTimeline | null>(null);
   const [failureArmed, setFailureArmed] = React.useState(true);
-  const [sandboxArmed, setSandboxArmed] = React.useState(true);
+  const [sandboxArmed, setSandboxArmed] = React.useState(SANDBOX_ENABLED);
   const [sandboxAccess, setSandboxAccess] = React.useState<SandboxAccess | null>(null);
   const [lastFeedback, setLastFeedback] = React.useState<FeedbackState | null>(null);
   const [toast, setToast] = React.useState("");
@@ -165,9 +166,9 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
     Record<string, ScorerStep>
   >({});
   const [runModel, setRunModel] = React.useState<string>("gpt-5.5");
-  const [evaluateFocus, setEvaluateFocus] = React.useState<
-    "score" | "defer" | "experiment"
-  >("score");
+  const [abTestFocus, setAbTestFocus] = React.useState<
+    "measure" | "defer" | "variants"
+  >("measure");
 
   const isRunning =
     phase === "sending" || phase === "running" || phase === "retrying";
@@ -176,14 +177,14 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
       ? "run"
       : activeStage === "observe"
         ? "observe"
-        : evaluateFocus === "defer"
-          ? "evaluate-defer"
-          : evaluateFocus === "experiment"
-            ? "evaluate-experiment"
-            : "evaluate-score";
+        : abTestFocus === "defer"
+          ? "abtest-defer"
+          : abTestFocus === "variants"
+            ? "abtest-variants"
+            : "abtest-measure";
   const dashboardUrl = trigger?.dashboardUrl ?? getDeepLink("envDashboard");
   const traceUrl = trigger?.traceUrl ?? getDeepLink("runTrace");
-  const scoresUrl = getDeepLink("scoresOnTrace", { runId: trigger?.runId });
+  const metricsUrl = getDeepLink("scoresOnTrace", { runId: trigger?.runId });
   const insightsUrl = getDeepLink("insights");
   const brief = extractBriefOutput(timeline);
   const experimentUrl =
@@ -192,7 +193,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
       experimentId: "research-agent-model-bakeoff",
     });
   const scorecardRunId = trigger?.runId ?? trigger?.researchRunId;
-  const scoreRows = buildScoreRows({
+  const metricRows = buildMetricRows({
     feedback: lastFeedback,
     outcome: lastOutcome,
     runId: scorecardRunId,
@@ -200,6 +201,8 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
   });
 
   React.useEffect(() => {
+    if (!SANDBOX_ENABLED) return;
+
     let cancelled = false;
 
     fetch("/api/demo/status")
@@ -385,8 +388,8 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
   async function sendSignal(signal: ResearchFeedbackSignal) {
     if (signalPending) return;
 
-    setActiveStage("evaluate");
-    setEvaluateFocus("score");
+    setActiveStage("abtest");
+    setAbTestFocus("measure");
     setNotice(null);
     setSignalPending(true);
 
@@ -448,8 +451,8 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
   async function sendOutcome(outcome: "shipped" | "wrong") {
     if (outcomePending) return;
 
-    setActiveStage("evaluate");
-    setEvaluateFocus("defer");
+    setActiveStage("abtest");
+    setAbTestFocus("defer");
     setNotice(null);
     setOutcomePending(true);
 
@@ -493,8 +496,8 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
   async function runExperiment() {
     if (experimentPending) return;
 
-    setActiveStage("evaluate");
-    setEvaluateFocus("experiment");
+    setActiveStage("abtest");
+    setAbTestFocus("variants");
     setNotice(null);
     const corpusRunId = trigger?.researchRunId ?? result?.researchRunId;
     const corpusRuns = corpusRunId
@@ -535,8 +538,8 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
       });
       showToast(
         response.sent
-          ? `Bakeoff started across ${response.runCount ?? runCount} runs`
-          : "Bakeoff queued locally",
+          ? `A/B test started across ${response.runCount ?? runCount} runs`
+          : "A/B test queued locally",
       );
 
       // Poll the aggregate so the comparison fills in live rather than the
@@ -722,7 +725,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
             })}
             <span
               className="grid w-9 place-items-center text-[var(--muted-copy)]"
-              title="Evaluation feeds the next run: the loop closes"
+              title="A/B testing feeds the next run: the loop closes"
             >
               <Repeat className="size-3.5" />
             </span>
@@ -776,8 +779,8 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
                 traceUrl={traceUrl}
               />
             ) : null}
-            {activeStage === "evaluate" ? (
-              <EvaluateControls
+            {activeStage === "abtest" ? (
+              <AbTestControls
                 experimentPending={experimentPending}
                 experimentResults={experimentResults}
                 experimentUrl={experimentUrl}
@@ -785,8 +788,8 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
                 outcomePending={outcomePending}
                 qualityScore={result?.qualityScore ?? null}
                 runId={scorecardRunId}
-                scoreRows={scoreRows}
-                scoresUrl={scoresUrl}
+                metricRows={metricRows}
+                metricsUrl={metricsUrl}
                 selectedSignal={lastFeedback?.signal ?? null}
                 signalPending={signalPending}
                 onRunExperiment={runExperiment}
@@ -914,6 +917,7 @@ function RunControls({
           <ExternalLink className="size-4" />
         </DashboardLink>
       </div>
+      {SANDBOX_ENABLED ? (
       <label
         className="flex items-center justify-between gap-3 border border-[var(--rule-soft)] bg-white px-2.5 py-2 text-xs"
         title={sandboxAccess?.reason}
@@ -938,6 +942,7 @@ function RunControls({
           onChange={(event) => onSandboxArmedChange(event.target.checked)}
         />
       </label>
+      ) : null}
       <label className="flex items-center justify-between gap-3 border border-[var(--rule-soft)] bg-white px-2.5 py-2 text-xs">
         <span>
           <span className="block font-medium">Fail competitor API once</span>
@@ -1077,7 +1082,7 @@ function ObserveControls({
   );
 }
 
-function EvaluateControls({
+function AbTestControls({
   experimentPending,
   experimentResults,
   experimentUrl,
@@ -1085,8 +1090,8 @@ function EvaluateControls({
   outcomePending,
   qualityScore,
   runId,
-  scoreRows,
-  scoresUrl,
+  metricRows,
+  metricsUrl,
   selectedSignal,
   signalPending,
   onRunExperiment,
@@ -1101,8 +1106,8 @@ function EvaluateControls({
   outcomePending: boolean;
   qualityScore: number | null;
   runId?: string;
-  scoreRows: ScoreRow[];
-  scoresUrl: string;
+  metricRows: MetricRow[];
+  metricsUrl: string;
   selectedSignal: ResearchFeedbackSignal | null;
   signalPending: boolean;
   onRunExperiment: () => void;
@@ -1110,14 +1115,14 @@ function EvaluateControls({
   onOutcome: (outcome: "shipped" | "wrong") => void;
   onSignal: (signal: "useful" | "missed-context" | "saved") => void;
 }) {
-  const stage = getLoopStage("evaluate");
-  const copy = evaluateCopy;
+  const stage = getLoopStage("abtest");
+  const copy = abTestCopy;
   const actionButtonClass =
     "demo-segment-button inline-flex h-8 w-full min-w-0 items-center justify-center gap-1 rounded-none px-1.5 text-[11px] disabled:pointer-events-none disabled:opacity-55";
   const isOtherSignal = (signal: ResearchFeedbackSignal) =>
     (selectedSignal !== null && selectedSignal !== signal) || signalPending;
   const humanScore =
-    scoreRows.find((row) => row.name === "research_human_feedback")?.value ??
+    metricRows.find((row) => row.name === "research_human_feedback")?.value ??
     null;
   const winner = experimentResults?.winner ?? null;
 
@@ -1129,23 +1134,23 @@ function EvaluateControls({
         detail={stage.detail}
       />
 
-      <EvaluateScorecard
+      <AbTestScorecard
         quality={qualityScore}
         human={humanScore}
         outcome={lastOutcome?.score ?? null}
         winner={winner}
         runId={runId}
-        rows={scoreRows}
+        rows={metricRows}
       />
 
-      {/* Score it now: a product signal becomes a durable score on this run. */}
+      {/* Measure it now: a product signal becomes a durable metric on this run. */}
       <div className="border border-[var(--ink)] bg-white">
         <div className="px-2.5 py-2">
           <div className="mono text-[10px] uppercase text-[var(--muted-copy)]">
-            {copy.scoreNow.eyebrow}
+            {copy.measureNow.eyebrow}
           </div>
           <p className="mt-1 text-xs leading-5 text-[var(--muted-copy)]">
-            {copy.scoreNow.detail}
+            {copy.measureNow.detail}
           </p>
         </div>
         <div className="grid grid-cols-4 gap-1.5 border-t border-[var(--rule-soft)] bg-[var(--bone)] p-1.5">
@@ -1185,24 +1190,24 @@ function EvaluateControls({
             <span className="truncate">Save</span>
           </Button>
           <DashboardLink
-            href={scoresUrl}
+            href={metricsUrl}
             className={`${actionButtonClass} mono text-[10px] uppercase`}
           >
             <Gauge className="size-3.5" />
-            <span className="truncate">Scores</span>
+            <span className="truncate">Metrics</span>
           </DashboardLink>
         </div>
       </div>
 
-      {/* Score it later: the same run, scored weeks after it finished. */}
+      {/* Measure it later: the same run, measured weeks after it finished. */}
       <div className="border border-[var(--ink)] bg-white">
         <div className="flex items-start justify-between gap-2 px-2.5 py-2">
           <div className="min-w-0">
             <div className="mono text-[10px] uppercase text-[var(--muted-copy)]">
-              {copy.scoreLater.eyebrow}
+              {copy.measureLater.eyebrow}
             </div>
             <p className="mt-1 text-xs leading-5 text-[var(--muted-copy)]">
-              {copy.scoreLater.detail}
+              {copy.measureLater.detail}
             </p>
           </div>
           {lastOutcome ? (
@@ -1220,7 +1225,7 @@ function EvaluateControls({
             data-active={lastOutcome?.outcome === "shipped" ? "true" : undefined}
           >
             <Check className="size-4" />
-            <span className="truncate">{copy.scoreLater.shipped}</span>
+            <span className="truncate">{copy.measureLater.shipped}</span>
           </Button>
           <Button
             variant="outline"
@@ -1230,12 +1235,12 @@ function EvaluateControls({
             data-active={lastOutcome?.outcome === "wrong" ? "true" : undefined}
           >
             <TriangleAlert className="size-4" />
-            <span className="truncate">{copy.scoreLater.wrong}</span>
+            <span className="truncate">{copy.measureLater.wrong}</span>
           </Button>
         </div>
       </div>
 
-      {/* Compare models: a real traffic split, rendered here not deep-linked. */}
+      {/* A/B test models: a real traffic split, rendered here not deep-linked. */}
       {experimentResults ? (
         <VariantComparison
           aggregate={experimentResults}
@@ -1260,7 +1265,7 @@ function EvaluateControls({
           className="demo-segment-button mono inline-flex h-10 items-center gap-1.5 px-3 text-[10px] uppercase"
         >
           <ExternalLink className="size-3.5" />
-          <span className="truncate">Experiment</span>
+          <span className="truncate">A/B test</span>
         </DashboardLink>
       </div>
 
@@ -1333,7 +1338,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return json as T;
 }
 
-/** One bakeoff click. Enough runs that both variants appear ~99% of the time. */
+/** One A/B test click. Enough runs that both variants appear ~99% of the time. */
 const EXPERIMENT_RUN_COUNT = 8;
 
 async function fetchExperimentResults(
@@ -1386,10 +1391,10 @@ async function fetchScorerStep(
 }
 
 /**
- * Assembles the scorecard's score rows. Both rows deliberately carry the same
- * run id: that repetition is the deferred-scoring argument made visually.
+ * Assembles the scorecard's metric rows. Both rows deliberately carry the same
+ * run id: that repetition is the delayed-conversion argument made visually.
  */
-function buildScoreRows({
+function buildMetricRows({
   feedback,
   outcome,
   runId,
@@ -1399,8 +1404,8 @@ function buildScoreRows({
   outcome: OutcomeState | null;
   runId?: string;
   scorerSteps: Record<string, ScorerStep>;
-}): ScoreRow[] {
-  const rows: ScoreRow[] = [];
+}): MetricRow[] {
+  const rows: MetricRow[] = [];
 
   if (feedback) {
     const step = scorerSteps["attach-research-human-feedback-score"];
@@ -1411,7 +1416,7 @@ function buildScoreRows({
       at: feedback.feedbackAt,
       note: step
         ? `step ${step.name}${step.durationMs !== undefined ? ` ${Math.round(step.durationMs)}ms` : ""}`
-        : evaluateCopy.scoreNow.pendingStep,
+        : abTestCopy.measureNow.pendingStep,
     });
   }
 
@@ -1422,8 +1427,8 @@ function buildScoreRows({
       value: outcome.score,
       runId,
       at: outcome.observedAt,
-      note: `${outcome.daysLater} ${evaluateCopy.scoreLater.daysLaterSuffix} · ${
-        step ? `step ${step.name}` : evaluateCopy.scoreLater.viaDefer
+      note: `${outcome.daysLater} ${abTestCopy.measureLater.daysLaterSuffix} · ${
+        step ? `step ${step.name}` : abTestCopy.measureLater.viaDefer
       }`,
     });
   }

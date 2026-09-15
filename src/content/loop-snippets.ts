@@ -1,19 +1,24 @@
-// Code snippets for the Run / Observe / Evaluate loop demo. Kept separate
+import { SANDBOX_ENABLED } from "@/lib/feature-flags";
+
+// Code snippets for the Run / Observe / A/B Test loop demo. Kept separate
 // from code-snippets.ts so the legacy act demos at /research, /booth-story,
 // and /booth-control keep rendering unchanged.
 
 /**
- * The Evaluate stage is split three ways so the code pane can follow whichever
- * sub-action the driver just used: score a run now, score it later via defer,
- * or compare models. One combined snippet meant the audience was looking at
- * three primitives at once while the driver talked about one.
+ * The A/B Test stage is split three ways so the code pane can follow whichever
+ * sub-action the driver just used: measure a run now, measure it later via
+ * defer, or A/B test the models. One combined snippet meant the audience was
+ * looking at three primitives at once while the driver talked about one.
+ *
+ * The ids use the product vocabulary; the SDK names inside the snippets
+ * (createScorer, step.score, group.experiment) are Inngest API and stay.
  */
 export type LoopSnippetId =
   | "run"
   | "observe"
-  | "evaluate-score"
-  | "evaluate-defer"
-  | "evaluate-experiment";
+  | "abtest-measure"
+  | "abtest-defer"
+  | "abtest-variants";
 
 export type LoopSnippet = {
   id: LoopSnippetId;
@@ -70,6 +75,36 @@ export const researchAgent = inngest.createFunction(
 
     const brief = await step.run("call-llm-synthesize-brief", () =>
       callModel("gpt-5.5", { task: "write competitive research brief", context, analysis })
+    );
+
+    return { researchRunId: event.data.researchRunId, brief };
+  }
+);`;
+
+const runCoreCode = `import { inngest, researchRunRequested } from "@/inngest/client";
+import { callModel, fetchResearchCorpus } from "@/lib/research";
+
+export const researchAgent = inngest.createFunction(
+  { id: "research-agent", retries: 4, triggers: [researchRunRequested] },
+  async ({ event, step }) => {
+    // Steps are marked by primitives: Inngest owns how and when each
+    // one executes, retries it, and replays memoized results.
+    // @demo-highlight-start
+    const context = await step.run("load-research-context", () =>
+      fetchResearchCorpus.internal({ topic: event.data.topic })
+    );
+
+    const changelog = await step.run("fetch-competitor-changelog", () =>
+      fetchResearchCorpus.competitorChangelog(event.data.competitors)
+    );
+    // @demo-highlight-end
+
+    const sources = await step.run("search-market-sources", () =>
+      fetchResearchCorpus.market({ topic: event.data.topic })
+    );
+
+    const brief = await step.run("call-llm-synthesize-brief", () =>
+      callModel("gpt-5.5", { task: "write competitive research brief", context, sources })
     );
 
     return { researchRunId: event.data.researchRunId, brief };
@@ -133,11 +168,11 @@ export const modelQualityByVariant = \`
 \`;
 // @demo-highlight-end`;
 
-const evaluateScoreCode = `import { createScorer } from "inngest/experimental";
+const abTestMeasureCode = `import { createScorer } from "inngest/experimental";
 import { inngest } from "@/inngest/client";
 import { gradeResearchBrief } from "@/lib/research";
 
-// A score is just your function returning 0..1. Durable, like
+// A metric is just your function returning 0..1. Durable, like
 // everything else, and attached back to the run that did the work.
 // @demo-highlight-start
 export const researchQualityScorer = createScorer(
@@ -153,7 +188,7 @@ export const researchQualityScorer = createScorer(
 );
 // @demo-highlight-end
 
-// A product signal is a score too. step.score attaches it to the
+// A product signal is a metric too. step.score attaches it to the
 // run that produced the brief, inside a durable step.
 // @demo-highlight-start
 export const scoreFromFeedback = inngest.createFunction(
@@ -168,11 +203,11 @@ export const scoreFromFeedback = inngest.createFunction(
 );
 // @demo-highlight-end`;
 
-const evaluateDeferCode = `import { createScorer } from "inngest/experimental";
+const abTestDeferCode = `import { createScorer } from "inngest/experimental";
 import { inngest } from "@/inngest/client";
 
-// The outcome of a brief is not known when the run ends. It lands
-// when someone ships the recommendation, days or weeks later.
+// The conversion is not known when the run ends. It lands when
+// someone ships the recommendation, days or weeks later.
 export const researchOutcomeScorer = createScorer(
   inngest,
   { id: "research-outcome-scorer" },
@@ -187,8 +222,8 @@ export const researchOutcomeScorer = createScorer(
 export const scoreOnOutcome = inngest.createFunction(
   { id: "research-agent-score-run", triggers: [researchOutcomeRecorded] },
   async ({ event, defer }) => {
-    // defer() scores a run that finalized long ago. No pipeline,
-    // no join, no warehouse. The score lands on the original run.
+    // defer() measures a run that finalized long ago. No pipeline,
+    // no join, no warehouse. The metric lands on the original run.
     // @demo-highlight-start
     await defer("research-outcome:" + event.data.researchRunId, {
       function: researchOutcomeScorer,
@@ -202,7 +237,7 @@ export const scoreOnOutcome = inngest.createFunction(
   }
 );`;
 
-const evaluateExperimentCode = `import { experiment } from "inngest";
+const abTestVariantsCode = `import { experiment } from "inngest";
 import { inngest } from "@/inngest/client";
 import { synthesizeBrief } from "@/lib/research";
 
@@ -229,7 +264,7 @@ export const modelBakeoff = inngest.createFunction(
     );
     // @demo-highlight-end
 
-    // Every score lands on the variant that produced it, so the
+    // Every metric lands on the variant that produced it, so the
     // comparison is built from real runs, not a separate harness.
     // @demo-highlight-start
     await inngest.score.experiment({
@@ -248,10 +283,11 @@ export const loopSnippets: LoopSnippet[] = [
     id: "run",
     stage: 1,
     label: "Run",
-    eyebrow: "Primitives + Sandboxes",
-    description:
-      "Primitives mark each durable step. When a step needs isolation, step.sandbox gives model-generated code its own Linux environment, traced and destroyed like any other step.",
-    code: runCode,
+    eyebrow: SANDBOX_ENABLED ? "Primitives + Sandboxes" : "Primitives",
+    description: SANDBOX_ENABLED
+      ? "Primitives mark each durable step. When a step needs isolation, step.sandbox gives model-generated code its own Linux environment, traced and destroyed like any other step."
+      : "Primitives mark each durable step. Inngest owns how and when each one executes, retries the boundary that failed, and replays everything that already succeeded.",
+    code: SANDBOX_ENABLED ? runCode : runCoreCode,
   },
   {
     id: "observe",
@@ -263,31 +299,31 @@ export const loopSnippets: LoopSnippet[] = [
     code: observeCode,
   },
   {
-    id: "evaluate-score",
+    id: "abtest-measure",
     stage: 3,
-    label: "Score now",
+    label: "Measure now",
     eyebrow: "createScorer + step.score",
     description:
-      "A score is your own function returning 0..1. createScorer makes it durable, and step.score attaches a product signal to the run that produced the work.",
-    code: evaluateScoreCode,
+      "A metric is your own function returning 0..1. createScorer makes it durable, and step.score attaches a product signal to the run that produced the work.",
+    code: abTestMeasureCode,
   },
   {
-    id: "evaluate-defer",
+    id: "abtest-defer",
     stage: 3,
-    label: "Score later",
+    label: "Measure later",
     eyebrow: "defer",
     description:
-      "The outcome is not known when the run ends. defer() scores a run that finalized days or weeks ago, and the score still lands on the original run.",
-    code: evaluateDeferCode,
+      "The conversion is not known when the run ends. defer() measures a run that finalized days or weeks ago, and the metric still lands on the original run.",
+    code: abTestDeferCode,
   },
   {
-    id: "evaluate-experiment",
+    id: "abtest-variants",
     stage: 3,
-    label: "Compare models",
+    label: "A/B test models",
     eyebrow: "group.experiment",
     description:
-      "group.experiment routes real traffic across variants. Every score attaches to the variant that produced it, so the comparison is built from real runs.",
-    code: evaluateExperimentCode,
+      "group.experiment routes real traffic across variants. Every metric attaches to the variant that produced it, so the comparison is built from real runs.",
+    code: abTestVariantsCode,
   },
 ];
 

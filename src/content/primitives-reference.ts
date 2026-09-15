@@ -61,14 +61,15 @@ export const primitiveCards: PrimitiveCard[] = [
   },
   {
     id: "score",
-    name: "Score",
-    tagline: "Your rubric becomes a durable score attached to the run.",
+    name: "Metric",
+    tagline:
+      "Your rubric becomes a durable metric on the run. In the SDK it is createScorer.",
     code: scoreCode,
   },
   {
     id: "defer",
     name: "Defer",
-    tagline: "Score a finished run later, when the real outcome lands.",
+    tagline: "Measure a finished run later, when the real conversion lands.",
     code: deferCode,
   },
 ];

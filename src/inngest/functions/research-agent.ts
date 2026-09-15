@@ -22,6 +22,7 @@ import {
   type SandboxRunMode,
 } from "@/lib/sandbox";
 import { isCloud } from "@/lib/demo-target";
+import { SANDBOX_ENABLED } from "@/lib/feature-flags";
 import { isOpenRouterConfigured, OPENROUTER_MODEL } from "@/lib/openrouter";
 import {
   researchSessionKey,
@@ -131,7 +132,7 @@ export const researchAgent = inngest.createFunction(
     // simulated beat on the local dev server.
     let sandboxSummary: SandboxRunSummary | undefined;
 
-    if (useSandbox) {
+    if (useSandbox && SANDBOX_ENABLED) {
       const sandboxResult = await runSandboxAnalysis({
         step,
         researchRunId,
@@ -233,7 +234,7 @@ export const researchAgent = inngest.createFunction(
     }
 
     // Act 2's addition in the code view: this event is the durable boundary
-    // that lets the scoring/session function attach eval data to this run.
+    // that lets the scoring/session function attach metrics to this run.
     await step.sendEvent(
       "emit-research-run-completed",
       researchRunCompleted.create(
