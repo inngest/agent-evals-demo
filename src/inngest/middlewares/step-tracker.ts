@@ -196,6 +196,18 @@ function indexRun(run: TrackedRun, keys: Array<string | undefined>) {
   }
 }
 
+/**
+ * Non-secret diagnostics for /api/demo/status. `trackedRuns` dropping to 0 on a
+ * deployed instance is the visible symptom of a restart having wiped the store,
+ * which is why it is worth reporting rather than inferring.
+ */
+export function getTimelineStoreStats(): {
+  trackedRuns: number;
+  indexedKeys: number;
+} {
+  return { trackedRuns: timelines.size, indexedKeys: keyIndex.size };
+}
+
 function prune() {
   if (timelines.size <= MAX_TRACKED_RUNS) return;
 

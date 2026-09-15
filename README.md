@@ -200,7 +200,7 @@ The app is wired for Inngest Cloud the same way the swag-store apps are:
 The repo ships a Render blueprint (`render.yaml` at the repo root) that
 creates the Web Service with everything below preconfigured: Node runtime,
 `npm ci && npm run build` build, `npm run start` start command, and
-`/api/demo/status` as the health check. The production env vars are split
+`/api/health` as the health check. The production env vars are split
 between blueprint defaults (`DEMO_TARGET=cloud`, the Inngest API base, the
 dashboard URL) and prompted secrets.
 
@@ -217,7 +217,7 @@ dashboard URL) and prompted secrets.
      `NEXT_PUBLIC_INNGEST_RUNS_URL`, `NEXT_PUBLIC_INNGEST_INSIGHTS_URL`) —
      leave blank to skip.
 3. Apply. First build takes a few minutes; the service goes live once
-   `/api/demo/status` passes the health check.
+   `/api/health` passes the health check.
 
 ### Create the service (manual, without the blueprint)
 
@@ -226,7 +226,10 @@ dashboard URL) and prompted secrets.
 - Runtime: Node
 - Build command: `npm ci && npm run build`
 - Start command: `npm run start`
-- Health check path: `/api/demo/status`
+- Health check path: `/api/health` (a static, zero-I/O liveness route). Do
+  **not** point it at `/api/demo/status`: that endpoint calls the Inngest API,
+  so a slow uplink would fail the check, restart the instance, and wipe the
+  in-memory step timelines mid-demo.
 - Instance type: Starter or higher. Avoid the free tier — it spins down
   between requests, and a cold start mid-booth ruins the timing.
 - Environment: set the env vars from the blueprint or the list above
@@ -257,6 +260,7 @@ Smoke-test the foreground golden path:
 
 ```bash
 DEMO_BASE_URL=https://<render-domain> npm run demo:smoke
+DEMO_BASE_URL=https://<render-domain> npm run demo:smoke-loop
 ```
 
 Seed the deployed app (idempotent):

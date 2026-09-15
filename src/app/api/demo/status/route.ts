@@ -3,6 +3,8 @@ import { isCloud, DEMO_TARGET } from "@/lib/demo-target";
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import { getScoreHistory } from "@/lib/scoring";
 import { checkSandboxAccess } from "@/lib/sandbox";
+import { isOpenRouterConfigured, OPENROUTER_MODEL } from "@/lib/openrouter";
+import { getTimelineStoreStats } from "@/inngest/middlewares/step-tracker";
 import { incidents } from "@/content/incidents";
 import { seededExperiment, seededSessions } from "@/content/seed-data";
 
@@ -66,6 +68,14 @@ export async function GET() {
       experimentSeeded: seededExperiment.cells.length > 0,
     },
     sandbox,
+    // Which model actually narrates the run. The booth talk track differs
+    // between a real completion and the canned brief, so this must not be
+    // inferred from the UI.
+    llm: {
+      mode: isOpenRouterConfigured() ? "openrouter" : "mock",
+      model: isOpenRouterConfigured() ? OPENROUTER_MODEL : "gpt-5.5 (mocked)",
+    },
+    timeline: getTimelineStoreStats(),
     scoreHistory: {
       source: history.source,
       points: history.points.length,

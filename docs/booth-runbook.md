@@ -49,6 +49,7 @@ npm run lint
 npm run build
 npm run demo:preflight
 npm run demo:smoke
+npm run demo:smoke-loop
 npm run demo:viewport
 npm run demo:cloud-handoff
 ```
@@ -84,11 +85,19 @@ Check the local app surface:
 DEMO_BASE_URL=http://localhost:3001 npm run demo:local-ready
 ```
 
-`demo:local-ready` runs lint, build, preflight, smoke, a small seeded smoke
-pass, and viewport QA. The smoke checks verify the foreground golden path and,
-on localhost, confirm the reset endpoint clears local score state for
-back-to-back rehearsals. Use the individual scripts only when debugging a
-failed step.
+`demo:local-ready` runs lint, build, preflight, smoke, loop smoke, a small
+seeded smoke pass, and viewport QA. Use the individual scripts only when
+debugging a failed step.
+
+`demo:smoke` covers the legacy incident-triage routes only. **`demo:smoke-loop`
+is the one that tests the demo you are actually giving.** It fails if the run
+fell back to the simulated timeline, if no memoized replay happened, or if the
+synthesis step's output does not parse - that last check is what catches the
+research output card silently disappearing.
+
+Note: `demo:viewport` still asserts against the retired four-act root route and
+fails on this branch. That failure predates the loop demo; do not read it as a
+regression.
 
 For a quick JSON view of the same non-secret readiness state:
 
