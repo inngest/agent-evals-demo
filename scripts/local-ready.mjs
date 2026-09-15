@@ -29,6 +29,14 @@ const steps = [
     env: { DEMO_BASE_URL: baseUrl },
   },
   {
+    // The loop demo at `/` is what the booth actually shows. "Smoke" above
+    // only covers the legacy incident-triage routes.
+    label: "Loop smoke",
+    command: "npm",
+    args: ["run", "demo:smoke-loop"],
+    env: { DEMO_BASE_URL: baseUrl },
+  },
+  {
     label: "Seeded smoke",
     command: "npm",
     args: ["run", "demo:smoke"],

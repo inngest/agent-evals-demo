@@ -49,8 +49,12 @@ export async function POST(request: Request) {
 async function buildStatus(params: URLSearchParams) {
   const researchRunId = params.get("researchRunId") ?? "demo-research-run";
   const useSandbox = params.get("useSandbox") === "true";
-  const stored = researchRunStore.get(researchRunId);
-  const requestedAt = stored?.requestedAt ?? new Date().toISOString();
+  // An unknown run means the store never saw it, or the process restarted and
+  // lost it. Anchor its start time on first sight, otherwise requestedAt is
+  // recomputed on every poll, elapsed is always ~0, and the offline timeline
+  // freezes at "queued" instead of progressing.
+  const stored = researchRunStore.get(researchRunId) ?? adoptUnknownRun(researchRunId);
+  const requestedAt = stored.requestedAt;
   const elapsed = Date.now() - new Date(requestedAt).getTime();
   // The sandbox beat (simulated locally, real in cloud) adds a beat of work.
   const totalSteps = researchSteps.length + (useSandbox ? 1 : 0);
@@ -173,6 +177,23 @@ async function buildStatus(params: URLSearchParams) {
     elapsedMs: elapsed,
     expectedMs: offlineTotalMs,
   };
+}
+
+/**
+ * Registers a first-seen timestamp for a run the store has no record of, so
+ * elapsed time advances across polls. Marked `sent: false`: nothing here
+ * implies Inngest ever accepted the run.
+ */
+function adoptUnknownRun(researchRunId: string): StoredResearchRun {
+  const adopted: StoredResearchRun = {
+    researchRunId,
+    requestedAt: new Date().toISOString(),
+    sent: false,
+  };
+
+  researchRunStore.set(researchRunId, adopted);
+
+  return adopted;
 }
 
 function completedResult(

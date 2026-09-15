@@ -109,7 +109,7 @@ async function waitForHealth() {
   let devUp = false;
 
   while (Date.now() < deadline && !(appUp && devUp)) {
-    appUp = appUp || (await isHealthy(`${APP_URL}/api/demo/status`));
+    appUp = appUp || (await isHealthy(`${APP_URL}/api/health`));
     devUp = devUp || (await isHealthy(DEV_URL));
     if (!(appUp && devUp)) await sleep(POLL_INTERVAL_MS);
   }
@@ -119,6 +119,26 @@ async function waitForHealth() {
       `Servers did not become healthy within ${HEALTH_TIMEOUT_MS / 1000}s (app: ${appUp ? "up" : "DOWN"}, dev server: ${devUp ? "up" : "DOWN"}).`
     );
     shutdown();
+  }
+
+  await warmDemoRoute();
+}
+
+/**
+ * Compile the demo route before announcing readiness. `next dev` builds a
+ * route on its first request, and `/` server-renders every loop snippet and
+ * primitive card through shiki. Without this the script prints "Booth ready",
+ * opens the browser, and the first visitor waits several seconds on a white
+ * screen. Best-effort: a failure here is not worth aborting the booth for.
+ */
+async function warmDemoRoute() {
+  process.stdout.write("Warming the demo route... ");
+
+  try {
+    await fetch(APP_URL, { headers: { accept: "text/html" } });
+    console.log("done.");
+  } catch {
+    console.log("skipped (route did not respond; it will compile on first view).");
   }
 }
 
