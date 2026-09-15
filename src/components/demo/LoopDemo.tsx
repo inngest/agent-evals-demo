@@ -32,6 +32,7 @@ import {
   LOOP_TAGLINE,
   abTestCopy,
   getLoopStage,
+  runBrief,
   loopPillars,
   loopStages,
   type LoopStageId,
@@ -897,6 +898,21 @@ function RunControls({
         title={stage.title}
         detail={stage.detail}
       />
+      <div className="border border-[var(--ink)] bg-white">
+        <div className="mono border-b border-[var(--rule-soft)] px-2.5 py-1.5 text-[10px] uppercase text-[var(--muted-copy)]">
+          {runBrief.eyebrow}
+        </div>
+        <dl className="grid gap-1 bg-[var(--bone)] px-2.5 py-2">
+          {runBrief.rows.map((row) => (
+            <div key={row.label} className="grid grid-cols-[52px_minmax(0,1fr)] gap-2">
+              <dt className="mono text-[10px] uppercase leading-5 text-[var(--muted-copy)]">
+                {row.label}
+              </dt>
+              <dd className="text-xs leading-5">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <Button
           variant="outline"

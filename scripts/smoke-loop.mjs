@@ -144,10 +144,13 @@ function checkTimeline(final) {
 
   const steps = timeline.steps ?? [];
 
+  // Exact, not a floor: the Run stage copy states this number out loud, so a
+  // step added or removed without updating it should fail here.
+  const expectedSteps = 9;
   addCheck(
-    steps.length >= 8 ? "pass" : "fail",
+    steps.length === expectedSteps ? "pass" : "fail",
     "All research steps recorded",
-    `${steps.length} steps (expected at least 8)`
+    `${steps.length} steps (expected exactly ${expectedSteps} with sandbox off; update runBrief in loop-messaging.ts if this changed)`
   );
 
   const replayed = steps.filter((step) => step.memoized).length;

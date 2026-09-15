@@ -90,6 +90,29 @@ export const loopStages: LoopStage[] = [
 ];
 
 /**
+ * One-glance summary of the run, shown above the Run button.
+ *
+ * A booth visitor arrives mid-conversation and needs to know what is about to
+ * happen before it happens, or the timeline streaming past means nothing. Three
+ * lines, readable from arm's length: what goes in, what it does, what is real.
+ * Keep it short - this is read aloud in about ten seconds.
+ */
+export const runBrief = {
+  eyebrow: "what this run does",
+  rows: [
+    { label: "input", value: "Competitor research topic + 3 sources" },
+    { label: "does", value: "Plans, gathers, synthesizes a brief, scores it" },
+    // Counted, not guessed: 9 steps with the sandbox off, 10 with it on. If a
+    // step is ever added to research-agent, this line goes stale - the smoke
+    // test asserts the real count, so check it there.
+    {
+      label: "runs",
+      value: `${SANDBOX_ENABLED ? 10 : 9} durable steps; one source fails once, on purpose`,
+    },
+  ],
+} as const;
+
+/**
  * Every user-facing string in the A/B Test stage. Kept here rather than inline
  * in the component so the vocabulary can be changed in one place.
  *
