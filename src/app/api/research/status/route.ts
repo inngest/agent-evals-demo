@@ -6,6 +6,10 @@ import {
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import { isCloud } from "@/lib/demo-target";
 import { getTimelineForDemo } from "@/inngest/middlewares/step-tracker";
+import {
+  buildOfflineTimeline,
+  offlineTimelineTotalMs,
+} from "@/lib/offline-timeline";
 
 type StoredResearchRun = {
   researchRunId: string;
@@ -48,18 +52,16 @@ async function buildStatus(params: URLSearchParams) {
   const stored = researchRunStore.get(researchRunId);
   const requestedAt = stored?.requestedAt ?? new Date().toISOString();
   const elapsed = Date.now() - new Date(requestedAt).getTime();
-  const totalSteps = researchSteps.length + (useSandbox ? 1 : 0);
   // The sandbox beat (simulated locally, real in cloud) adds a beat of work.
-  const completionMs = useSandbox ? 8800 : 7600;
-  const retryAtMs = 3100;
+  const totalSteps = researchSteps.length + (useSandbox ? 1 : 0);
   const eventIdParam = params.get("inngestEventId") ?? undefined;
   const cloudRunId = await resolveCloudRunId(eventIdParam, stored);
   const runId = cloudRunId ?? researchRunId;
   const traceUrl = getDeepLink("runTrace", { runId });
 
   // Real step data captured by stepTrackerMiddleware. When present it is
-  // authoritative (honest step names, retries, memoized replays); the
-  // timing simulation below is the fallback when no run has been observed.
+  // authoritative (honest step names, retries, memoized replays). When absent
+  // we fall through to the labeled offline timeline below.
   const timeline = getTimelineForDemo(
     eventIdParam ?? stored?.inngestEventId,
     researchRunId,
@@ -116,6 +118,24 @@ async function buildStatus(params: URLSearchParams) {
     };
   }
 
+  // Nothing has been observed for this run: Inngest never acknowledged it, or
+  // the process restarted and lost the in-memory store. Render a clearly
+  // labeled rehearsal timeline instead of inventing a completed run. It must
+  // never claim a clean completion without the simulated flag travelling with
+  // it - see src/lib/offline-timeline.ts for why.
+  const failureArmed = params.get("failureStep")
+    ? params.get("failureStep") !== "none"
+    : true;
+  const offlineTimeline = buildOfflineTimeline({
+    runId,
+    elapsedMs: elapsed,
+    useSandbox,
+    failureArmed,
+    startedAt: new Date(requestedAt).getTime(),
+  });
+  const offlineComplete = offlineTimeline.status === "completed";
+  const offlineTotalMs = offlineTimelineTotalMs(useSandbox);
+
   if (elapsed < 400) {
     return {
       ok: true,
@@ -127,53 +147,51 @@ async function buildStatus(params: URLSearchParams) {
       traceUrl,
       result: null,
       error: stored?.error,
+      timeline: offlineTimeline,
+      simulated: true,
     };
   }
-
-  if (elapsed < completionMs) {
-    const completedSteps = Math.max(
-      1,
-      Math.min(totalSteps - 1, Math.floor((elapsed / completionMs) * totalSteps))
-    );
-
-    return {
-      ok: true,
-      status: "running",
-      hadRetry: elapsed > retryAtMs,
-      completedSteps,
-      totalSteps,
-      runId,
-      traceUrl,
-      result: null,
-      error: stored?.error,
-    };
-  }
-
-  const result = completedResult(researchRunId, useSandbox);
 
   return {
     ok: true,
-    status: "completed",
-    hadRetry: true,
-    completedSteps: totalSteps,
-    totalSteps,
+    status: offlineComplete ? "completed" : "running",
+    hadRetry: offlineTimeline.steps.some(
+      (step) => step.memoized || step.status === "retrying",
+    ),
+    completedSteps: offlineTimeline.steps.filter(
+      (step) => step.status === "completed",
+    ).length,
+    totalSteps: Math.max(totalSteps, offlineTimeline.steps.length),
     runId,
     traceUrl,
-    result,
+    result: offlineComplete
+      ? completedResult(researchRunId, useSandbox, { simulated: true })
+      : null,
     error: stored?.error,
+    timeline: offlineTimeline,
+    simulated: true,
+    elapsedMs: elapsed,
+    expectedMs: offlineTotalMs,
   };
 }
 
-function completedResult(researchRunId: string, useSandbox: boolean) {
+function completedResult(
+  researchRunId: string,
+  useSandbox: boolean,
+  { simulated = false }: { simulated?: boolean } = {},
+) {
   const result = buildResearchRunSummary({ researchRunId });
+  // In the offline path no sandbox was created, in either mode. Reporting
+  // "sandbox" there would put a claim on screen that nothing backs.
+  const sandboxMode = isCloud && !simulated ? "sandbox" : "simulated";
 
   return {
     ...result,
     ...(useSandbox
       ? {
           sandbox: {
-            mode: isCloud ? "sandbox" : "simulated",
-            sandboxId: `sbx-${isCloud ? "cloud" : "simulated"}-${researchRunId.slice(0, 8)}`,
+            mode: sandboxMode,
+            sandboxId: `sbx-${sandboxMode}-${researchRunId.slice(0, 8)}`,
             exitCode: 0,
             totalLaunches: 7,
             competitorCount: 3,

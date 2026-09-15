@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, TriangleAlert } from "lucide-react";
 import type { RunTimeline } from "@/inngest/middlewares/step-tracker";
 
 type TimelineStep = RunTimeline["steps"][number];
@@ -43,6 +43,12 @@ export function StepTimeline({
 
   return (
     <div className="border border-[var(--ink)] bg-white">
+      {timeline.simulated ? (
+        <div className="mono flex items-center gap-1.5 border-b border-[var(--ink)] bg-[var(--coral)] px-2.5 py-1.5 text-[10px] uppercase text-white">
+          <TriangleAlert className="size-3.5 shrink-0" />
+          <span>simulated — Inngest unreachable, no run executed</span>
+        </div>
+      ) : null}
       <div className="flex items-center justify-between gap-2 px-2.5 py-2">
         <span className="mono text-[10px] uppercase text-[var(--muted-copy)]">
           steps

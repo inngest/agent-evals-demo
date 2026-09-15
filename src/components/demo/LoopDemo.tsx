@@ -76,6 +76,8 @@ type StatusResponse = {
   result: LoopRunResult | null;
   error?: string;
   timeline?: RunTimeline | null;
+  /** True when no real run was observed and the timeline is a rehearsal. */
+  simulated?: boolean;
 };
 
 type FeedbackState = {
@@ -229,7 +231,10 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
 
       while (Date.now() < pollDeadline && !completed) {
         await wait(800);
-        const status = await fetchStatus(response).catch((error: unknown) => {
+        const status = await fetchStatus(response, {
+          useSandbox: sandboxArmed,
+          failureStep: failureArmed ? "fetch-competitor-changelog" : "none",
+        }).catch((error: unknown) => {
           lastStatusError =
             error instanceof Error ? error.message : "Run status unavailable";
           return null;
@@ -939,10 +944,17 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   return json as T;
 }
 
-async function fetchStatus(trigger: TriggerResponse): Promise<StatusResponse> {
+async function fetchStatus(
+  trigger: TriggerResponse,
+  options: { useSandbox: boolean; failureStep: string },
+): Promise<StatusResponse> {
   const params = new URLSearchParams({
     researchRunId: trigger.researchRunId,
-    useSandbox: "true",
+    // Must mirror what the run was actually triggered with. Hardcoding this
+    // made the status route report a sandbox beat even when the driver had
+    // the toggle off.
+    useSandbox: String(options.useSandbox),
+    failureStep: options.failureStep,
   });
 
   if (trigger.inngestEventId) {
