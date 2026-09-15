@@ -7,7 +7,10 @@ services:
     autoDeploy: true
     buildCommand: npm ci && npm run build && cp -r .next/static .next/standalone/.next/static
     startCommand: node .next/standalone/server.js
-    healthCheckPath: /api/demo/status
+    # Zero-I/O liveness probe. Must NOT be /api/demo/status: that endpoint
+    # calls the Inngest API, so a slow uplink would restart the instance and
+    # wipe the in-memory step timelines the demo is showing.
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
         value: "22"
@@ -34,6 +37,8 @@ services:
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_MODEL
+        sync: false
+      - key: OPENROUTER_BASE_URL
         sync: false
       - key: NEXT_PUBLIC_INNGEST_RUNS_URL
         sync: false

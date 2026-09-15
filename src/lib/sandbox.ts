@@ -286,6 +286,30 @@ const globalSandboxAccess = globalThis as typeof globalThis & {
   __sandboxAccess?: { value: SandboxAccess; expiresAt: number };
 };
 
+/**
+ * Ceiling on the entitlement probe. The Inngest client has no timeout of its
+ * own, so without this a stalled uplink hangs every caller of
+ * checkSandboxAccess - including the first paint of the loop demo, which
+ * fetches /api/demo/status before it can label the sandbox toggle. Failing
+ * closed to "simulated" after a short wait is always better than hanging.
+ */
+const SANDBOX_PROBE_TIMEOUT_MS = 2500;
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 // Entitlement probe for the UI toggle: is the beta enabled for this env?
 // Cached for 60s so status polls stay cheap.
 export async function checkSandboxAccess(): Promise<SandboxAccess> {
@@ -314,7 +338,11 @@ async function probeSandboxAccess(): Promise<SandboxAccess> {
   }
 
   try {
-    await inngest.sandboxes.list({ limit: 1 });
+    await withTimeout(
+      inngest.sandboxes.list({ limit: 1 }),
+      SANDBOX_PROBE_TIMEOUT_MS,
+      "Sandbox entitlement probe timed out",
+    );
 
     return {
       mode: "sandbox",
