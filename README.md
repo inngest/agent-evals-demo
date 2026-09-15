@@ -1,7 +1,7 @@
 # Inngest Booth Demo — Unbreakable agents, invisible infra.
 
 This repo holds the booth demo for [EVENT NAME] ([DATES], booth [BOOTH #]).
-The story is a loop: **Run -> Observe -> Evaluate**, with Sandboxes (beta) as
+The story is a loop: **Run -> Observe -> A/B Test**, with Sandboxes (beta) as
 a Run-stage beat.
 
 - `/` is the loop demo: a real Inngest v4 research agent (durable steps,
@@ -101,8 +101,8 @@ in exactly one place, `src/lib/demo-target.ts`, which exports `DEMO_TARGET` and
 
 | `DEMO_TARGET` | Behavior |
 |---------------|----------|
-| `local` (default, or unset) | Faked/seeded path. Scores, sessions, and experiments come from `src/content/seed-data.ts` and the local history store. Offline-safe, deterministic, dev-server only. Behaviorally identical to the booth build. No real eval primitive fires. |
-| `cloud` | Emits the **real** Inngest eval primitives so scores and experiments land in the Inngest Cloud dashboard. Registers against Cloud (`isDev=false`, keys from env). |
+| `local` (default, or unset) | Faked/seeded path. Scores, sessions, and experiments come from `src/content/seed-data.ts` and the local history store. Offline-safe, deterministic, dev-server only. Behaviorally identical to the booth build. No real scoring primitive fires. |
+| `cloud` | Emits the **real** Inngest scoring primitives so scores and experiments land in the Inngest Cloud dashboard. Registers against Cloud (`isDev=false`, keys from env). |
 
 In `cloud` mode the app emits real primitives at three call sites:
 
@@ -142,7 +142,7 @@ keep reading seed data in both modes. There is no `if (isCloud)` branch for sess
 
 Real primitives (scores, experiments, sandboxes) require `inngest >= 4.20.0`
 (pinned in `package.json`). The old `inngest@pr-1521` pin is obsolete;
-4.20.0 ships the eval primitives plus the sandbox middleware.
+4.20.0 ships the scoring primitives plus the sandbox middleware.
 
 ### Running cloud mode
 

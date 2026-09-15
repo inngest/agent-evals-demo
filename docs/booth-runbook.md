@@ -19,8 +19,8 @@ For the production Cloud handoff, use `docs/cloud-auth-request.md` first, then
 - Event: [EVENT NAME], [DATES].
 - Booth: [BOOTH #].
 - Core booth story: Unbreakable agents, invisible infra. One loop demo
-  (Run / Observe / Evaluate) at `/` covering durability, observability,
-  evaluation, and Sandboxes (beta).
+  (Run / Observe / A/B Test) at `/` covering durability, observability,
+  A/B testing, and Sandboxes (beta).
 - Booth surfaces: `/` is the loop demo. Legacy demos remain at `/research`
   (acts demo), `/booth-story`, and `/booth-control` for rehearsal and
   comparison only.
@@ -240,7 +240,7 @@ and emits:
 - seeded feedback instructions that the agent turns into
   `research/feedback.recorded` events after it knows the real Cloud run ID, so
   Act 2 positive/negative scores attach to the durable run.
-- `research/experiment.requested` events for Act 3 model bakeoff data. Each
+- `research/experiment.requested` events for Act 3 model A/B test data. Each
   experiment event carries a `corpusRuns` window with the Act 2 feedback signal
   and score from the same seeded batch, so the experiment output can point back
   to scored research-agent runs.
@@ -276,7 +276,7 @@ durable retry attempt and a short retry delay.
 6. Open the corresponding Inngest run/trace on the right; show the retried
    boundary and the sandbox steps.
 7. Observe stage: open the trace link, then `Open Insights`.
-8. Evaluate stage: click `Good`, open `Scores`; run the model bakeoff and
+8. A/B Test stage: click `Good`, open `Scores`; run the model A/B test and
    open the Experiment view.
 
 Start each live conversation with:
@@ -285,10 +285,10 @@ Start each live conversation with:
 > prompts keep changing underneath them?
 
 Use the answer to route the demo: reliability pain stays in Run;
-observability questions get the trace and Insights; evals-savvy visitors go
-straight to Evaluate.
+observability questions get the trace and Insights; evaluation-savvy visitors go
+straight to A/B Test.
 
-If the visitor is qualified or explicitly comparing eval/observability
+If the visitor is qualified or explicitly comparing evaluation/observability
 options, end with the Patrick handoff from `docs/demo-talk-track.md` instead
 of adding more screens. Use the event page calendar for the handoff:
 [EVENT PAGE URL]. The goal is a useful follow-up, not a longer booth

@@ -1,5 +1,9 @@
 # Codex Goal — Finish the Four-Act Incident-Triage Booth Demo
 
+> **Historical.** Written when the third loop stage was called *Evaluate*;
+> it is now **A/B Test**. Inngest SDK names in this file (createScorer,
+> step.score, group.experiment, defer) are unchanged and still correct.
+
 You are finishing a Next.js booth demo for AI Engineer World's Fair. Work on the
 current branch `feature/four-act-demo` in this repo (`~/inngest/evals-demo`).
 

@@ -9,7 +9,7 @@ The live booth is `U-G26` and opens Monday, June 29, 2026 at 4 PM. Complete
 Cloud readiness, hardware display QA, and driver sign-off before that first
 booth shift.
 
-## Evaluate Stage Sign-off
+## A/B Test Stage Sign-off
 
 Run once per display before the shift. Each line has an observable result.
 
@@ -18,7 +18,7 @@ Run once per display before the shift. Each line has an observable result.
 - [ ] `Recommendation shipped` adds a `research_deferred_outcome` row with a
       `+21d` badge and **the same run id as the first row**. If the ids differ,
       stop: the deferred-scoring beat is the one claim that must be exact.
-- [ ] `Run model bakeoff` reaches `8 of 8 complete`, lists both variants with
+- [ ] `Run model A/B test` reaches `8 of 8 complete`, lists both variants with
       non-zero runs, and badges a winner.
 - [ ] Quality bars are distinguishable from ~2m away.
 - [ ] `Run again with <winner>` returns to the Run stage and starts a new run.
@@ -95,7 +95,7 @@ scaling, mirrored/projector behavior, and right-side Inngest Cloud dashboard.
 Pass means there is no awkward clipping, overlap, hidden primary action, or
 horizontal page scroll.
 
-- Header shows `Agent Evals Booth Demo`, status, `Inngest`, and
+- Header shows `Inngest Booth Demo`, status, `Inngest`, and
   `Demo Controls`.
 - `Ask agent`, `Run again`, and `Use sample query` fit in the agent card.
 - `Run query` and `Save` remain visible above the SQL editor.
@@ -117,7 +117,7 @@ horizontal page scroll.
 - Filters are set to the correct app/environment.
 - Opening a run shows step-level detail for `generate-sql` and `run-query`.
 - Retry demo shows the failure and recovery clearly enough to narrate.
-- Score/eval event or Insights view is ready before the live walkthrough.
+- Metric event or Insights view is ready before the live walkthrough.
 
 ## Walkthrough Checks
 
@@ -126,7 +126,7 @@ Run both scripts from `docs/demo-talk-track.md`:
 - 90-second loop completes without improvising missing screens.
 - 2-3 minute walkthrough completes without resetting or changing windows.
 - `Opus offline` retry path is visible and recovers.
-- Save produces a score/eval signal.
+- Save produces a metric signal.
 - Reset clears local demo score state during rehearsal.
 - The right-side Inngest view is used for trace/history/scoring context.
 
@@ -136,7 +136,7 @@ Before a driver is cleared for booth duty:
 
 - Driver starts with "What are you using today to know if your agents are
   actually working in production?"
-- Driver can route an evals-savvy visitor to Scores/Insights quickly.
+- Driver can route an evaluation-savvy visitor to Scores/Insights quickly.
 - Driver can route a durability question to the retry recovery path.
 - Driver can route an observability question to Inngest Runs and Trace.
 - Driver can explain local seeded fallback versus Insights-backed history.

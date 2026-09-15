@@ -1,5 +1,9 @@
 # CONTRACT.md — Four-Act Incident-Triage Booth Demo
 
+> **Historical.** Written when the third loop stage was called *Evaluate*;
+> it is now **A/B Test**. Inngest SDK names in this file (createScorer,
+> step.score, group.experiment, defer) are unchanged and still correct.
+
 **Branch:** `feature/four-act-demo` · **Repo:** `~/inngest/evals-demo`
 
 This is the binding interface contract for four parallel builders. Follow it literally.

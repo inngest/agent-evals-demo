@@ -24,8 +24,8 @@ Then route the story:
 
 - Reliability pain: stay in Run. Failure toggle, retry/replay, sandbox.
 - Observability focus: get to Observe. Trace plus Insights.
-- Evals-savvy: get to Evaluate. The deferred score on the same run is the
-  beat that lands; show it before the bakeoff.
+- Evaluation-savvy: get to A/B Test. The deferred score on the same run is the
+  beat that lands; show it before the A/B test.
 - Exec or walk-by: 90-second loop, end on the tagline.
 
 ## 90-Second Loop
@@ -39,7 +39,7 @@ Then route the story:
    steps replayed.
 5. Observe stage: `Open trace`. "Observability is not added code. The
    durability generated this data."
-6. Evaluate stage: click `Good`. A score row appears on the run, with the
+6. A/B Test stage: click `Good`. A score row appears on the run, with the
    durable step that wrote it. "Your rubric, attached to the run."
 7. Close: "Unbreakable agents, invisible infra."
 8. If they are interested: "Want me to get you on Patrick's calendar while
@@ -53,15 +53,15 @@ Then route the story:
 4. Right pane: trace with inputs/outputs, the retry, the sandbox steps.
 5. Observe stage: trace link, then `Open Insights`. "No pipeline to wire."
 6. Point at the code pane: "This is the whole function."
-7. Evaluate stage, three beats. The code pane follows each one:
+7. A/B Test stage, three beats. The code pane follows each one:
    - `Good`: a score lands on the run, with the durable step that wrote it.
    - `Recommendation shipped`: a SECOND score appears on the SAME run id,
      stamped 21 days later. Point at the two run ids. "Same run, scored
      three weeks later. No pipeline, no join, no warehouse."
-   - `Run model bakeoff`: 8 real runs split across both models, scored per
+   - `Run model A/B test`: 8 real runs split across both models, scored per
      variant, winner badged in the panel.
 8. Close the loop: click `Run again with <winner>`. "Run, observe,
-   evaluate. The loop makes the next run better."
+   A/B test. The loop makes the next run better."
 9. If qualified or comparing stacks, hand off to Patrick. Use
    [EVENT PAGE URL].
 

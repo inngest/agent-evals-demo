@@ -60,7 +60,7 @@ For the silent loop, keep captions short and product-facing:
 Narration:
 
 > This is the loop: run the agent durably, observe every step, and turn real
-> user behavior into eval signals.
+> user behavior into conversion signals.
 
 ## 2-3 Minute Driven Shot List
 

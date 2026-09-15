@@ -3,7 +3,7 @@ import type { RunTimeline } from "@/inngest/middlewares/step-tracker";
 import type { ResearchExperimentCorpusRun } from "@/inngest/client";
 
 /**
- * Shared scoring and aggregation for the model bakeoff.
+ * Shared scoring and aggregation for the model A/B test.
  *
  * Three callers need identical numbers: the Inngest function that runs the
  * variants, the results endpoint that aggregates them back for the UI, and the
@@ -96,7 +96,7 @@ export function scoreModelAgainstCorpus(
 }
 
 /**
- * Collapses the captured bakeoff timelines into per-variant rows.
+ * Collapses the captured A/B test timelines into per-variant rows.
  *
  * Each run's variant step is named `evaluate-research-brief-<variant>`, so the
  * variant that `group.experiment` actually selected is read back off the step

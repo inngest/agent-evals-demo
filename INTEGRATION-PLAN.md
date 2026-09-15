@@ -1,5 +1,9 @@
 # INTEGRATION-PLAN.md — Real Inngest Eval Primitives (Cloud) + Faked Path (Local)
 
+> **Historical.** Written when the third loop stage was called *Evaluate*;
+> it is now **A/B Test**. Inngest SDK names in this file (createScorer,
+> step.score, group.experiment, defer) are unchanged and still correct.
+
 **Repo:** `~/inngest/evals-demo` · **Branch:** `feature/four-act-demo`
 **Goal:** Emit the REAL Inngest eval primitives (run-level `step.score` / `inngest.score`, `createScorer`/`createDefer` deferred outcome scorer, `group.experiment`) so scores + experiments show up in the Inngest CLOUD dashboard — WITHOUT breaking the existing faked/seeded/offline booth path.
 

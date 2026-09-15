@@ -1,5 +1,9 @@
 # Inngest Insights Score Query
 
+> **Historical.** Written when the third loop stage was called *Evaluate*;
+> it is now **A/B Test**. Inngest SDK names in this file (createScorer,
+> step.score, group.experiment, defer) are unchanged and still correct.
+
 The durable `score-query-signal` function emits `app/query.scored` events
 specifically so the Scores panel can load historic quality data from Inngest
 Insights once the app is deployed to Cloud.

@@ -1,5 +1,9 @@
 # Cloud Handoff
 
+> **Historical.** Written when the third loop stage was called *Evaluate*;
+> it is now **A/B Test**. Inngest SDK names in this file (createScorer,
+> step.score, group.experiment, defer) are unchanged and still correct.
+
 Use this when the demo is ready to move from local proof to the live
 conference environment.
 

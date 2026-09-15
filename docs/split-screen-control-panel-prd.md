@@ -1,5 +1,9 @@
 # Split-Screen Booth Control Panel PRD
 
+> **Historical.** Written when the third loop stage was called *Evaluate*;
+> it is now **A/B Test**. Inngest SDK names in this file (createScorer,
+> step.score, group.experiment, defer) are unchanged and still correct.
+
 **Date:** 2026-06-22  
 **Status:** Experimental PRD for a Codex implementation thread  
 **Goal:** Preserve the existing demo foundations, but reframe the booth experience so the left side is only a trigger/control surface and Inngest is the product surface.
