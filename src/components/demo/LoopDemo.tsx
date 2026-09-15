@@ -49,7 +49,22 @@ type LoopDemoProps = {
   primitives: HighlightedPrimitiveCard[];
 };
 
-type RunPhase = "idle" | "sending" | "running" | "retrying" | "complete" | "error";
+type RunPhase =
+  | "idle"
+  | "sending"
+  | "running"
+  | "retrying"
+  | "complete"
+  | "error"
+  | "stalled";
+
+/**
+ * A message that stays on screen until the next action clears it. Toasts are
+ * wrong for terminal states: a driver three minutes into a slow cloud run was
+ * left looking at an "idle" pill with no explanation, because the only notice
+ * had already timed out.
+ */
+type Notice = { tone: "warn" | "error"; message: string } | null;
 
 type TriggerResponse = {
   ok: boolean;
@@ -109,6 +124,10 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
   const [sandboxAccess, setSandboxAccess] = React.useState<SandboxAccess | null>(null);
   const [lastFeedback, setLastFeedback] = React.useState<FeedbackState | null>(null);
   const [toast, setToast] = React.useState("");
+  const [notice, setNotice] = React.useState<Notice>(null);
+  const [signalPending, setSignalPending] = React.useState(false);
+  const [experimentPending, setExperimentPending] = React.useState(false);
+  const toastTimer = React.useRef<number | null>(null);
   const [topPaneHeight, setTopPaneHeight] = React.useState(360);
   const [experiment, setExperiment] = React.useState<{
     sent: boolean;
@@ -200,6 +219,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
 
   async function runResearch() {
     setActiveStage("run");
+    setNotice(null);
     setPhase("sending");
     setTrigger(null);
     setResult(null);
@@ -226,11 +246,15 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
 
       // Cloud runs (real model calls + retry backoff + memoized replays) can
       // take a minute or more. Poll to a terminal state or a generous
-      // deadline; never fabricate a result on timeout.
-      const pollDeadline = Date.now() + 180_000;
+      // deadline; never fabricate a result on timeout. Counted in ticks rather
+      // than wall-clock so this stays a pure render path.
+      const pollIntervalMs = 800;
+      const maxPolls = Math.ceil(180_000 / pollIntervalMs);
+      let polls = 0;
 
-      while (Date.now() < pollDeadline && !completed) {
-        await wait(800);
+      while (polls < maxPolls && !completed) {
+        polls += 1;
+        await wait(pollIntervalMs);
         const status = await fetchStatus(response, {
           useSandbox: sandboxArmed,
           failureStep: failureArmed ? "fetch-competitor-changelog" : "none",
@@ -254,59 +278,95 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
 
         if (status.status === "failed") {
           setPhase("error");
-          showToast(status.error ?? "Research run failed");
+          setNotice({
+            tone: "error",
+            message: status.error ?? "Research run failed",
+          });
           return;
         }
       }
 
       if (!completed) {
-        setPhase("idle");
-        showToast(
-          lastStatusError
-            ? "Status unavailable; the run is still executing in Inngest"
-            : "Still executing in Inngest; open the trace to watch it finish",
-        );
+        // Keep the last timeline on screen and say so persistently. The run is
+        // still going in Inngest; the trace link is the way to follow it.
+        setPhase("stalled");
+        setNotice({
+          tone: "warn",
+          message: lastStatusError
+            ? "Status unavailable. The run is still executing in Inngest; open the trace."
+            : "Still executing in Inngest after 3 minutes. Open the trace to watch it finish.",
+        });
       }
     } catch (error) {
       setPhase("error");
-      showToast(error instanceof Error ? error.message : "Research run failed");
+      setNotice({
+        tone: "error",
+        message:
+          error instanceof Error ? error.message : "Research run failed",
+      });
     }
   }
 
   async function sendSignal(signal: ResearchFeedbackSignal) {
+    if (signalPending) return;
+
     setActiveStage("evaluate");
-    setLastFeedback({
+    setNotice(null);
+    setSignalPending(true);
+
+    const optimistic = {
       signal,
       score: signal === "missed-context" ? 0 : 1,
       feedbackAt: new Date().toISOString(),
-    });
+    };
+    setLastFeedback(optimistic);
 
-    const response = await postJson<{
-      ok: boolean;
-      score: number;
-      feedbackAt: string;
-    }>("/api/research/signal", {
-      researchRunId: trigger?.researchRunId,
-      parentRunId: trigger?.runId,
-      signal,
-    });
-    setLastFeedback({
-      signal,
-      score: response.score,
-      feedbackAt: response.feedbackAt,
-    });
+    try {
+      const response = await postJson<{
+        ok: boolean;
+        score: number;
+        feedbackAt: string;
+      }>("/api/research/signal", {
+        researchRunId: trigger?.researchRunId,
+        parentRunId: trigger?.runId,
+        signal,
+      });
+      setLastFeedback({
+        signal,
+        score: response.score,
+        feedbackAt: response.feedbackAt,
+      });
 
-    showToast(
-      signal === "missed-context"
-        ? "Feedback score captured"
-        : response.score === 1
-          ? "Positive score captured"
-          : "Score captured",
-    );
+      showToast(
+        signal === "missed-context"
+          ? "Feedback score captured"
+          : response.score === 1
+            ? "Positive score captured"
+            : "Score captured",
+      );
+    } catch (error) {
+      // The route already swallows Inngest errors and returns 200, so reaching
+      // here means the transport itself failed: dev server down, or a
+      // hot-reload mid-click. Roll the optimistic row back rather than leaving
+      // a score on screen that was never recorded.
+      setLastFeedback(null);
+      setNotice({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? `Could not record feedback: ${error.message}`
+            : "Could not record feedback; the app is not reachable",
+      });
+    } finally {
+      setSignalPending(false);
+    }
   }
 
   async function runExperiment() {
+    if (experimentPending) return;
+
     setActiveStage("evaluate");
+    setNotice(null);
     const corpusRunId = trigger?.researchRunId ?? result?.researchRunId;
     const corpusRuns = corpusRunId
       ? [
@@ -320,18 +380,34 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
           },
         ]
       : undefined;
-    const response = await postJson<{
-      ok: boolean;
-      sent: boolean;
-      experimentRunId: string;
-      experimentUrl: string;
-    }>("/api/research/experiment", {
-      topic: defaultResearchTopic,
-      corpusRuns,
-    });
+    setExperimentPending(true);
 
-    setExperiment(response);
-    showToast(response.sent ? "Experiment event sent" : "Experiment queued locally");
+    try {
+      const response = await postJson<{
+        ok: boolean;
+        sent: boolean;
+        experimentRunId: string;
+        experimentUrl: string;
+      }>("/api/research/experiment", {
+        topic: defaultResearchTopic,
+        corpusRuns,
+      });
+
+      setExperiment(response);
+      showToast(
+        response.sent ? "Experiment event sent" : "Experiment queued locally",
+      );
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        message:
+          error instanceof Error
+            ? `Could not start the experiment: ${error.message}`
+            : "Could not start the experiment; the app is not reachable",
+      });
+    } finally {
+      setExperimentPending(false);
+    }
   }
 
   function resetDemo() {
@@ -342,6 +418,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
     setTimeline(null);
     setLastFeedback(null);
     setExperiment(null);
+    setNotice(null);
     setToast("");
   }
 
@@ -369,8 +446,26 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
 
   function showToast(message: string) {
     setToast(message);
-    window.setTimeout(() => setToast(""), 2600);
+
+    // Without clearing, a second toast inherits the first's pending timer and
+    // can disappear almost immediately.
+    if (toastTimer.current !== null) {
+      window.clearTimeout(toastTimer.current);
+    }
+
+    toastTimer.current = window.setTimeout(() => {
+      setToast("");
+      toastTimer.current = null;
+    }, 2600);
   }
+
+  React.useEffect(() => {
+    return () => {
+      if (toastTimer.current !== null) {
+        window.clearTimeout(toastTimer.current);
+      }
+    };
+  }, []);
 
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--ink)]">
@@ -464,6 +559,30 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
           </nav>
 
           <div className="min-h-0 overflow-auto p-3 xl:p-4">
+            {notice ? (
+              <div
+                className="mb-3 flex items-start gap-2 border border-[var(--ink)] px-2.5 py-2"
+                style={{
+                  background:
+                    notice.tone === "error" ? "var(--coral)" : "var(--bone)",
+                  color: notice.tone === "error" ? "#fff" : "inherit",
+                }}
+                role="status"
+              >
+                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+                <div className="min-w-0 grid gap-1">
+                  <span className="text-xs leading-5">{notice.message}</span>
+                  {phase === "stalled" ? (
+                    <DashboardLink
+                      href={traceUrl}
+                      className="mono w-fit border border-[var(--ink)] bg-white px-1.5 py-0.5 text-[10px] uppercase text-[var(--ink)]"
+                    >
+                      Open trace
+                    </DashboardLink>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             {activeStage === "run" ? (
               <RunControls
                 brief={brief}
@@ -490,9 +609,11 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
             {activeStage === "evaluate" ? (
               <EvaluateControls
                 brief={brief}
+                experimentPending={experimentPending}
                 experimentUrl={experimentUrl}
                 scoresUrl={scoresUrl}
                 selectedSignal={lastFeedback?.signal ?? null}
+                signalPending={signalPending}
                 onRunExperiment={runExperiment}
                 onSignal={sendSignal}
               />
@@ -781,16 +902,20 @@ function ObserveControls({
 
 function EvaluateControls({
   brief,
+  experimentPending,
   experimentUrl,
   scoresUrl,
   selectedSignal,
+  signalPending,
   onRunExperiment,
   onSignal,
 }: {
   brief: BriefOutput | null;
+  experimentPending: boolean;
   experimentUrl: string;
   scoresUrl: string;
   selectedSignal: ResearchFeedbackSignal | null;
+  signalPending: boolean;
   onRunExperiment: () => void;
   onSignal: (signal: "useful" | "missed-context" | "saved") => void;
 }) {
@@ -798,7 +923,7 @@ function EvaluateControls({
   const actionButtonClass =
     "demo-segment-button inline-flex h-8 w-full min-w-0 items-center justify-center gap-1 rounded-none px-1.5 text-[11px] disabled:pointer-events-none disabled:opacity-55";
   const isOtherSignal = (signal: ResearchFeedbackSignal) =>
-    selectedSignal !== null && selectedSignal !== signal;
+    (selectedSignal !== null && selectedSignal !== signal) || signalPending;
 
   return (
     <div className="grid gap-3">
@@ -871,11 +996,14 @@ function EvaluateControls({
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
         <Button
           variant="outline"
-          className="demo-segment-button h-10 w-full min-w-0 rounded-none text-sm"
+          className="demo-segment-button h-10 w-full min-w-0 rounded-none text-sm disabled:pointer-events-none disabled:opacity-55"
+          disabled={experimentPending}
           onClick={onRunExperiment}
         >
           <FlaskConical className="size-4" />
-          <span className="truncate">Run model bakeoff</span>
+          <span className="truncate">
+            {experimentPending ? "Starting bakeoff…" : "Run model bakeoff"}
+          </span>
         </Button>
         <DashboardLink
           href={experimentUrl}

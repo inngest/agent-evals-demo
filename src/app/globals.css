@@ -194,6 +194,13 @@ button {
   box-shadow: 0 0 0 1px rgba(26, 22, 28, 0.18);
 }
 
+/* Poll deadline reached while the run is still going in Inngest. Static, not
+   pulsing: the app has stopped watching, so it must not look live. */
+.status-dot[data-state="stalled"] {
+  background: var(--citrine);
+  box-shadow: 0 0 0 1px rgba(26, 22, 28, 0.18);
+}
+
 .step-in {
   animation: step-in 260ms ease both;
 }
