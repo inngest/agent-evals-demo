@@ -847,7 +847,7 @@ export function LoopDemo({ snippets, primitives }: LoopDemoProps) {
         </section>
       </div>
 
-      <div className="pointer-events-none fixed bottom-3 left-1/2 z-50 flex max-w-[calc(100vw-24px)] -translate-x-1/2 gap-2 xl:left-3 xl:translate-x-0">
+      <div className="pointer-events-none fixed bottom-3 left-1/2 z-50 flex max-w-[calc(100vw-24px)] -translate-x-1/2 gap-2 xl:left-auto xl:right-3 xl:translate-x-0">
         {toast ? (
           <div className="flex h-8 min-w-0 items-center gap-2 border border-[var(--ink)] bg-white px-2 shadow-[3px_3px_0_#1a161c]">
             <Check className="size-3.5 text-[var(--teal)]" />
