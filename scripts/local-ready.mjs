@@ -3,7 +3,6 @@
 import { spawn } from "node:child_process";
 
 const baseUrl = process.env.DEMO_BASE_URL ?? process.argv[2] ?? "http://localhost:3001";
-const seedCount = process.env.DEMO_LOCAL_READY_SEED_COUNT ?? "2";
 
 const steps = [
   {
@@ -23,33 +22,9 @@ const steps = [
     env: { DEMO_BASE_URL: baseUrl },
   },
   {
-    label: "Smoke",
-    command: "npm",
-    args: ["run", "demo:smoke"],
-    env: { DEMO_BASE_URL: baseUrl },
-  },
-  {
-    // The loop demo at `/` is what the booth actually shows. "Smoke" above
-    // only covers the legacy incident-triage routes.
     label: "Loop smoke",
     command: "npm",
     args: ["run", "demo:smoke-loop"],
-    env: { DEMO_BASE_URL: baseUrl },
-  },
-  {
-    label: "Seeded smoke",
-    command: "npm",
-    args: ["run", "demo:smoke"],
-    env: {
-      DEMO_BASE_URL: baseUrl,
-      DEMO_SMOKE_SEED: "1",
-      DEMO_SMOKE_SEED_COUNT: seedCount,
-    },
-  },
-  {
-    label: "Viewport QA",
-    command: "npm",
-    args: ["run", "demo:viewport"],
     env: { DEMO_BASE_URL: baseUrl },
   },
 ];

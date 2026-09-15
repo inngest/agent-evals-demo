@@ -1,5 +1,4 @@
 import { codeToHtml, type ShikiTransformer } from "shiki";
-import { codeSnippets, type CodeSnippet } from "@/content/code-snippets";
 import {
   loopSnippets,
   type LoopSnippet,
@@ -19,10 +18,6 @@ export type AnySnippet = {
   code: string;
 };
 
-export type HighlightedCodeSnippet = CodeSnippet & {
-  html: string;
-};
-
 export type HighlightedLoopSnippet = LoopSnippet & {
   html: string;
 };
@@ -30,12 +25,6 @@ export type HighlightedLoopSnippet = LoopSnippet & {
 export type HighlightedPrimitiveCard = PrimitiveCard & {
   html: string;
 };
-
-export async function getHighlightedCodeSnippets(): Promise<
-  HighlightedCodeSnippet[]
-> {
-  return highlightSnippets<CodeSnippet>(codeSnippets);
-}
 
 export async function getHighlightedLoopSnippets(): Promise<
   HighlightedLoopSnippet[]

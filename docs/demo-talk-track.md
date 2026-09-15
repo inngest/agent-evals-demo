@@ -84,12 +84,10 @@ Use the event page calendar for the handoff: [EVENT PAGE URL].
 Local rehearsal:
 
 ```bash
-npm run demo:doctor
 npm run lint
 npm run build
 DEMO_BASE_URL=http://localhost:3001 npm run demo:preflight
-DEMO_BASE_URL=http://localhost:3001 npm run demo:smoke
-DEMO_BASE_URL=http://localhost:3001 npm run demo:viewport
+DEMO_BASE_URL=http://localhost:3000 npm run demo:smoke-loop
 ```
 
 Also confirm the sandbox probe:
@@ -105,8 +103,7 @@ Cloud rehearsal:
 
 ```bash
 DEMO_BASE_URL=https://<vercel-domain> npm run demo:preflight
-DEMO_BASE_URL=https://<vercel-domain> npm run demo:smoke
-npm run demo:seed-research-load -- --count 40 --experiments 20
+DEMO_BASE_URL=https://<render-domain> npm run demo:smoke-loop
 ```
 
 ## 90-Second Loop
@@ -201,7 +198,7 @@ The demo is dry-run ready when:
   order on the deployed cloud demo.
 - The sandbox probe reports `mode: "sandbox"` on the deployed demo, or the
   team has explicitly approved the simulated labeling for the event.
-- `npm run demo:preflight` and `npm run demo:smoke` pass against the final
+- `npm run demo:preflight` and `npm run demo:smoke-loop` pass against the final
   demo URL, and research history is seeded.
 - Lauren/Riley/DevRel agree on the scripts, and 2-3 drivers are signed off.
 - A 90-second loop and 2-3 minute contingency recording exist.
@@ -214,5 +211,4 @@ The demo is dry-run ready when:
   narrative to the beta caveat and show the trace without the sandbox steps,
   or run locally where the beat is simulated. Never debug sandboxes live at
   the booth.
-- If seeding fails, rerun `npm run demo:seed-research-load`.
 - If network or Cloud auth is flaky, switch to the contingency recording.

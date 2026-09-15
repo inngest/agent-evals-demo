@@ -3,7 +3,6 @@ import {
   buildResearchRunSummary,
   getResearchStep,
   researchSteps,
-  type ResearchModel,
   type ResearchRunSummary,
   type ResearchStepId,
 } from "@/content/research-demo";

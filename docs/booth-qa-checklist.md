@@ -1,6 +1,6 @@
 # Booth QA Checklist
 
-Use this checklist for DEV-425 sign-off. The goal is to prove the split-screen
+Use this checklist for booth sign-off. The goal is to prove the split-screen
 demo works on the actual presentation setups, not only in a local browser.
 
 ## Event Constraint
@@ -68,14 +68,13 @@ scaling, mirrored/projector behavior, and right-side Inngest Cloud dashboard.
    ```
 
    Run from a shell that also has `INNGEST_API_KEY` and
-   `INNGEST_INSIGHTS_SCORE_QUERY` exported.
+   Cloud keys exported.
 
    Run the individual checks only while debugging:
 
    ```bash
    DEMO_BASE_URL=<demo-url> npm run demo:preflight
-   DEMO_BASE_URL=<demo-url> npm run demo:smoke
-   DEMO_BASE_URL=<demo-url> npm run demo:viewport
+   DEMO_BASE_URL=<demo-url> npm run demo:smoke-loop
    ```
 
    The viewport QA script captures screenshots and a JSON report under
@@ -84,7 +83,6 @@ scaling, mirrored/projector behavior, and right-side Inngest Cloud dashboard.
 4. Seed history:
 
    ```bash
-   DEMO_BASE_URL=<demo-url> DEMO_SEED_TOKEN=<token> npm run demo:seed
    ```
 
 5. Open Inngest Runs filtered to the demo app/environment.

@@ -17,7 +17,7 @@ when that banner is in use.
 ## Do Not Record Until
 
 - Final demo URL passes `npm run demo:preflight`.
-- Final demo URL passes `npm run demo:smoke`.
+- Final demo URL passes `npm run demo:smoke-loop`.
 - Cloud history is seeded for the real demo app/environment.
 - Inngest dashboard filters are set and ready.
 - The talk track in `docs/demo-talk-track.md` is approved.

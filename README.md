@@ -1,20 +1,24 @@
 # Inngest Booth Demo — Unbreakable agents, invisible infra.
 
 This repo holds the booth demo for [EVENT NAME] ([DATES], booth [BOOTH #]).
-The story is a loop: **Run -> Observe -> A/B Test**, with Sandboxes (beta) as
-a Run-stage beat.
+The story is a loop: **Run -> Observe -> A/B Test**.
 
-- `/` is the loop demo: a real Inngest v4 research agent (durable steps,
-  retry/replay, traces) with the new positioning, sandbox execution, and
-  per-stage code snippets.
-- `/research` is the legacy three-act research demo (Durable / Scores /
-  Experiment), kept for rehearsal and comparison.
-- `/booth-story` and `/booth-control` are older incident-triage surfaces,
-  also kept for reference.
+`/` is the only demo surface: a real Inngest v4 research agent with durable
+steps, retry and replay, live traces, and per-stage code snippets. The earlier
+incident-triage and three-act surfaces were retired; they are in git history if
+they are ever needed again.
 
-The LLM, research corpus, and score values are mocked. The only live pieces
-are the real Inngest function, its traces, and (in cloud mode) the real
-score, experiment, and sandbox primitives.
+The research corpus is mocked, and the model is mocked unless OpenRouter is
+configured. The live pieces are the Inngest function, its captured step
+timeline, and (in cloud mode) the real score, experiment and defer primitives.
+
+## Sandboxes (beta) are off by default
+
+Set `NEXT_PUBLIC_DEMO_SANDBOX=1` to enable them. The beta is access-gated per
+Inngest environment, so with the flag off the feature is absent entirely: no
+toggle, no pillar, no `step.sandbox` in the code pane, and no sandbox beat in
+the run. `/api/demo/status` reports `sandboxEnabled` separately from the
+entitlement probe, so "turned off" and "not entitled" stay distinguishable.
 
 ## Sandboxes (beta)
 
@@ -76,22 +80,10 @@ at that app URL:
 APP_URL=http://localhost:3001 npm run inngest:dev
 ```
 
-If you are unsure which port is the current demo app, run:
-
-```bash
-npm run demo:doctor
-```
-
-It scans the common local ports, reports the detected app URL, confirms the
-local Inngest dev server, and shows the exact preflight/local-ready commands to
-run next. It also prints the missing Cloud handoff exports so the production
-setup can resume without hunting through the docs.
-
 For the booth split-screen, keep the loop demo at `/` on one side and open
 the Inngest dev server at `http://localhost:8288` on the other. The Run
 stage's `Run research agent` button sends a real `research/run.requested`
-event (with the sandbox flag armed) so the Runs list shows live history.
-`npm run demo:seed-research-load` seeds a larger corpus for the dashboard.
+event so the Runs list shows live history.
 
 ## Cloud mode (`DEMO_TARGET`)
 
@@ -153,7 +145,7 @@ Real primitives (scores, experiments, sandboxes) require `inngest >= 4.20.0`
 3. Seed the Cloud corpus of real runs, scores, and experiments:
 
    ```bash
-   DEMO_TARGET=cloud npm run demo:seed-cloud
+   DEMO_TARGET=cloud npm run demo:smoke-loop
    ```
 
    The seeder is idempotent (deterministic event ids dedupe re-runs) and refuses to run
@@ -186,14 +178,6 @@ The app is wired for Inngest Cloud the same way the swag-store apps are:
 - `NEXT_PUBLIC_INNGEST_INSIGHTS_URL` optionally points every "Open Insights"
   button at a saved Cloud Insights query. If omitted, the app opens the generic
   Insights route for the configured dashboard environment.
-- `INNGEST_API_KEY` + `INNGEST_INSIGHTS_SCORE_QUERY` are optional. When both
-  are present, `/api/score` reads the Scores panel from Inngest Insights.
-  Without them, the panel uses deterministic seeded demo signals. See
-  `docs/insights-score-query.md` for the event contract and Cloud query setup.
-- `DEMO_SEED_TOKEN` protects `/api/demo/seed` and `/api/demo/reset` in
-  production. Local dev can use the in-app controls without a token; deployed
-  seeding should use the runbook command. The token is ignored outside
-  production so copied Cloud env vars do not break local rehearsals.
 
 ## Deploy to Render
 
@@ -211,9 +195,8 @@ dashboard URL) and prompted secrets.
    reads `render.yaml` and prompts for the secret values:
    - `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` (required, from your Inngest
      Cloud environment's "Keys" page)
-   - `DEMO_SEED_TOKEN` (required; pick any unguessable string)
    - The rest are optional (`INNGEST_ENCRYPTION_KEY`, `INNGEST_ENV`,
-     `INNGEST_API_KEY`, `INNGEST_INSIGHTS_SCORE_QUERY`,
+     `INNGEST_API_KEY`,
      `NEXT_PUBLIC_INNGEST_RUNS_URL`, `NEXT_PUBLIC_INNGEST_INSIGHTS_URL`) —
      leave blank to skip.
 3. Apply. First build takes a few minutes; the service goes live once
@@ -259,20 +242,7 @@ DEMO_BASE_URL=https://<render-domain> npm run demo:preflight
 Smoke-test the foreground golden path:
 
 ```bash
-DEMO_BASE_URL=https://<render-domain> npm run demo:smoke
 DEMO_BASE_URL=https://<render-domain> npm run demo:smoke-loop
-```
-
-Seed the deployed app (idempotent):
-
-```bash
-DEMO_BASE_URL=https://<render-domain> DEMO_SEED_TOKEN=<token> npm run demo:seed
-```
-
-Check booth split-screen pane sizes:
-
-```bash
-DEMO_BASE_URL=https://<render-domain> npm run demo:viewport
 ```
 
 For non-secret deployment diagnostics, inspect:
@@ -284,7 +254,7 @@ https://<render-domain>/api/demo/status
 To see the current production handoff blockers, use:
 
 ```bash
-npm run demo:cloud-handoff
+npm run demo:cloud-ready
 ```
 
 To smoke-test Cloud auth from localhost, export the same Cloud keys locally

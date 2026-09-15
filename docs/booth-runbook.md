@@ -9,10 +9,8 @@ For display sign-off, use `docs/booth-qa-checklist.md`. For fallback video
 capture, use `docs/contingency-recording.md`.
 
 For the strict requirement-by-requirement status, use
-`docs/demo-readiness-audit.md`.
+`docs/booth-qa-checklist.md`.
 
-For the production Cloud handoff, use `docs/cloud-auth-request.md` first, then
-`docs/cloud-handoff.md`.
 
 ## Event Context
 
@@ -22,8 +20,6 @@ For the production Cloud handoff, use `docs/cloud-auth-request.md` first, then
   (Run / Observe / A/B Test) at `/` covering durability, observability,
   A/B testing, and Sandboxes (beta).
 - Booth surfaces: `/` is the loop demo. Legacy demos remain at `/research`
-  (acts demo), `/booth-story`, and `/booth-control` for rehearsal and
-  comparison only.
 
 ## Sandbox Beta Notes
 
@@ -44,14 +40,11 @@ For the production Cloud handoff, use `docs/cloud-auth-request.md` first, then
 Run these before a dry run or booth shift:
 
 ```bash
-npm run demo:doctor
 npm run lint
 npm run build
 npm run demo:preflight
-npm run demo:smoke
 npm run demo:smoke-loop
-npm run demo:viewport
-npm run demo:cloud-handoff
+npm run demo:cloud-ready
 ```
 
 Open the demo app and Inngest dashboard side by side. The left side is the
@@ -76,7 +69,6 @@ runs at `http://localhost:8288`.
 If a browser tab is on the wrong port, let the repo find the live app:
 
 ```bash
-npm run demo:doctor
 ```
 
 Check the local app surface:
@@ -89,15 +81,13 @@ DEMO_BASE_URL=http://localhost:3001 npm run demo:local-ready
 seeded smoke pass, and viewport QA. Use the individual scripts only when
 debugging a failed step.
 
-`demo:smoke` covers the legacy incident-triage routes only. **`demo:smoke-loop`
-is the one that tests the demo you are actually giving.** It fails if the run
-fell back to the simulated timeline, if no memoized replay happened, or if the
-synthesis step's output does not parse - that last check is what catches the
-research output card silently disappearing.
+**`demo:smoke-loop` is the gate that tests the demo you are actually giving.**
+It fails if the run fell back to the simulated timeline, if no memoized replay
+happened, or if the synthesis step's output does not parse - that last check is
+what catches the research output card silently disappearing.
 
-Note: `demo:viewport` still asserts against the retired four-act root route and
-fails on this branch. That failure predates the loop demo; do not read it as a
-regression.
+`demo:preflight` is the configuration check: app up, Inngest serve endpoint
+answering, keys and mode correct. It deliberately does not run the demo.
 
 For a quick JSON view of the same non-secret readiness state:
 
@@ -107,9 +97,8 @@ curl http://localhost:3001/api/demo/status
 
 ## Cloud Setup
 
-Use `docs/cloud-auth-request.md` for the human credential ask, then
-`docs/cloud-handoff.md` for the detailed env/deploy/sync flow and the
-`npm run demo:cloud-handoff` checker.
+Use `npm run demo:cloud-ready` to confirm the deployed serve endpoint is
+synced, then `npm run demo:preflight` against the deployed URL.
 
 Set these Vercel production environment variables before deploying:
 
@@ -119,8 +108,6 @@ INNGEST_SIGNING_KEY
 INNGEST_ENCRYPTION_KEY
 INNGEST_ENV
 INNGEST_API_KEY
-INNGEST_INSIGHTS_SCORE_QUERY
-DEMO_SEED_TOKEN
 NEXT_PUBLIC_INNGEST_DASHBOARD_URL
 NEXT_PUBLIC_INNGEST_RUNS_URL
 ```
@@ -130,12 +117,8 @@ Notes:
 - Leave `INNGEST_DEV` unset in production.
 - `INNGEST_ENV` is optional when using the default production environment.
 - `INNGEST_INSIGHTS_SCORE_QUERY` should return rows with `runId`, `signal`,
-  `score`, and `scoredAt`. See `docs/insights-score-query.md`.
 - Add `INNGEST_INSIGHTS_SCORE_QUERY` after Cloud score events exist and the
   query has been generated and validated.
-- `DEMO_SEED_TOKEN` protects the production seed and reset endpoints. Do not
-  commit it. Local dev ignores the token so copied Cloud env vars do not break
-  the in-app seed/reset controls during rehearsal.
 - `NEXT_PUBLIC_INNGEST_RUNS_URL` is optional but recommended. Set it to the
   filtered Inngest Runs URL for the conference app/environment so the app's
   `Inngest`, `Open Inngest`, and `View trace` links go directly to the right
@@ -156,18 +139,11 @@ npm run demo:cloud-ready
 ```
 
 `demo:cloud-ready` first runs deploy-phase handoff checks, then syncs the
-deployed `/api/inngest` endpoint. It optionally seeds Cloud history when
-`DEMO_CLOUD_READY_SEED=1`, validates the Insights score query, then runs the
-final Cloud handoff, preflight, smoke, and viewport QA. It fails if score
-history is still using seeded/local fallback data instead of
-`INNGEST_INSIGHTS_SCORE_QUERY`. Use `docs/insights-score-query.md` to generate
-and validate that query.
+deployed `/api/inngest` endpoint.
 
-The smoke command checks the foreground golden path: trigger agent, run query,
-save query, score, and local reset. It only seeds history when
-`DEMO_SMOKE_SEED=1` is set.
-The viewport command captures browser screenshots and checks for missing core
-controls or page-level horizontal overflow across booth-style split panes.
+`demo:smoke-loop` runs a real agent against the deployed URL and asserts on the
+captured timeline, so it is the check that proves the demo works rather than
+merely that the app booted.
 
 To sync the deployed serve endpoint manually before a seed-only dry run:
 
@@ -176,46 +152,6 @@ npx inngest-cli@latest api --prod sync-app \
   --app-id <cloud-app-id> \
   --url https://<vercel-domain>/api/inngest
 ```
-
-## Seed Cloud History
-
-Seed the deployed app before dry runs and booth shifts:
-
-```bash
-DEMO_BASE_URL=https://<vercel-domain> \
-DEMO_SEED_TOKEN=<token> \
-npm run demo:seed
-```
-
-For deployed URLs, `demo:seed` fails before sending anything unless the URL is
-HTTPS and `DEMO_SEED_TOKEN` is present.
-
-Optional:
-
-```bash
-DEMO_SEED_COUNT=24 npm run demo:seed
-```
-
-Before seeding manually, make sure the deployed `/api/inngest` endpoint has
-been synced in Cloud; `demo:cloud-ready` does this automatically before its
-optional seed step.
-
-The seed route sends `app/query.requested` events plus `app/query.saved`
-signals. The durable `score-query-signal` function emits the downstream
-`app/query.scored` events that power the Scores/Insights story. The local UI
-button is intentionally convenient for dev-server rehearsals; production
-seeding should use the tokenized command.
-
-`npm run demo:seed` should print the number of demo runs, happy-path runs,
-retry-demo runs, saved score signals, discarded score signals, total events
-sent, dashboard URL, serve endpoint, and the exact preflight/smoke commands to
-run next. Treat malformed output, zero score signals, missing retry-demo runs,
-or missing saved/discarded signal variety as a failed seed, not as a partial
-success.
-
-After a fresh Cloud seed, allow the durable score runs a few seconds to emit
-`app/query.scored`. `DEMO_CLOUD_READY_SEED=1 npm run demo:cloud-ready` retries
-the Insights check automatically.
 
 ## Research Score Heartbeat
 
@@ -230,7 +166,6 @@ Use this when the Inngest dashboard needs a large history of the research
 agent demo (this is the loop demo's agent):
 
 ```bash
-npm run demo:seed-research-load -- --count 250 --experiments 200
 ```
 
 The command loads `.env.local`, sends directly to the Inngest Cloud Event API,
@@ -248,13 +183,11 @@ and emits:
 Preview the exact pattern without sending anything:
 
 ```bash
-npm run demo:seed-research-load -- --dry-run --count 40 --experiments 20
 ```
 
 Useful knobs:
 
 ```bash
-npm run demo:seed-research-load -- \
   --count 500 \
   --experiments 500 \
   --failure-rate 0.12 \
@@ -321,8 +254,6 @@ MAR-166.
 - If the cloud sandbox beat fails (403 `access_denied`, capacity), check
   `/api/demo/status` `sandbox.mode`. The demo falls back to the labeled
   simulated beat; narrate the beta caveat and keep the walkthrough moving.
-- If production seeding returns 401/403, confirm `DEMO_SEED_TOKEN` is set in
-  Vercel and in the local shell running `npm run demo:seed`.
 - If production reset returns 401/403 from a browser interaction, that is
   expected. Use the local controls to reset the presenter state; server-side
   demo history reset is intentionally protected in production.

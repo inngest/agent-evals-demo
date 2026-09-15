@@ -84,12 +84,11 @@ Avoid:
 
 ## Recovery
 
-- Wrong local port: run `npm run demo:doctor`.
+- Wrong local port: `npm run demo:booth` prints both URLs.
 - No Inngest runs: check `/api/demo/status`, event keys, signing key, and
   Cloud app sync.
 - Cloud sandbox 403 or capacity error: skip the sandbox beat, narrate the
   beta caveat, show the trace. Do not debug live.
-- Seed failed: rerun `npm run demo:seed-research-load`.
 - Wi-Fi or auth is unstable: use the fallback recording.
 
 ## Driver Sign-Off

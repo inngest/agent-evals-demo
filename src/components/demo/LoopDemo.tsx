@@ -26,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import {
   BRIEF_STEP_ID,
   defaultResearchTopic,
-  type ResearchStepId,
   type ResearchRunSummary,
 } from "@/content/research-demo";
 import {
