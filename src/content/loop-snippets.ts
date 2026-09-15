@@ -2,7 +2,18 @@
 // from code-snippets.ts so the legacy act demos at /research, /booth-story,
 // and /booth-control keep rendering unchanged.
 
-export type LoopSnippetId = "run" | "observe" | "evaluate";
+/**
+ * The Evaluate stage is split three ways so the code pane can follow whichever
+ * sub-action the driver just used: score a run now, score it later via defer,
+ * or compare models. One combined snippet meant the audience was looking at
+ * three primitives at once while the driver talked about one.
+ */
+export type LoopSnippetId =
+  | "run"
+  | "observe"
+  | "evaluate-score"
+  | "evaluate-defer"
+  | "evaluate-experiment";
 
 export type LoopSnippet = {
   id: LoopSnippetId;
@@ -122,9 +133,9 @@ export const modelQualityByVariant = \`
 \`;
 // @demo-highlight-end`;
 
-const evaluateCode = `import { createScorer } from "inngest/experimental";
-import { inngest, researchRunRequested } from "@/inngest/client";
-import { gradeResearchBrief, synthesizeBrief } from "@/lib/research";
+const evaluateScoreCode = `import { createScorer } from "inngest/experimental";
+import { inngest } from "@/inngest/client";
+import { gradeResearchBrief } from "@/lib/research";
 
 // A score is just your function returning 0..1. Durable, like
 // everything else, and attached back to the run that did the work.
@@ -142,54 +153,93 @@ export const researchQualityScorer = createScorer(
 );
 // @demo-highlight-end
 
-export const researchAgent = inngest.createFunction(
-  { id: "research-agent", triggers: [researchRunRequested] },
-  async ({ event, step, group, defer }) => {
-    const evidence = await step.run("load-research-evidence", () =>
-      loadEvidence({ topic: event.data.topic })
-    );
+// A product signal is a score too. step.score attaches it to the
+// run that produced the brief, inside a durable step.
+// @demo-highlight-start
+export const scoreFromFeedback = inngest.createFunction(
+  { id: "research-agent-score-run", triggers: [researchFeedbackRecorded] },
+  async ({ event, step }) => {
+    await step.score("attach-research-human-feedback-score", {
+      runId: event.data.parentRunId,
+      name: "research_human_feedback",
+      value: event.data.signal === "missed-context" ? 0 : 1,
+    });
+  }
+);
+// @demo-highlight-end`;
 
-    // Evaluate LATER: defer() scores this run after it finalizes.
-    // The scorer can use data that lands days or even weeks later.
+const evaluateDeferCode = `import { createScorer } from "inngest/experimental";
+import { inngest } from "@/inngest/client";
+
+// The outcome of a brief is not known when the run ends. It lands
+// when someone ships the recommendation, days or weeks later.
+export const researchOutcomeScorer = createScorer(
+  inngest,
+  { id: "research-outcome-scorer" },
+  async ({ event }) => ({
+    name: "research_deferred_outcome",
+    value: event.data.outcome === "shipped" ? 1 : 0,
+    // The ORIGINAL run, not the run doing the scoring.
+    runId: event.data.parentRunId,
+  })
+);
+
+export const scoreOnOutcome = inngest.createFunction(
+  { id: "research-agent-score-run", triggers: [researchOutcomeRecorded] },
+  async ({ event, defer }) => {
+    // defer() scores a run that finalized long ago. No pipeline,
+    // no join, no warehouse. The score lands on the original run.
     // @demo-highlight-start
-    defer("score-brief-quality", {
-      function: researchQualityScorer,
+    await defer("research-outcome:" + event.data.researchRunId, {
+      function: researchOutcomeScorer,
       data: {
-        researchRunId: event.data.researchRunId,
-        brief,
-        sources: evidence.sources,
+        parentRunId: event.data.parentRunId,
+        outcome: event.data.outcome,
+        observedAt: event.data.observedAt,
       },
     });
     // @demo-highlight-end
+  }
+);`;
 
-    // Evaluate NOW: the same model step becomes an experiment.
-    // Every score lands on the variant that produced it.
+const evaluateExperimentCode = `import { experiment } from "inngest";
+import { inngest } from "@/inngest/client";
+import { synthesizeBrief } from "@/lib/research";
+
+export const modelBakeoff = inngest.createFunction(
+  { id: "research-agent-model-bakeoff", triggers: [researchExperimentRequested] },
+  async ({ step, group }) => {
+    // Real traffic splits across the variants. Each run picks one.
     // @demo-highlight-start
-    const { result: brief, variant, experimentRef } = await group.experiment(
+    const { result, variant, experimentRef } = await group.experiment(
       "research-agent-model-bakeoff",
       {
         variants: {
           "gpt-5.5": () =>
-            step.run("synthesize-gpt-5.5", () =>
-              synthesizeBrief({ model: "gpt-5.5", evidence })
+            step.run("evaluate-research-brief-gpt-5.5", () =>
+              synthesizeBrief({ model: "gpt-5.5" })
             ),
           "claude-opus-4.8": () =>
-            step.run("synthesize-opus-4.8", () =>
-              synthesizeBrief({ model: "claude-opus-4.8", evidence })
+            step.run("evaluate-research-brief-claude-opus-4.8", () =>
+              synthesizeBrief({ model: "claude-opus-4.8" })
             ),
         },
         select: experiment.weighted({ "gpt-5.5": 50, "claude-opus-4.8": 50 }),
       }
     );
+    // @demo-highlight-end
 
+    // Every score lands on the variant that produced it, so the
+    // comparison is built from real runs, not a separate harness.
+    // @demo-highlight-start
     await inngest.score.experiment({
       experiment: experimentRef,
-      name: "research_token_cost_usd",
-      value: brief.costUsd,
+      name: "research_quality",
+      value: result.qualityScore,
     });
     // @demo-highlight-end
 
-    return { researchRunId: event.data.researchRunId, variant, brief };
+    return { variant, ...result };
   }
 );`;
 
@@ -213,13 +263,31 @@ export const loopSnippets: LoopSnippet[] = [
     code: observeCode,
   },
   {
-    id: "evaluate",
+    id: "evaluate-score",
     stage: 3,
-    label: "Evaluate",
-    eyebrow: "Scores + Experiments + Defer",
+    label: "Score now",
+    eyebrow: "createScorer + step.score",
     description:
-      "createScorer turns any rubric into a durable score function. defer() evaluates after the run finalizes, and group.experiment routes real traffic across models with scores attached per variant.",
-    code: evaluateCode,
+      "A score is your own function returning 0..1. createScorer makes it durable, and step.score attaches a product signal to the run that produced the work.",
+    code: evaluateScoreCode,
+  },
+  {
+    id: "evaluate-defer",
+    stage: 3,
+    label: "Score later",
+    eyebrow: "defer",
+    description:
+      "The outcome is not known when the run ends. defer() scores a run that finalized days or weeks ago, and the score still lands on the original run.",
+    code: evaluateDeferCode,
+  },
+  {
+    id: "evaluate-experiment",
+    stage: 3,
+    label: "Compare models",
+    eyebrow: "group.experiment",
+    description:
+      "group.experiment routes real traffic across variants. Every score attaches to the variant that produced it, so the comparison is built from real runs.",
+    code: evaluateExperimentCode,
   },
 ];
 

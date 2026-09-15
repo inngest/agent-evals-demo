@@ -1,5 +1,5 @@
 // Reference cards for the Primitives tab on the loop demo's code pane.
-// Intentionally minimal: the four core primitives the whole demo runs on.
+// Intentionally minimal: the core primitives the whole demo runs on.
 // Each card: the primitive's name, a one-line booth tagline, and a short
 // signature lifted from (or matching) the demo's real code.
 
@@ -33,6 +33,13 @@ const scoreCode = `export const researchQualityScorer = createScorer(
   async ({ event, step }) => ({ name: "research_quality", value: score })
 );`;
 
+const deferCode = `// Score a run that finalized days or weeks ago. The score
+// still lands on the original run, no pipeline required.
+await defer("research-outcome:" + researchRunId, {
+  function: researchOutcomeScorer,
+  data: { parentRunId, outcome, observedAt },
+});`;
+
 export const primitiveCards: PrimitiveCard[] = [
   {
     id: "event",
@@ -57,5 +64,11 @@ export const primitiveCards: PrimitiveCard[] = [
     name: "Score",
     tagline: "Your rubric becomes a durable score attached to the run.",
     code: scoreCode,
+  },
+  {
+    id: "defer",
+    name: "Defer",
+    tagline: "Score a finished run later, when the real outcome lands.",
+    code: deferCode,
   },
 ];

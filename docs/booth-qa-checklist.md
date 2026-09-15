@@ -9,6 +9,23 @@ The live booth is `U-G26` and opens Monday, June 29, 2026 at 4 PM. Complete
 Cloud readiness, hardware display QA, and driver sign-off before that first
 booth shift.
 
+## Evaluate Stage Sign-off
+
+Run once per display before the shift. Each line has an observable result.
+
+- [ ] `Good` adds a `research_human_feedback` row showing the run id, then a
+      `step attach-research-human-feedback-score` receipt within ~10s.
+- [ ] `Recommendation shipped` adds a `research_deferred_outcome` row with a
+      `+21d` badge and **the same run id as the first row**. If the ids differ,
+      stop: the deferred-scoring beat is the one claim that must be exact.
+- [ ] `Run model bakeoff` reaches `8 of 8 complete`, lists both variants with
+      non-zero runs, and badges a winner.
+- [ ] Quality bars are distinguishable from ~2m away.
+- [ ] `Run again with <winner>` returns to the Run stage and starts a new run.
+- [ ] The code pane follows each click: `Good` shows step.score, `shipped`
+      shows defer(), `bakeoff` shows group.experiment.
+- [ ] No `SIMULATED` banner anywhere while Inngest is reachable.
+
 ## Required Setups
 
 | Setup | Target viewport | Window layout | Status |
