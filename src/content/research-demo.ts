@@ -10,6 +10,14 @@ export type ResearchStepId =
   | "publish-brief"
   | "notify-stakeholders";
 
+/**
+ * The synthesis step id. The loop demo string-matches this to pull the brief
+ * out of the captured timeline, so both sides import it from here rather than
+ * repeating the literal: renaming the step in one place only would silently
+ * remove the research output card.
+ */
+export const BRIEF_STEP_ID = "call-llm-synthesize-brief" satisfies ResearchStepId;
+
 export type ResearchStep = {
   id: ResearchStepId;
   label: string;

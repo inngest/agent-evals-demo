@@ -1,4 +1,8 @@
-import { researchSteps, researchSessionId } from "@/content/research-demo";
+import {
+  BRIEF_STEP_ID,
+  researchSteps,
+  researchSessionId,
+} from "@/content/research-demo";
 import {
   inngest,
   researchFeedbackRecorded,
@@ -151,8 +155,8 @@ export const researchAgent = inngest.createFunction(
         input: { topic, sources: ["Parallel", "G2", "GitHub"] },
       }),
     );
-    const brief = await step.run("call-llm-synthesize-brief", () =>
-      runResearchCall("call-llm-synthesize-brief", {
+    const brief = await step.run(BRIEF_STEP_ID, () =>
+      runResearchCall(BRIEF_STEP_ID, {
         attempt,
         failStep: failureStep,
         latencyMs,

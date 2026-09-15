@@ -32,15 +32,48 @@ export type RunTimeline = {
   startedAt: number;
   durationMs?: number;
   steps: TimelineStep[];
+  /**
+   * True only for the offline rehearsal timeline built when Inngest is
+   * unreachable. Real captured runs never set it. The UI badges it loudly.
+   */
+  simulated?: boolean;
 };
 
 type TrackedRun = RunTimeline & { lastTouchedAt: number };
 
-const MAX_TRACKED_RUNS = 20;
-const MAX_RUNS_PER_KEY = 8;
+const MAX_TRACKED_RUNS = 64;
+const MAX_RUNS_PER_KEY = 16;
 const MAX_PAYLOAD_CHARS = 2000;
+/**
+ * Model-call steps carry the artifact the booth actually shows (the research
+ * brief). A real OpenRouter completion runs well past the default cap, so
+ * those steps get a larger budget. Everything else stays small: the status
+ * route ships the whole timeline on an 800ms poll.
+ */
+const MAX_PAYLOAD_CHARS_LARGE = 6000;
+/** Runs touched this recently are never evicted, even under pressure. */
+const EVICTION_GRACE_MS = 10 * 60 * 1000;
 
-function serializePayload(value: unknown): string | undefined {
+function payloadBudget(displayName: string): number {
+  return displayName.startsWith("call-")
+    ? MAX_PAYLOAD_CHARS_LARGE
+    : MAX_PAYLOAD_CHARS;
+}
+
+/**
+ * Serializes a step payload, clamping it to `maxChars`. Overflow MUST stay
+ * parseable: the UI does `JSON.parse(step.output)` to pull the brief out, and
+ * an unparseable payload silently removes the research output card.
+ *
+ * When the value is a plain object we clamp its longest string fields and keep
+ * the envelope shape, so consumers still read `output`/`source`/`tokens` and
+ * merely see clipped prose. Anything else falls back to a preview wrapper.
+ * Both forms carry `__truncated` so the UI can badge them.
+ */
+function serializePayload(
+  value: unknown,
+  maxChars: number = MAX_PAYLOAD_CHARS,
+): string | undefined {
   if (value === undefined) return undefined;
 
   let text: string;
@@ -50,9 +83,63 @@ function serializePayload(value: unknown): string | undefined {
     text = String(value);
   }
 
-  return text.length > MAX_PAYLOAD_CHARS
-    ? `${text.slice(0, MAX_PAYLOAD_CHARS)}… [truncated]`
-    : text;
+  if (text.length <= maxChars) return text;
+
+  const clamped = clampObjectStrings(value, maxChars, text.length);
+  if (clamped !== undefined) return clamped;
+
+  return JSON.stringify({
+    __truncated: true,
+    __chars: text.length,
+    preview: text.slice(0, maxChars),
+  });
+}
+
+/**
+ * Shrinks the longest string properties of a plain object until the whole
+ * thing serializes under `maxChars`. Returns undefined when the value is not a
+ * plain object or cannot be brought under budget this way.
+ */
+function clampObjectStrings(
+  value: unknown,
+  maxChars: number,
+  originalChars: number,
+): string | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const draft: Record<string, unknown> = {
+    ...(value as Record<string, unknown>),
+    __truncated: true,
+    __chars: originalChars,
+  };
+
+  const stringKeys = Object.keys(draft).filter(
+    (key) => typeof draft[key] === "string",
+  );
+  if (stringKeys.length === 0) return undefined;
+
+  // Longest field first: clipping it buys the most room per pass.
+  stringKeys.sort(
+    (a, b) => (draft[b] as string).length - (draft[a] as string).length,
+  );
+
+  for (const key of stringKeys) {
+    let text = JSON.stringify(draft);
+    if (text.length <= maxChars) return text;
+
+    const current = draft[key] as string;
+    const overflow = text.length - maxChars;
+    const nextLength = Math.max(0, current.length - overflow - 16);
+
+    draft[key] = current.slice(0, nextLength);
+    text = JSON.stringify(draft);
+    if (text.length <= maxChars) return text;
+  }
+
+  const final = JSON.stringify(draft);
+  return final.length <= maxChars ? final : undefined;
 }
 
 /**
@@ -74,7 +161,7 @@ export function recordStepInput(
   );
   if (!step) return;
 
-  const serialized = serializePayload(input);
+  const serialized = serializePayload(input, payloadBudget(displayName));
   if (serialized !== undefined) step.input = serialized;
 }
 
@@ -112,9 +199,14 @@ function indexRun(run: TrackedRun, keys: Array<string | undefined>) {
 function prune() {
   if (timelines.size <= MAX_TRACKED_RUNS) return;
 
-  const byAge = [...timelines.values()].sort(
-    (a, b) => a.lastTouchedAt - b.lastTouchedAt,
-  );
+  // A *completed* run stops being touched, which makes it the oldest entry and
+  // therefore the first eviction candidate. That is exactly the run the booth
+  // is still showing, so anything recent is off-limits no matter how full the
+  // store gets. Without this, one experiment fan-out blanks the Run stage.
+  const cutoff = Date.now() - EVICTION_GRACE_MS;
+  const byAge = [...timelines.values()]
+    .filter((run) => run.lastTouchedAt < cutoff)
+    .sort((a, b) => a.lastTouchedAt - b.lastTouchedAt);
 
   for (const run of byAge.slice(0, timelines.size - MAX_TRACKED_RUNS)) {
     timelines.delete(run.runId);
@@ -283,7 +375,7 @@ export const stepTrackerMiddleware = () => {
       if (step && step.status === "running") {
         step.status = "completed";
         step.durationMs = Date.now() - step.startedAt;
-        step.output = serializePayload(output);
+        step.output = serializePayload(output, payloadBudget(step.displayName));
       }
     }
 

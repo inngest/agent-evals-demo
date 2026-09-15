@@ -22,6 +22,7 @@ import { PrimitivesReference } from "@/components/demo/PrimitivesReference";
 import { StepTimeline } from "@/components/demo/StepTimeline";
 import { Button } from "@/components/ui/button";
 import {
+  BRIEF_STEP_ID,
   defaultResearchTopic,
   type ResearchStepId,
   type ResearchRunSummary,
@@ -665,6 +666,9 @@ function RunControls({
               research output
             </span>
             <span className="mono truncate text-[10px] uppercase">
+              {brief.truncated ? (
+                <span className="mr-1.5 text-[var(--coral)]">truncated</span>
+              ) : null}
               {brief.source}
               {brief.tokens > 0 ? (
                 <span className="ml-1.5 text-[var(--muted-copy)]">
@@ -956,7 +960,12 @@ function wait(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-type BriefOutput = { text: string; source: string; tokens: number };
+type BriefOutput = {
+  text: string;
+  source: string;
+  tokens: number;
+  truncated: boolean;
+};
 
 /**
  * Pulls the synthesized research brief out of the live timeline: the
@@ -968,7 +977,7 @@ function extractBriefOutput(timeline: RunTimeline | null): BriefOutput | null {
   if (!timeline) return null;
 
   const step = timeline.steps.find(
-    (step) => step.displayName === "call-llm-synthesize-brief",
+    (step) => step.displayName === BRIEF_STEP_ID,
   );
 
   if (!step?.output) return null;
@@ -978,6 +987,7 @@ function extractBriefOutput(timeline: RunTimeline | null): BriefOutput | null {
       output?: string;
       source?: string;
       tokens?: number;
+      __truncated?: boolean;
     };
 
     if (!parsed.output) return null;
@@ -986,6 +996,7 @@ function extractBriefOutput(timeline: RunTimeline | null): BriefOutput | null {
       text: parsed.output,
       source: parsed.source ?? "model",
       tokens: parsed.tokens ?? 0,
+      truncated: parsed.__truncated === true,
     };
   } catch {
     return null;
