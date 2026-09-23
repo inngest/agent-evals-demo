@@ -6,6 +6,7 @@ import {
 } from "@/inngest/client";
 import {
   FAILURE_STEP_ID,
+  challengerSupportModel,
   currentSupportModel,
   defaultSupportTicketId,
   isSupportTicketId,
@@ -87,7 +88,5 @@ export async function POST(request: Request) {
 }
 
 function normalizeModel(value: unknown): SupportModel {
-  return value === "gpt-5.5" || value === "claude-opus-4.8"
-    ? value
-    : currentSupportModel;
+  return value === challengerSupportModel ? challengerSupportModel : currentSupportModel;
 }

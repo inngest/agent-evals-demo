@@ -1,3 +1,8 @@
+import { challengerSupportModel, currentSupportModel } from "@/content/support-demo";
+
+const current = JSON.stringify(currentSupportModel);
+const challenger = JSON.stringify(challengerSupportModel);
+
 /**
  * Code shown in the "Under the hood" drawer, one snippet per screen (two for
  * the A/B screen, which the drawer follows as the driver moves from the vote
@@ -81,12 +86,12 @@ const { result, experimentRef } = await group.experiment(
   "support-agent-model-split-test",
   {
     variants: {
-      "claude-opus-4.8": () => answerWith("claude-opus-4.8"),
-      "gpt-5.5": () => answerWith("gpt-5.5"),
+      ${current}: () => answerWith(${current}),
+      ${challenger}: () => answerWith(${challenger}),
     },
     select: experiment.weighted({
-      "claude-opus-4.8": 50,
-      "gpt-5.5": 50,
+      ${current}: 50,
+      ${challenger}: 50,
     }),
   }
 );

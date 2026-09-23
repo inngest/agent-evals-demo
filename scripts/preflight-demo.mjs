@@ -86,6 +86,10 @@ function checkConfiguration(body) {
   const llm = body.llm ?? {};
   add("pass", "Model source", `${llm.mode} (${llm.model})`);
 
+  const split = body.splitTest ?? {};
+  add(split.current && split.challenger ? "pass" : "warn", "Split-test models",
+    `${split.current} (current) vs ${split.challenger} (challenger)`);
+
   // Sandboxes are opt-in; report which state the booth will actually show.
   add("pass", "Sandboxes",
     body.sandboxEnabled

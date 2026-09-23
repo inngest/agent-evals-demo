@@ -58,6 +58,7 @@ export const supportAgent = inngest.createFunction(
     const call = (id: SupportStepId, input: unknown) =>
       runSupportCall(id, {
         ticketId: ticket.id,
+        model,
         attempt,
         failStep,
         runId,

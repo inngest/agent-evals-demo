@@ -26,7 +26,7 @@ export const supportExperiment = inngest.createFunction(
     const { ticketId } = event.data;
     // A variant is just a function: this one swaps the model, but the same
     // shape splits prompts, retrievers, vendors or thresholds.
-    const answerWith = (model: typeof currentSupportModel) => () =>
+    const answerWith = (model: string) => () =>
       step.run(variantStepName(model), async () => {
         await new Promise((resolve) => setTimeout(resolve, VARIANT_LATENCY_MS));
         return scoreVariant(model, ticketId);

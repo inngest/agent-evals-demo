@@ -5,7 +5,10 @@ import { checkSandboxAccess } from "@/lib/sandbox";
 import { SANDBOX_ENABLED } from "@/lib/feature-flags";
 import { isOpenRouterConfigured, OPENROUTER_MODEL } from "@/lib/openrouter";
 import { getTimelineStoreStats } from "@/inngest/middlewares/step-tracker";
-import { currentSupportModel } from "@/content/support-demo";
+import {
+  challengerSupportModel,
+  currentSupportModel,
+} from "@/content/support-demo";
 
 export async function GET() {
   const sandbox = await checkSandboxAccess();
@@ -68,6 +71,12 @@ export async function GET() {
       model: isOpenRouterConfigured()
         ? OPENROUTER_MODEL
         : `${currentSupportModel} (mocked)`,
+    },
+    // The split test's two variants, from NEXT_PUBLIC_DEMO_MODEL_*. Labels
+    // only: the scores are scripted by role, so the challenger always wins.
+    splitTest: {
+      current: currentSupportModel,
+      challenger: challengerSupportModel,
     },
     timeline: getTimelineStoreStats(),
   });

@@ -248,6 +248,15 @@ and run:
 npm run dev:cloud
 ```
 
+### Split-test models
+
+`NEXT_PUBLIC_DEMO_MODEL_CURRENT` (default `claude-opus-4.8`) and
+`NEXT_PUBLIC_DEMO_MODEL_CHALLENGER` (default `gpt-5.5`) name the two models the
+A/B screen compares. The current model also labels the main run. The names are
+labels only: the split test's quality and cost are scripted by role
+(`src/lib/demo-models.ts`, `src/lib/experiment-results.ts`), so the challenger
+always wins. They are read at build time.
+
 ### Booth QR code
 
 `NEXT_PUBLIC_BOOTH_CTA_URL` sets where the recap screen's QR code points

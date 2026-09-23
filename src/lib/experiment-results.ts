@@ -7,6 +7,7 @@ import {
   ticketTokenCount,
   type SupportTicketId,
 } from "@/content/support-demo";
+import { modelRole, type ModelRole } from "@/lib/demo-models";
 import type { RunTimeline } from "@/inngest/middlewares/step-tracker";
 
 /**
@@ -25,7 +26,8 @@ export const EXPERIMENT_MODELS = [
   challengerSupportModel,
 ] as const;
 
-export type ExperimentModel = (typeof EXPERIMENT_MODELS)[number];
+/** Model names come from env, so this is any string, not a fixed union. */
+export type ExperimentModel = string;
 
 export type VariantResult = {
   model: ExperimentModel;
@@ -54,16 +56,19 @@ export type ExperimentAggregate = {
   totalRuns: number;
 };
 
-/** Canned per-model quality. The split test's winner is scripted, not measured. */
-const BASE_QUALITY: Record<ExperimentModel, number> = {
-  "claude-opus-4.8": 0.84,
-  "gpt-5.5": 0.91,
+/**
+ * Canned quality by role. The split test's winner is scripted, not measured:
+ * whichever models env names, the challenger wins.
+ */
+const BASE_QUALITY: Record<ModelRole, number> = {
+  current: 0.84,
+  challenger: 0.91,
 };
 
 /** Token usage relative to the canned ticket outputs. */
-const TOKEN_FACTOR: Record<ExperimentModel, number> = {
-  "claude-opus-4.8": 1,
-  "gpt-5.5": 0.96,
+const TOKEN_FACTOR: Record<ModelRole, number> = {
+  current: 1,
+  challenger: 0.96,
 };
 
 /**
@@ -81,12 +86,13 @@ export function scoreVariant(
   ticketId: SupportTicketId,
 ): VariantResult {
   const ticket = getSupportTicket(ticketId);
-  const tokenCount = Math.round(ticketTokenCount(ticket) * TOKEN_FACTOR[model]);
+  const role = modelRole(model);
+  const tokenCount = Math.round(ticketTokenCount(ticket) * TOKEN_FACTOR[role]);
 
   return {
     model,
     ticketId: ticket.id,
-    qualityScore: clamp01(round(BASE_QUALITY[model] + TICKET_JITTER[ticket.id], 3)),
+    qualityScore: clamp01(round(BASE_QUALITY[role] + TICKET_JITTER[ticket.id], 3)),
     tokenCount,
     costUsd: round((tokenCount / 1000) * costPer1kTokens(model), 4),
   };

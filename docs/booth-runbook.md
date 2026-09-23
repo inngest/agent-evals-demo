@@ -104,6 +104,8 @@ INNGEST_ENV                   # optional, defaults to production
 INNGEST_API_KEY
 NEXT_PUBLIC_INNGEST_DASHBOARD_URL
 NEXT_PUBLIC_BOOTH_CTA_URL     # where the recap QR code points; default https://www.inngest.com/docs
+NEXT_PUBLIC_DEMO_MODEL_CURRENT     # split test "current" model; default claude-opus-4.8
+NEXT_PUBLIC_DEMO_MODEL_CHALLENGER  # split test "challenger" model; default gpt-5.5
 OPENROUTER_API_KEY            # optional: a real model writes the reply
 ```
 
@@ -112,6 +114,12 @@ Notes:
 - Leave `INNGEST_DEV` unset in production.
 - `DEMO_TARGET=cloud` switches on the real `step.score` attach and
   `step.metadata`. `group.experiment` runs in both modes.
+- `NEXT_PUBLIC_DEMO_MODEL_*` sets the two split-test models. The current
+  model also labels the main run. They are labels only: quality and price
+  are scripted by role, so the challenger always wins with better quality
+  and lower cost. Two identical names fall back to a distinct default. These
+  are inlined at build time, so redeploy after changing them, and check the
+  pair with `demo:preflight`.
 - With `OPENROUTER_API_KEY` set, only the "Draft reply" step calls the
   model. Check that it still fits the 20s budget with `demo:smoke-loop`.
 - The Inngest app id is still `aie-research-agent-booth-demo`, kept so Cloud

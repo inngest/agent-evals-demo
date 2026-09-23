@@ -8,11 +8,14 @@
  * function does not run.
  */
 
-export type SupportModel = "gpt-5.5" | "claude-opus-4.8";
+import { challengerModel, currentModel, modelRole } from "@/lib/demo-models";
+
+/** Any model name; the two the booth uses come from env (lib/demo-models.ts). */
+export type SupportModel = string;
 
 /** The model the agent runs on today. The split test challenges it. */
-export const currentSupportModel: SupportModel = "claude-opus-4.8";
-export const challengerSupportModel: SupportModel = "gpt-5.5";
+export const currentSupportModel: SupportModel = currentModel;
+export const challengerSupportModel: SupportModel = challengerModel;
 
 export type SupportStepId =
   | "classify-ticket"
@@ -219,18 +222,18 @@ export const defaultSupportTicketId: SupportTicketId = "where-is-my-order";
 export const supportSessionId = "sess-support-booth";
 
 /**
- * Model pricing for the demo's cost numbers, in USD per 1k tokens. Canned, and
- * labelled as illustrative wherever it reaches the screen.
+ * Model pricing for the demo's cost numbers, in USD per 1k tokens. Canned,
+ * labelled as illustrative wherever it reaches the screen, and keyed by role
+ * rather than name so any pair of models from env gets the same story: the
+ * challenger is cheaper.
  */
-const COST_PER_1K_TOKENS: Record<SupportModel, number> = {
-  "claude-opus-4.8": 0.024,
-  "gpt-5.5": 0.017,
-};
+const COST_PER_1K_TOKENS = {
+  current: 0.024,
+  challenger: 0.017,
+} as const;
 
 export function costPer1kTokens(model: string): number {
-  return model.includes("gpt")
-    ? COST_PER_1K_TOKENS["gpt-5.5"]
-    : COST_PER_1K_TOKENS["claude-opus-4.8"];
+  return COST_PER_1K_TOKENS[modelRole(model)];
 }
 
 export type SupportRunSummary = {
@@ -291,7 +294,7 @@ export function buildSupportRunSummary(args: {
     ticketId: ticket.id,
     model,
     qualityScore:
-      args.qualityScore ?? (model.includes("gpt") ? 0.91 : 0.84),
+      args.qualityScore ?? (modelRole(model) === "challenger" ? 0.91 : 0.84),
     tokenCount,
     costUsd: roundCost((tokenCount / 1000) * costPer1kTokens(model)),
     completedAt: args.completedAt ?? new Date().toISOString(),

@@ -7,6 +7,7 @@ import {
 } from "@/content/support-demo";
 import { startPostSpan, startGenAISpan } from "./otel";
 import { recordStepInput } from "@/inngest/middlewares/step-tracker";
+import { modelProvider } from "@/lib/demo-models";
 import {
   completeChat,
   isOpenRouterConfigured,
@@ -15,6 +16,8 @@ import {
 
 type SupportCallOptions = {
   ticketId: SupportTicketId;
+  /** The model this run narrates, for the gen_ai span. */
+  model: string;
   attempt: number;
   failStep?: SupportStepId;
   /** Executor run id, used to record the step input on the live timeline */
@@ -55,10 +58,11 @@ export async function runSupportCall(
 
   let span = null;
   if (step.kind === "llm") {
-    span = await startGenAISpan(
-      useOpenRouter ? `chat ${OPENROUTER_MODEL}` : "chat claude-opus-4-8",
-      {},
-    );
+    const spanModel = useOpenRouter ? OPENROUTER_MODEL : options.model;
+    span = await startGenAISpan(`chat ${spanModel}`, {
+      "gen_ai.request.model": spanModel,
+      "gen_ai.provider.name": modelProvider(spanModel),
+    });
   } else if (step.kind === "api") {
     span = await startPostSpan(`https://api.acme-shop.com/${id}`);
   }

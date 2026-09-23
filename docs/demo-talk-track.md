@@ -140,7 +140,9 @@ takeaway.
 ## Claims To Avoid
 
 - Do not present the split-test winner as a real model benchmark. It is a
-  scripted booth result; the traffic split mechanism is what is real.
+  scripted booth result; the traffic split mechanism is what is real. The
+  model names come from `NEXT_PUBLIC_DEMO_MODEL_*`, and the challenger wins
+  whichever models are configured.
 - Do not present $ figures or the monthly saving as real pricing. The
   screen labels them "illustrative".
 - Do not imply the reply comes from a real LLM unless OpenRouter is
