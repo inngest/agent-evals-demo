@@ -55,9 +55,9 @@ async function checkServeEndpoint() {
   }
 
   const count = body.function_count ?? 0;
-  // The loop demo serves: research-agent (+ its failure handler), score-run,
-  // score-heartbeat, model bakeoff, and the deferred outcome scorer.
-  add(count >= 5 ? "pass" : "fail", "Inngest functions served",
+  // The booth serves: support-agent, its metrics scorer, and the model
+  // split test.
+  add(count >= 3 ? "pass" : "fail", "Inngest functions served",
     `${count} function(s) registered`);
 }
 

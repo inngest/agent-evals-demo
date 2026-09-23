@@ -1,26 +1,38 @@
-import { modelExperimentResult } from "@/lib/mock-research";
+import {
+  challengerSupportModel,
+  costPer1kTokens,
+  currentSupportModel,
+  getSupportTicket,
+  supportTickets,
+  ticketTokenCount,
+  type SupportTicketId,
+} from "@/content/support-demo";
 import type { RunTimeline } from "@/inngest/middlewares/step-tracker";
-import type { ResearchExperimentCorpusRun } from "@/inngest/client";
 
 /**
- * Shared scoring and aggregation for the model A/B test.
+ * Shared scoring and aggregation for the model split test.
  *
  * Three callers need identical numbers: the Inngest function that runs the
  * variants, the results endpoint that aggregates them back for the UI, and the
- * offline fallback when Inngest is unreachable. Keeping the maths here means
- * the rendered comparison always matches what the function actually computed.
+ * booth's labelled fallback when Inngest is unreachable. Keeping the maths
+ * here - with no server-only imports - means the rendered comparison always
+ * matches what the function actually computed, and the client can build the
+ * fallback without a network round trip.
  */
 
-export const EXPERIMENT_MODELS = ["gpt-5.5", "claude-opus-4.8"] as const;
+export const EXPERIMENT_MODELS = [
+  currentSupportModel,
+  challengerSupportModel,
+] as const;
 
 export type ExperimentModel = (typeof EXPERIMENT_MODELS)[number];
 
-export type CorpusSummary = {
-  runCount: number;
-  scoredRunCount: number;
-  positiveSignals: number;
-  negativeSignals: number;
-  averageFeedbackScore: number;
+export type VariantResult = {
+  model: ExperimentModel;
+  ticketId: SupportTicketId;
+  qualityScore: number;
+  tokenCount: number;
+  costUsd: number;
 };
 
 export type VariantAggregate = {
@@ -42,80 +54,74 @@ export type ExperimentAggregate = {
   totalRuns: number;
 };
 
-export function normalizeCorpusRuns(
-  corpusRuns: ResearchExperimentCorpusRun[] | undefined,
-  corpusRunIds: string[],
-): ResearchExperimentCorpusRun[] {
-  if (Array.isArray(corpusRuns) && corpusRuns.length > 0) {
-    return corpusRuns;
-  }
+/** Canned per-model quality. The split test's winner is scripted, not measured. */
+const BASE_QUALITY: Record<ExperimentModel, number> = {
+  "claude-opus-4.8": 0.84,
+  "gpt-5.5": 0.91,
+};
 
-  return corpusRunIds.map((researchRunId) => ({ researchRunId }));
-}
-
-export function summarizeCorpus(
-  corpusRuns: ResearchExperimentCorpusRun[],
-): CorpusSummary {
-  const scoredRuns = corpusRuns.filter((run) =>
-    Number.isFinite(run.feedbackScore),
-  );
-  const positiveSignals = scoredRuns.filter(
-    (run) => run.feedbackSignal === "useful" || run.feedbackSignal === "saved",
-  ).length;
-  const negativeSignals = scoredRuns.filter(
-    (run) => run.feedbackSignal === "missed-context",
-  ).length;
-  const totalScore = scoredRuns.reduce((sum, run) => {
-    return sum + (run.feedbackScore ?? 0);
-  }, 0);
-
-  return {
-    runCount: corpusRuns.length,
-    scoredRunCount: scoredRuns.length,
-    positiveSignals,
-    negativeSignals,
-    averageFeedbackScore:
-      scoredRuns.length > 0 ? round(totalScore / scoredRuns.length, 3) : 0.5,
-  };
-}
-
-export function scoreModelAgainstCorpus(
-  model: string,
-  corpusSummary: CorpusSummary,
-) {
-  const base = modelExperimentResult(model);
-  const feedbackLift = (corpusSummary.averageFeedbackScore - 0.5) * 0.08;
-  const corpusSizeLift = Math.min(0.03, corpusSummary.runCount / 5000);
-
-  return {
-    ...base,
-    qualityScore: clamp01(
-      round(base.qualityScore + feedbackLift + corpusSizeLift, 3),
-    ),
-  };
-}
+/** Token usage relative to the canned ticket outputs. */
+const TOKEN_FACTOR: Record<ExperimentModel, number> = {
+  "claude-opus-4.8": 1,
+  "gpt-5.5": 0.96,
+};
 
 /**
- * Collapses the captured A/B test timelines into per-variant rows.
- *
- * Each run's variant step is named `evaluate-research-brief-<variant>`, so the
- * variant that `group.experiment` actually selected is read back off the step
- * that ran - these are real selections, not a re-simulation.
+ * Small deterministic per-ticket variation so the bars move as runs land,
+ * instead of every run reporting an identical score.
  */
+const TICKET_JITTER: Record<SupportTicketId, number> = {
+  "where-is-my-order": 0.01,
+  "damaged-item": -0.015,
+  "change-address": 0.005,
+};
+
+export function scoreVariant(
+  model: ExperimentModel,
+  ticketId: SupportTicketId,
+): VariantResult {
+  const ticket = getSupportTicket(ticketId);
+  const tokenCount = Math.round(ticketTokenCount(ticket) * TOKEN_FACTOR[model]);
+
+  return {
+    model,
+    ticketId: ticket.id,
+    qualityScore: clamp01(round(BASE_QUALITY[model] + TICKET_JITTER[ticket.id], 3)),
+    tokenCount,
+    costUsd: round((tokenCount / 1000) * costPer1kTokens(model), 4),
+  };
+}
+
+/** Which ticket split-test run `index` replays. Cycles the three presets. */
+export function ticketForExperimentRun(index: number): SupportTicketId {
+  return supportTickets[index % supportTickets.length]!.id;
+}
+
+// Step names are memoization keys and are read back by
+// aggregateExperimentTimelines to recover the selected variant.
+const VARIANT_STEP_PREFIX = "answer-ticket-with-";
+
+export function variantStepName(variant: string): string {
+  return `${VARIANT_STEP_PREFIX}${variant}`;
+}
+
+/** Collapses the captured split-test timelines into per-variant rows. */
 export function aggregateExperimentTimelines(
   timelines: RunTimeline[],
   expectedRuns: number,
 ): ExperimentAggregate {
-  const totals = new Map<
-    string,
-    { runs: number; quality: number; cost: number; tokens: number }
-  >();
+  return aggregateVariantResults(collectVariantResults(timelines), expectedRuns);
+}
 
-  for (const model of EXPERIMENT_MODELS) {
-    totals.set(model, { runs: 0, quality: 0, cost: 0, tokens: 0 });
-  }
-
-  let completedRuns = 0;
+/**
+ * Per-run variant results, in the order the runs finished.
+ *
+ * Each run's variant step is named `answer-ticket-with-<variant>`, so the
+ * variant that `group.experiment` actually selected is read back off the step
+ * that ran - these are real selections, not a re-simulation.
+ */
+export function collectVariantResults(timelines: RunTimeline[]): VariantResult[] {
+  const results: Array<VariantResult & { finishedAt: number }> = [];
 
   for (const timeline of timelines) {
     if (timeline.status !== "completed") continue;
@@ -129,33 +135,62 @@ export function aggregateExperimentTimelines(
 
     if (!variantStep?.output) continue;
 
-    const variant = variantStep.displayName.slice(VARIANT_STEP_PREFIX.length);
-    let parsed: {
-      qualityScore?: number;
-      costUsd?: number;
-      tokenCount?: number;
-    } | null = null;
-
     try {
-      parsed = JSON.parse(variantStep.output);
+      const parsed = JSON.parse(variantStep.output) as Partial<VariantResult>;
+
+      if (!Number.isFinite(parsed.qualityScore)) continue;
+
+      results.push({
+        model: variantStep.displayName.slice(
+          VARIANT_STEP_PREFIX.length,
+        ) as ExperimentModel,
+        ticketId: parsed.ticketId ?? ticketForExperimentRun(0),
+        qualityScore: parsed.qualityScore ?? 0,
+        tokenCount: parsed.tokenCount ?? 0,
+        costUsd: parsed.costUsd ?? 0,
+        finishedAt: timeline.startedAt + (timeline.durationMs ?? 0),
+      });
     } catch {
       continue;
     }
+  }
 
-    if (!parsed || !Number.isFinite(parsed.qualityScore)) continue;
+  return results
+    .sort((a, b) => a.finishedAt - b.finishedAt)
+    .map((result) => ({
+      model: result.model,
+      ticketId: result.ticketId,
+      qualityScore: result.qualityScore,
+      tokenCount: result.tokenCount,
+      costUsd: result.costUsd,
+    }));
+}
 
-    const bucket = totals.get(variant) ?? {
+export function aggregateVariantResults(
+  results: VariantResult[],
+  expectedRuns: number,
+): ExperimentAggregate {
+  const totals = new Map<
+    string,
+    { runs: number; quality: number; cost: number; tokens: number }
+  >();
+
+  for (const model of EXPERIMENT_MODELS) {
+    totals.set(model, { runs: 0, quality: 0, cost: 0, tokens: 0 });
+  }
+
+  for (const result of results) {
+    const bucket = totals.get(result.model) ?? {
       runs: 0,
       quality: 0,
       cost: 0,
       tokens: 0,
     };
     bucket.runs += 1;
-    bucket.quality += parsed.qualityScore ?? 0;
-    bucket.cost += parsed.costUsd ?? 0;
-    bucket.tokens += parsed.tokenCount ?? 0;
-    totals.set(variant, bucket);
-    completedRuns += 1;
+    bucket.quality += result.qualityScore;
+    bucket.cost += result.costUsd;
+    bucket.tokens += result.tokenCount;
+    totals.set(result.model, bucket);
   }
 
   const variants: VariantAggregate[] = [...totals.entries()].map(
@@ -165,7 +200,7 @@ export function aggregateExperimentTimelines(
       // A variant with zero runs is reported as zero rather than hidden: an
       // empty row is information, a missing row looks like a bug.
       qualityScore: bucket.runs > 0 ? round(bucket.quality / bucket.runs, 3) : 0,
-      costUsd: bucket.runs > 0 ? round(bucket.cost / bucket.runs, 3) : 0,
+      costUsd: bucket.runs > 0 ? round(bucket.cost / bucket.runs, 4) : 0,
       tokenCount: bucket.runs > 0 ? Math.round(bucket.tokens / bucket.runs) : 0,
     }),
   );
@@ -179,7 +214,8 @@ export function aggregateExperimentTimelines(
 
   return {
     variants,
-    winner: winner?.variant ?? null,
+    // A winner needs a comparison: one variant alone has beaten nothing.
+    winner: winner && runnerUp ? winner.variant : null,
     qualityDelta:
       winner && runnerUp
         ? round(winner.qualityScore - runnerUp.qualityScore, 3)
@@ -188,18 +224,23 @@ export function aggregateExperimentTimelines(
       winner && runnerUp && runnerUp.costUsd > 0
         ? round((winner.costUsd - runnerUp.costUsd) / runnerUp.costUsd, 3)
         : 0,
-    completedRuns,
+    completedRuns: results.length,
     totalRuns: expectedRuns,
   };
 }
 
-// Kept verbatim: Inngest step names are memoization keys, and renaming one
-// re-executes it for in-flight runs and orphans historical trace rows. The
-// product vocabulary changed; the wire identifier deliberately did not.
-const VARIANT_STEP_PREFIX = "evaluate-research-brief-";
-
-export function variantStepName(variant: string): string {
-  return `${VARIANT_STEP_PREFIX}${variant}`;
+/**
+ * The labelled fallback when the split test never ran in Inngest: the same
+ * maths over a deterministic alternating split, so a rehearsal always looks
+ * the same.
+ */
+export function simulatedVariantResults(expectedRuns: number): VariantResult[] {
+  return Array.from({ length: expectedRuns }, (_, index) =>
+    scoreVariant(
+      EXPERIMENT_MODELS[index % EXPERIMENT_MODELS.length]!,
+      ticketForExperimentRun(Math.floor(index / EXPERIMENT_MODELS.length)),
+    ),
+  );
 }
 
 export function round(value: number, digits: number): number {

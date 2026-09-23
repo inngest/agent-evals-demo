@@ -8,7 +8,7 @@ import { Middleware } from "inngest";
 export type TimelineStep = {
   /** SDK-side unique step id (hashed) */
   id: string;
-  /** User-facing step id, e.g. "fetch-competitor-changelog" */
+  /** User-facing step id, e.g. "lookup-order" */
   displayName: string;
   stepType: string;
   status: "running" | "completed" | "errored" | "retrying";
@@ -21,6 +21,17 @@ export type TimelineStep = {
   /** Serialized step output, captured automatically on completion */
   output?: string;
   /** Error message for the failed attempt (retrying/errored steps) */
+  errorMessage?: string;
+  /**
+   * Earlier attempts of this step that failed and were retried. The trace
+   * waterfall draws these as red segments ahead of the successful attempt.
+   */
+  failedAttempts?: FailedAttempt[];
+};
+
+export type FailedAttempt = {
+  startedAt: number;
+  durationMs: number;
   errorMessage?: string;
 };
 
@@ -45,8 +56,8 @@ const MAX_TRACKED_RUNS = 64;
 const MAX_RUNS_PER_KEY = 16;
 const MAX_PAYLOAD_CHARS = 2000;
 /**
- * Model-call steps carry the artifact the booth actually shows (the research
- * brief). A real OpenRouter completion runs well past the default cap, so
+ * Model-call steps carry the artifact the booth actually shows (the drafted
+ * reply). A real OpenRouter completion runs well past the default cap, so
  * those steps get a larger budget. Everything else stays small: the status
  * route ships the whole timeline on an 800ms poll.
  */
@@ -63,7 +74,7 @@ function payloadBudget(displayName: string): number {
 /**
  * Serializes a step payload, clamping it to `maxChars`. Overflow MUST stay
  * parseable: the UI does `JSON.parse(step.output)` to pull the brief out, and
- * an unparseable payload silently removes the research output card.
+ * an unparseable payload silently removes the reply bubble.
  *
  * When the value is a plain object we clamp its longest string fields and keep
  * the envelope shape, so consumers still read `output`/`source`/`tokens` and
@@ -145,7 +156,7 @@ function clampObjectStrings(
 /**
  * Records a step's input payload against its timeline entry. Middleware
  * cannot see closure inputs inside `step.run`, so functions report the
- * meaningful payload themselves (the demo's research agent does this via
+ * meaningful payload themselves (the demo's support agent does this via
  * `runResearchCall`). No-op when the run or step is not being tracked.
  */
 export function recordStepInput(
@@ -174,7 +185,7 @@ const timelines =
   globalStepStore.__stepTimelines ??
   (globalStepStore.__stepTimelines = new Map<string, TrackedRun>());
 
-// Lookup keys (platform event id and the demo's researchRunId correlation
+// Lookup keys (platform event id and the demo's supportRunId correlation
 // field) to the runIds they spawned, newest last. In local dev the event id
 // seen by the app is a dev-server synthetic id that never matches the id
 // inngest.send() returns, so the correlation field is the reliable local key.
@@ -276,8 +287,8 @@ function trackedRun(
 ): TrackedRun {
   const data = ctx.event?.data;
   const correlationId =
-    typeof data?.researchRunId === "string"
-      ? (data.researchRunId as string)
+    typeof data?.supportRunId === "string"
+      ? (data.supportRunId as string)
       : undefined;
   // The experiment fan-out sends N events sharing one batchId. Indexing it
   // lets the results endpoint collect every variant run from a single click.
@@ -412,8 +423,22 @@ export const stepTrackerMiddleware = () => {
 
       if (previous >= 0) {
         // Carry the last failure forward: a step that 503'd and recovered
-        // keeps the error visible in the timeline for the full story.
-        step.errorMessage = run.steps[previous].errorMessage;
+        // keeps the error, and the failed attempt's timing, visible in the
+        // timeline for the full story.
+        const prior = run.steps[previous];
+        step.errorMessage = prior.errorMessage;
+        step.failedAttempts = [
+          ...(prior.failedAttempts ?? []),
+          ...(prior.status === "retrying" || prior.status === "errored"
+            ? [
+                {
+                  startedAt: prior.startedAt,
+                  durationMs: prior.durationMs ?? 0,
+                  errorMessage: prior.errorMessage,
+                },
+              ]
+            : []),
+        ];
         run.steps[previous] = step;
       } else {
         run.steps.push(step);
@@ -477,17 +502,17 @@ export const stepTrackerMiddleware = () => {
 };
 
 /**
- * Finds the timeline for a demo run. Preference order: the researchRunId
+ * Finds the timeline for a demo run. Preference order: the supportRunId
  * correlation id (reliable in both local and cloud mode), then the platform
  * event id (cloud mode). Filtered to the requested function so follow-up runs
- * triggered by the same research run (e.g. the scorer) never shadow it.
+ * triggered by the same support run (e.g. the scorer) never shadow it.
  */
 export function getTimelineForDemo(
   eventId: string | undefined,
-  researchRunId: string | undefined,
-  functionName = "research-agent",
+  supportRunId: string | undefined,
+  functionName = "support-agent",
 ): RunTimeline | null {
-  const keys = [researchRunId, eventId].filter(
+  const keys = [supportRunId, eventId].filter(
     (key): key is string => Boolean(key),
   );
 

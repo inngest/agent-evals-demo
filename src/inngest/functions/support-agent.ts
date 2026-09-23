@@ -1,0 +1,141 @@
+import {
+  FAILURE_STEP_ID,
+  buildSupportRunSummary,
+  currentSupportModel,
+  getSupportTicket,
+  supportSessionId,
+  supportSteps,
+  type SupportRunSummary,
+  type SupportStepId,
+} from "@/content/support-demo";
+import {
+  inngest,
+  supportRunCompleted,
+  supportTicketReceived,
+  type SupportTicketReceivedData,
+} from "@/inngest/client";
+import { runSupportCall } from "@/lib/mock-support";
+import { isCloud } from "@/lib/demo-target";
+import { isOpenRouterConfigured, OPENROUTER_MODEL } from "@/lib/openrouter";
+import {
+  supportSessionKey,
+  supportSessionMeta,
+} from "@/lib/support-session-meta";
+
+export type SupportAgentResult = SupportRunSummary & {
+  parentRunId?: string;
+  reply: string;
+};
+
+export const supportAgent = inngest.createFunction(
+  {
+    id: "support-agent",
+    name: "Support agent",
+    retries: 4,
+    triggers: [supportTicketReceived],
+  },
+  async ({
+    event,
+    step,
+    attempt,
+    runId,
+  }): Promise<SupportAgentResult> => {
+    const data = event.data as Partial<SupportTicketReceivedData>;
+    const supportRunId = data.supportRunId ?? `support-${runId}`;
+    const ticket = getSupportTicket(data.ticketId);
+    // With OpenRouter configured, the real model id is the honest narrative:
+    // it is what actually writes the reply. The payload's model only drives
+    // the mock-mode story.
+    const model = isOpenRouterConfigured()
+      ? OPENROUTER_MODEL
+      : (data.model ?? currentSupportModel);
+    const failStep: SupportStepId | undefined =
+      data.failureStep === "none"
+        ? undefined
+        : (data.failureStep ?? FAILURE_STEP_ID);
+    const sessionId =
+      event.meta?.sessions?.[supportSessionKey] ?? supportSessionId;
+    const call = (id: SupportStepId, input: unknown) =>
+      runSupportCall(id, {
+        ticketId: ticket.id,
+        attempt,
+        failStep,
+        runId,
+        input,
+      });
+
+    // Each step.run is a durability boundary: if the order API 503s, Inngest
+    // retries that one step and replays the finished ones from memoized
+    // state instead of calling the model again.
+    const intent = await step.run("classify-ticket", () =>
+      call("classify-ticket", { message: ticket.message, model }),
+    );
+    const customer = await step.run("lookup-customer", () =>
+      call("lookup-customer", { customer: ticket.customer }),
+    );
+    const order = await step.run("lookup-order", () =>
+      call("lookup-order", { customer: ticket.customer }),
+    );
+    const reply = await step.run("call-llm-draft-reply", () =>
+      call("call-llm-draft-reply", {
+        model,
+        intent: intent.output,
+        customer: customer.output,
+        order: order.output,
+      }),
+    );
+    await step.run("policy-check", () =>
+      call("policy-check", { reply: reply.output }),
+    );
+    await step.run("send-reply", () =>
+      call("send-reply", { customer: ticket.customer }),
+    );
+
+    const summary = buildSupportRunSummary({
+      supportRunId,
+      ticketId: ticket.id,
+      model,
+    });
+
+    if (isCloud) {
+      await step.metadata("attach-support-run-metadata").update(
+        {
+          supportRunId,
+          ticketId: ticket.id,
+          model: summary.model,
+          tokenCount: summary.tokenCount,
+          costUsd: summary.costUsd,
+          qualityScore: summary.qualityScore,
+          failureStep: failStep ?? "none",
+          source: "booth-demo",
+        },
+        "userland.support",
+      );
+    }
+
+    // The durable boundary that lets the scorer attach metrics to this run.
+    await step.sendEvent(
+      "emit-support-run-completed",
+      supportRunCompleted.create(
+        {
+          ...summary,
+          parentRunId: isCloud ? runId : supportRunId,
+          sessionId,
+          source: "booth-demo",
+        },
+        {
+          id: `support-completed:${supportRunId}`,
+          meta: supportSessionMeta(sessionId),
+        },
+      ),
+    );
+
+    return {
+      ...summary,
+      parentRunId: isCloud ? runId : undefined,
+      reply: reply.output,
+    };
+  },
+);
+
+export const supportStepCount = supportSteps.length;

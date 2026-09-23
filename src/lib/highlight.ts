@@ -1,15 +1,7 @@
 import { codeToHtml, type ShikiTransformer } from "shiki";
-import {
-  loopSnippets,
-  type LoopSnippet,
-} from "@/content/loop-snippets";
-import {
-  primitiveCards,
-  type PrimitiveCard,
-} from "@/content/primitives-reference";
+import { boothSnippets, type BoothSnippet } from "@/content/booth-snippets";
 
-// Any snippet shape the CodeView can render. Legacy CodeSnippet (act ids)
-// and LoopSnippet (stage ids) both satisfy this structurally.
+// Any snippet shape the CodeView can render.
 export type AnySnippet = {
   id: string;
   label: string;
@@ -18,24 +10,14 @@ export type AnySnippet = {
   code: string;
 };
 
-export type HighlightedLoopSnippet = LoopSnippet & {
+export type HighlightedBoothSnippet = BoothSnippet & {
   html: string;
 };
 
-export type HighlightedPrimitiveCard = PrimitiveCard & {
-  html: string;
-};
-
-export async function getHighlightedLoopSnippets(): Promise<
-  HighlightedLoopSnippet[]
+export async function getHighlightedBoothSnippets(): Promise<
+  HighlightedBoothSnippet[]
 > {
-  return highlightSnippets<LoopSnippet>(loopSnippets);
-}
-
-export async function getHighlightedPrimitives(): Promise<
-  HighlightedPrimitiveCard[]
-> {
-  return highlightSnippets<PrimitiveCard>(primitiveCards);
+  return highlightSnippets<BoothSnippet>(boothSnippets);
 }
 
 async function highlightSnippets<T extends { code: string }>(

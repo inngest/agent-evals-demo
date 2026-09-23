@@ -5,7 +5,7 @@ import "./brand.css";
 export const metadata: Metadata = {
   title: "Inngest Booth Demo | Unbreakable agents, invisible infra.",
   description:
-    "Run, Observe, A/B Test: a real Inngest agent loop with durable steps, traces, insights, metrics, variants, and sandboxes.",
+    "An AI support agent on Inngest: it survives an outage, shows every step it took, and gets better through A/B testing.",
 };
 
 export default function RootLayout({

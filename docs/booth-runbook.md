@@ -1,265 +1,166 @@
 # Booth Demo Runbook
 
-For the driver script and stakeholder dry-run criteria, use
-`docs/demo-talk-track.md`.
-
-For the one-page presenter version, print or pin `docs/driver-card.md`.
-
-For display sign-off, use `docs/booth-qa-checklist.md`. For fallback video
-capture, use `docs/contingency-recording.md`.
-
-For the strict requirement-by-requirement status, use
-`docs/booth-qa-checklist.md`.
-
+- Driver script: `docs/demo-talk-track.md`.
+- One-page presenter card: `docs/driver-card.md`.
+- Display and driver sign-off: `docs/booth-qa-checklist.md`.
+- Fallback video: `docs/contingency-recording.md`.
 
 ## Event Context
 
 - Event: [EVENT NAME], [DATES].
 - Booth: [BOOTH #].
-- Core booth story: Unbreakable agents, invisible infra. One loop demo
-  (Run / Observe / A/B Test) at `/` covering durability, observability,
-  A/B testing, and Sandboxes (beta).
-- Booth surfaces: `/` is the loop demo. Legacy demos remain at `/research`
+- Story: Unbreakable agents, invisible infra. A customer-support agent at `/`
+  survives an order-API outage (durable execution), shows every step it took
+  (observability), and is measured and split-tested (A/B testing).
 
-## Sandbox Beta Notes
+## What Runs
 
-- Sandboxes require `inngest >= 4.20.0` (pinned in `package.json`) and are
-  cloud-only, access-gated.
-- The demo probes entitlement at `/api/demo/status` under `sandbox.mode`:
-  - `sandbox`: cloud mode with the beta enabled for the environment. Real
-    durable sandbox steps run (`create-analysis-sandbox`,
-    `run-generated-analysis`, `destroy-analysis-sandbox`).
-  - `simulated`: local dev server or beta unavailable. The beat runs as a
-    labeled simulated step so the trace story stays intact.
-- If cloud returns 403 `access_denied`, ask the Inngest team to enable the
-  beta for the demo environment before the event.
-- The agent's `onFailure` handler destroys leaked sandboxes by name.
+| Piece | Where |
+| --- | --- |
+| Booth UI (five screens, 1920×1080 stage) | `src/components/booth/` |
+| Scenario: tickets, steps, canned outputs | `src/content/support-demo.ts` |
+| Screen copy (business and technical lines) | `src/content/booth-copy.ts` |
+| Agent function, `support-agent` | `src/inngest/functions/support-agent.ts` |
+| Metrics scorer, `support-agent-score-run` | `src/inngest/functions/support-score-run.ts` |
+| Model split test, `support-agent-model-split-test` | `src/inngest/functions/support-experiment.ts` |
+| API routes | `/api/support/{trigger,status,signal,experiment,experiment/status}` |
+
+Events: `support/ticket.received`, `support/run.completed`,
+`support/feedback.recorded`, `support/experiment.requested`.
+
+## Timing Budget and Fallbacks
+
+The booth never waits on a slow run. Budgets live in
+`src/components/booth/useAgentRun.ts` and `useAbTest.ts`.
+
+| Situation | Behaviour |
+| --- | --- |
+| Live run | About 8s: six canned-latency steps plus a 3s `RetryAfterError` on `lookup-order`. |
+| Trigger fails or Inngest rejects the event | Immediate labelled replay. |
+| No steps captured within 5s | Labelled replay. |
+| Live run makes no progress for 25s | Labelled replay. |
+| Split test | 8 runs at 50/50. If nothing is captured in 5s, or not all 8 land in 15s, it switches to the labelled simulation. |
+| Vote | Optimistic on screen, then a receipt once the scorer's `attach-human-feedback-score` step is observed. If Inngest is unreachable it shows "Recorded on screen only". |
+
+A replay (`src/lib/replay-timeline.ts`) has the same step names, timings,
+503 and memoized replays as a live run, and always carries
+`simulated: true`. The UI shows it as a coral **Replay** chip.
 
 ## Preflight
 
-Run these before a dry run or booth shift:
-
 ```bash
 npm run lint
-npm run build
+npm run typecheck
 npm run demo:preflight
 npm run demo:smoke-loop
-npm run demo:cloud-ready
 ```
 
-Open the demo app and Inngest dashboard side by side. The left side is the
-demo app; the right side is the Inngest Runs view filtered to the conference
-demo app/environment.
+**`demo:smoke-loop` is the gate that tests the demo you are actually giving.**
+It triggers a real ticket and fails unless all of the following hold:
 
-Before booth staffing is finalized, pick 2-3 approved drivers and run each of
-them through the driver sign-off in `docs/driver-card.md`.
+- Inngest executed the run.
+- All six steps were recorded.
+- `lookup-order` failed and recovered.
+- Finished steps were replayed rather than re-run.
+- The drafted reply parses.
+- The vote reached Inngest.
+- All 8 split-test runs landed within 15s.
+
+It warns if the run took longer than the 20s booth budget.
+
+`demo:preflight` checks configuration: the app is up, the serve endpoint
+lists the three functions, and the mode and keys are right. It does not run
+the demo.
+
+For a JSON view of readiness:
+
+```bash
+curl http://localhost:3000/api/demo/status
+```
 
 ## Local Dry Run
 
-Use this path when rehearsing without Cloud keys:
-
 ```bash
 npm run dev
-APP_URL=http://localhost:3001 npm run inngest:dev
+npm run inngest:dev        # APP_URL=http://localhost:<port> if Next picked another port
 ```
 
-If Next uses a different port, pass that port in `APP_URL`. The local dashboard
-runs at `http://localhost:8288`.
+Open `http://localhost:3000` full screen. The local Inngest dashboard is at
+`http://localhost:8288`, and `D` in the demo opens it on the current run.
 
-If a browser tab is on the wrong port, let the repo find the live app:
-
-```bash
-```
-
-Check the local app surface:
-
-```bash
-DEMO_BASE_URL=http://localhost:3001 npm run demo:local-ready
-```
-
-`demo:local-ready` runs lint, build, preflight, smoke, loop smoke, a small
-seeded smoke pass, and viewport QA. Use the individual scripts only when
-debugging a failed step.
-
-**`demo:smoke-loop` is the gate that tests the demo you are actually giving.**
-It fails if the run fell back to the simulated timeline, if no memoized replay
-happened, or if the synthesis step's output does not parse - that last check is
-what catches the research output card silently disappearing.
-
-`demo:preflight` is the configuration check: app up, Inngest serve endpoint
-answering, keys and mode correct. It deliberately does not run the demo.
-
-For a quick JSON view of the same non-secret readiness state:
-
-```bash
-curl http://localhost:3001/api/demo/status
-```
+To rehearse the fallback, stop `inngest:dev` and pick a ticket. The run
+should replay within 5s with the Replay chip showing.
 
 ## Cloud Setup
 
-Use `npm run demo:cloud-ready` to confirm the deployed serve endpoint is
-synced, then `npm run demo:preflight` against the deployed URL.
-
-Set these Vercel production environment variables before deploying:
+Set these production environment variables:
 
 ```txt
+DEMO_TARGET=cloud
 INNGEST_EVENT_KEY
 INNGEST_SIGNING_KEY
-INNGEST_ENCRYPTION_KEY
-INNGEST_ENV
+INNGEST_ENCRYPTION_KEY        # optional
+INNGEST_ENV                   # optional, defaults to production
 INNGEST_API_KEY
 NEXT_PUBLIC_INNGEST_DASHBOARD_URL
-NEXT_PUBLIC_INNGEST_RUNS_URL
+NEXT_PUBLIC_BOOTH_CTA_URL     # where the recap QR code points; default https://www.inngest.com/docs
+OPENROUTER_API_KEY            # optional: a real model writes the reply
 ```
 
 Notes:
 
 - Leave `INNGEST_DEV` unset in production.
-- `INNGEST_ENV` is optional when using the default production environment.
-- `INNGEST_INSIGHTS_SCORE_QUERY` should return rows with `runId`, `signal`,
-- Add `INNGEST_INSIGHTS_SCORE_QUERY` after Cloud score events exist and the
-  query has been generated and validated.
-- `NEXT_PUBLIC_INNGEST_RUNS_URL` is optional but recommended. Set it to the
-  filtered Inngest Runs URL for the conference app/environment so the app's
-  `Inngest`, `Open Inngest`, and `View trace` links go directly to the right
-  product view during the split-screen walkthrough.
+- `DEMO_TARGET=cloud` switches on the real `step.score` attach and
+  `step.metadata`. `group.experiment` runs in both modes.
+- With `OPENROUTER_API_KEY` set, only the "Draft reply" step calls the
+  model. Check that it still fits the 20s budget with `demo:smoke-loop`.
+- The Inngest app id is still `aie-research-agent-booth-demo`, kept so Cloud
+  run history carries over. The function ids are new (`support-agent`,
+  `support-agent-score-run`, `support-agent-model-split-test`), so re-sync
+  the app after deploying.
 
-Deploy with:
-
-```bash
-npx vercel --prod
-```
-
-Check the deployed app surface:
+Check the deployed app:
 
 ```bash
-DEMO_BASE_URL=https://<vercel-domain> \
-INNGEST_CLOUD_APP_ID=<cloud-app-id> \
-npm run demo:cloud-ready
+DEMO_BASE_URL=https://<domain> INNGEST_CLOUD_APP_ID=<cloud-app-id> npm run demo:cloud-ready
+DEMO_BASE_URL=https://<domain> npm run demo:smoke-loop
 ```
 
-`demo:cloud-ready` first runs deploy-phase handoff checks, then syncs the
-deployed `/api/inngest` endpoint.
-
-`demo:smoke-loop` runs a real agent against the deployed URL and asserts on the
-captured timeline, so it is the check that proves the demo works rather than
-merely that the app booted.
-
-To sync the deployed serve endpoint manually before a seed-only dry run:
+Sync the serve endpoint manually if needed:
 
 ```bash
 npx inngest-cli@latest api --prod sync-app \
   --app-id <cloud-app-id> \
-  --url https://<vercel-domain>/api/inngest
+  --url https://<domain>/api/inngest
 ```
 
-## Research Score Heartbeat
+## Sandboxes
 
-The deployed `research-agent-score-heartbeat` cron runs every five minutes and
-uses `step.invoke` to run the research agent and await the child result. Keep
-this as an invoke, not fire-and-forget `step.sendEvent`, because the score path
-needs the invoked agent run ID.
-
-## Seed Research Agent Load
-
-Use this when the Inngest dashboard needs a large history of the research
-agent demo (this is the loop demo's agent):
-
-```bash
-```
-
-The command loads `.env.local`, sends directly to the Inngest Cloud Event API,
-and emits:
-
-- `research/run.requested` events for Act 1 durable agent traces.
-- seeded feedback instructions that the agent turns into
-  `research/feedback.recorded` events after it knows the real Cloud run ID, so
-  Act 2 positive/negative scores attach to the durable run.
-- `research/experiment.requested` events for Act 3 model A/B test data. Each
-  experiment event carries a `corpusRuns` window with the Act 2 feedback signal
-  and score from the same seeded batch, so the experiment output can point back
-  to scored research-agent runs.
-
-Preview the exact pattern without sending anything:
-
-```bash
-```
-
-Useful knobs:
-
-```bash
-  --count 500 \
-  --experiments 500 \
-  --failure-rate 0.12 \
-  --batch-size 50
-```
-
-The default feedback pattern intentionally starts with 2-5 positive signals,
-then a 10-run negative streak, then recovery positives, with randomized
-repeats. Keep `--failure-rate` modest for large loads; each retry demo adds a
-durable retry attempt and a short retry delay.
-
-## Walkthrough
-
-1. Seed research history locally or with the Cloud command above.
-2. Open Inngest Runs on the right side.
-3. In the loop demo at `/`, stay on the Run stage with both toggles armed.
-4. Click `Run research agent`.
-5. Narrate the 503 retry, then the sandbox result card.
-6. Open the corresponding Inngest run/trace on the right; show the retried
-   boundary and the sandbox steps.
-7. Observe stage: open the trace link, then `Open Insights`.
-8. A/B Test stage: click `Good`, open `Scores`; run the model A/B test and
-   open the Experiment view.
-
-Start each live conversation with:
-
-> How are you keeping your agents reliable today, while the models and
-> prompts keep changing underneath them?
-
-Use the answer to route the demo: reliability pain stays in Run;
-observability questions get the trace and Insights; evaluation-savvy visitors go
-straight to A/B Test.
-
-If the visitor is qualified or explicitly comparing evaluation/observability
-options, end with the Patrick handoff from `docs/demo-talk-track.md` instead
-of adding more screens. Use the event page calendar for the handoff:
-[EVENT PAGE URL]. The goal is a useful follow-up, not a longer booth
-monologue.
+The Sandboxes beat is not part of the support-agent story. The flag
+(`NEXT_PUBLIC_DEMO_SANDBOX`), `src/lib/sandbox.ts`, and the
+`/api/demo/status` entitlement probe remain, but no function calls
+`step.sandbox` today.
 
 ## Booth QA
 
-Before the final dry run, complete the matrix in
-`docs/booth-qa-checklist.md` across the 32-inch, 16-inch, and 14-inch setups.
-The demo is not signed off while Cloud preflight fails, the Inngest dashboard
-cannot show the demo app/environment, or the split-screen layout requires
-repeated resizing to stay readable.
+Complete `docs/booth-qa-checklist.md` on the actual booth TV before the
+first shift.
 
 ## Fallback Recording
 
-After Cloud deploy, seed history, Insights score query, and stakeholder talk
-track are approved, record the 90-second loop and 2-3 minute driven fallback
-from `docs/contingency-recording.md`. Add the final video links here and to
-MAR-166.
+Record the 3-minute and 5-minute paths from `docs/contingency-recording.md`
+and add the links here:
 
 ```txt
-90-second loop:
-2-3 minute driven fallback:
+3-minute path:
+5-minute path (Under the hood):
 ```
 
 ## Recovery
 
-- If the app works but Inngest has no new runs, check the deployment env vars
-  and re-sync `/api/inngest`.
-- If the cloud sandbox beat fails (403 `access_denied`, capacity), check
-  `/api/demo/status` `sandbox.mode`. The demo falls back to the labeled
-  simulated beat; narrate the beta caveat and keep the walkthrough moving.
-- If production reset returns 401/403 from a browser interaction, that is
-  expected. Use the local controls to reset the presenter state; server-side
-  demo history reset is intentionally protected in production.
-- If score history is empty after refresh, verify `INNGEST_INSIGHTS_SCORE_QUERY`.
-  If it cannot be fixed before showtime, switch to the approved emergency
-  fallback framing or recording.
-- If Wi-Fi is unreliable, use the contingency recording. Keep the local
-  dev-server path for internal rehearsal only unless a booth lead explicitly
-  approves it as an emergency fallback.
+- **App works but no new Inngest runs.** Check the env vars and re-sync
+  `/api/inngest`. The demo keeps working on Replay in the meantime.
+- **Run consistently replays in cloud.** Check the event key (trigger
+  `sent: false`), then whether the serve endpoint is synced (run never
+  starts).
+- **Wi-Fi unreliable.** Use the contingency recording.

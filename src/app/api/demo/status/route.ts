@@ -5,6 +5,7 @@ import { checkSandboxAccess } from "@/lib/sandbox";
 import { SANDBOX_ENABLED } from "@/lib/feature-flags";
 import { isOpenRouterConfigured, OPENROUTER_MODEL } from "@/lib/openrouter";
 import { getTimelineStoreStats } from "@/inngest/middlewares/step-tracker";
+import { currentSupportModel } from "@/content/support-demo";
 
 export async function GET() {
   const sandbox = await checkSandboxAccess();
@@ -64,7 +65,9 @@ export async function GET() {
     // inferred from the UI.
     llm: {
       mode: isOpenRouterConfigured() ? "openrouter" : "mock",
-      model: isOpenRouterConfigured() ? OPENROUTER_MODEL : "gpt-5.5 (mocked)",
+      model: isOpenRouterConfigured()
+        ? OPENROUTER_MODEL
+        : `${currentSupportModel} (mocked)`,
     },
     timeline: getTimelineStoreStats(),
   });

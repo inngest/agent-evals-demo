@@ -1,44 +1,46 @@
 # Inngest Booth Demo — Unbreakable agents, invisible infra.
 
 This repo holds the booth demo for [EVENT NAME] ([DATES], booth [BOOTH #]).
-The story is a loop: **Run -> Observe -> A/B Test**.
 
-`/` is the only demo surface: a real Inngest v4 research agent with durable
-steps, retry and replay, live traces, and per-stage code snippets. The earlier
-incident-triage and three-act surfaces were retired; they are in git history if
-they are ever needed again.
+`/` is a full-screen, keyboard-driven booth demo: an AI **customer-support
+agent** that survives an order-API outage (**durable execution**), shows every
+step it took (**observability**), and gets measured and split-tested across
+two models (**A/B testing**). It fits in 3 minutes for a business visitor, or
+5 with "Under the hood" (`U`) on for engineers. Both get the same five screens:
 
-The research corpus is mocked, and the model is mocked unless OpenRouter is
-configured. The live pieces are the Inngest function, its captured step
-timeline, and (in cloud mode) the real score, experiment and defer primitives.
+```
+Start (pick a ticket) → Durable → Observe → A/B test → Recap (ROI + QR)
+```
+
+The screens render on a fixed 1920×1080 stage that scales to the display, so
+the layout is identical on a TV, laptop, or projector.
+
+**What's real:**
+
+- the Inngest function (`support-agent`) and its six durable steps;
+- the 503 retry and memoized replay;
+- the captured step timeline;
+- `group.experiment` traffic splitting;
+- in cloud mode, `step.score` and run metadata.
+
+**What's canned:** the tickets, the customer and order data, the reply
+(unless OpenRouter is configured), the per-model quality scores, and the
+model pricing.
+
+**When a live run can't make the booth budget**, the UI switches to a
+labelled replay and shows a "Replay" chip; it never passes a replay off as
+live. See `docs/booth-runbook.md` for the timing budget.
+
+- Driver script: `docs/demo-talk-track.md`.
+- Printable card: `docs/driver-card.md`.
+- Booth ops: `docs/booth-runbook.md`.
 
 ## Sandboxes (beta) are off by default
 
-Set `NEXT_PUBLIC_DEMO_SANDBOX=1` to enable them. The beta is access-gated per
-Inngest environment, so with the flag off the feature is absent entirely: no
-toggle, no pillar, no `step.sandbox` in the code pane, and no sandbox beat in
-the run. `/api/demo/status` reports `sandboxEnabled` separately from the
-entitlement probe, so "turned off" and "not entitled" stay distinguishable.
-
-## Sandboxes (beta)
-
-The Run stage can execute a model-generated analysis script inside a real
-Inngest Sandbox. Sandboxes are cloud-only and access-gated, and require
-`inngest >= 4.20.0` (pinned). The seam is `src/lib/sandbox.ts`:
-
-- `DEMO_TARGET=cloud` plus a beta-enabled environment runs real durable
-  sandbox steps (`create-analysis-sandbox`, `run-generated-analysis`,
-  `destroy-analysis-sandbox`) inside `research-agent`.
-- The local dev server runs a labeled simulated beat so the trace story is
-  identical offline.
-- `/api/demo/status` exposes the entitlement probe as `sandbox.mode`
-  (`sandbox` or `simulated`) plus the reason.
-- If Create returns 403 `access_denied`, ask the Inngest team to enable the
-  beta for the demo environment.
-
-For dry-run and booth ops, use `docs/booth-runbook.md`. For the driver
-walkthrough and booth script, use `docs/demo-talk-track.md`. For the printable
-booth driver card, use `docs/driver-card.md`.
+The support-agent story does not use Sandboxes. The flag
+(`NEXT_PUBLIC_DEMO_SANDBOX`), `src/lib/sandbox.ts`, and the `/api/demo/status`
+entitlement probe remain for a future beat, but no function calls
+`step.sandbox` today.
 
 ## Design System Source
 
@@ -80,10 +82,9 @@ at that app URL:
 APP_URL=http://localhost:3001 npm run inngest:dev
 ```
 
-For the booth split-screen, keep the loop demo at `/` on one side and open
-the Inngest dev server at `http://localhost:8288` on the other. The Run
-stage's `Run research agent` button sends a real `research/run.requested`
-event so the Runs list shows live history.
+Open `http://localhost:3000` full screen. Picking a ticket sends a real
+`support/ticket.received` event; press `D` during the demo to open that run in
+the Inngest dev server (`http://localhost:8288`).
 
 ## Cloud mode (`DEMO_TARGET`)
 
@@ -93,22 +94,21 @@ in exactly one place, `src/lib/demo-target.ts`, which exports `DEMO_TARGET` and
 
 | `DEMO_TARGET` | Behavior |
 |---------------|----------|
-| `local` (default, or unset) | Faked/seeded path. Scores, sessions, and experiments come from `src/content/seed-data.ts` and the local history store. Offline-safe, deterministic, dev-server only. Behaviorally identical to the booth build. No real scoring primitive fires. |
+| `local` (default, or unset) | Dev-server path. The agent, retries, timeline and `group.experiment` are real; `step.score` and `step.metadata` are replaced by same-named `step.run` steps so the timeline looks identical. |
 | `cloud` | Emits the **real** Inngest scoring primitives so scores and experiments land in the Inngest Cloud dashboard. Registers against Cloud (`isDev=false`, keys from env). |
 
-In `cloud` mode the app emits real primitives at three call sites:
+In `cloud` mode the app emits real primitives at these call sites:
 
-- **Run-level score (Act 1 → 2):** `src/inngest/functions/triage-agent.ts` writes the
-  localization score with a durable, run-level `step.score(...)` (no `stepId`, so it
-  attaches to the run). This requires `scoreMiddleware()` on the client, which is
-  registered unconditionally in `src/inngest/client.ts`.
-- **Deferred outcome scorer (Act 2 hero):** `src/inngest/scorers/localization-scorer.ts`
-  defines a `createScorer(...)` deferred function. `src/inngest/functions/score-incident.ts`
-  triggers it with `defer(id, { function, data })` when an RCA is saved. The scorer
-  returns `{ name, value, runId }` and the SDK writes it via `client.score(...)`.
-- **Experiment (Act 3):** `src/inngest/functions/experiment-bakeoff.ts` runs a real
-  `group.experiment(...)` (GPT-5.5 vs claude-opus-4.8) and calls `inngest.score(...)`
-  inside each variant so the score auto-associates with the experiment + variant.
+- **Run-level metrics:** `src/inngest/functions/support-score-run.ts` attaches
+  `support_reply_quality`, `support_cost_usd`, and the visitor's
+  `support_human_feedback` vote to the agent run with `step.score(...)`. This
+  requires `scoreMiddleware()` on the client, which is registered
+  unconditionally in `src/inngest/client.ts`.
+- **Run metadata:** `src/inngest/functions/support-agent.ts` writes
+  `step.metadata(...)` for Insights to group by.
+- **Split test:** `src/inngest/functions/support-experiment.ts` runs a
+  `group.experiment(...)` (claude-opus-4.8 vs gpt-5.5, 50/50) and scores each
+  variant with `inngest.score.experiment(...)`. This runs in both modes.
 
 The faked branch is always the fallback. Every real-primitive call site is wrapped
 `if (isCloud) { ...real... } else { ...existing faked... }`, and the faked branch is
@@ -117,18 +117,6 @@ unchanged from the local build.
 `DEMO_TARGET` is orthogonal to `INNGEST_DEV`. `local` implies the dev server; `cloud`
 sets `isDev=false`. The client derives `isDev` from `isCloud` (`isDev: !isCloud`), so
 **do not also set `INNGEST_DEV` in cloud mode** — let the flag drive it.
-
-### Sessions are deferred (BLOCKED)
-
-The **sessions** view stays faked in **both** modes this pass. The sessions primitive is
-not in the pinned SDK tag (`inngest@pr-1521`, which resolves to `4.4.1-pr-1521.15`); it
-ships in a different base (`pr-1547` / `4.6.1`). `seededSessions` in
-`src/content/seed-data.ts` and the session deep-link in `src/lib/inngest-dashboard.ts`
-keep reading seed data in both modes. There is no `if (isCloud)` branch for sessions.
-
-> BLOCKED: needs the unified scoring + sessions SDK tag (pr-1547 / base 4.6.1).
-> Owner: Jakob. Do not wire a real sessions primitive against pr-1521 — it does not
-> exist there. Revisit when the unified tag lands.
 
 ### SDK pin for cloud mode
 
@@ -142,19 +130,16 @@ Real primitives (scores, experiments, sandboxes) require `inngest >= 4.20.0`
    `INNGEST_DEV` unset/false.
 2. Deploy to Render (see "Production Inngest" below) and sync the `/api/inngest`
    serve endpoint with Inngest Cloud.
-3. Seed the Cloud corpus of real runs, scores, and experiments:
+3. Prove the deployed demo end to end (a real run, the vote metric, and the
+   split test):
 
    ```bash
-   DEMO_TARGET=cloud npm run demo:smoke-loop
+   DEMO_BASE_URL=https://<render-domain> npm run demo:smoke-loop
    ```
 
-   The seeder is idempotent (deterministic event ids dedupe re-runs) and refuses to run
-   unless `DEMO_TARGET=cloud` and the keys are present. Use `--dry-run` (or `DRY_RUN=1`)
-   to print the planned events without sending anything.
-
-After seeding, the Cloud dashboard shows: a triage run with a run-level localization
-score, a deferred outcome score on the run when an RCA is saved, and a real
-`group.experiment` with per-variant scores. Sessions remain faked.
+The Cloud dashboard then shows `support-agent` runs with attached
+`support_*` scores, and the `support-agent-model-split-test` experiment with
+per-variant scores.
 
 ## Production Inngest
 
@@ -162,10 +147,9 @@ The app is wired for Inngest Cloud the same way the swag-store apps are:
 
 - `INNGEST_EVENT_KEY` sends events from API routes.
 - `INNGEST_SIGNING_KEY` authenticates the `/api/inngest` serve endpoint.
-- `OPENROUTER_API_KEY` is optional. When set, the research agent's two LLM
-  steps (`call-llm-plan-research`, `call-llm-synthesize-brief`) call
-  [OpenRouter](https://openrouter.ai) for real (real text, real token counts);
-  unset, they stay mocked. `OPENROUTER_MODEL` overrides the default
+- `OPENROUTER_API_KEY` is optional. When set, the support agent's
+  `call-llm-draft-reply` step calls [OpenRouter](https://openrouter.ai) for
+  real (real text, real token counts); unset, it stays mocked. `OPENROUTER_MODEL` overrides the default
   (`openai/gpt-5.5`), and `OPENROUTER_BASE_URL` retargets the API. The 503
   failure-injection beat and memoized replays behave identically either way.
 - `INNGEST_ENCRYPTION_KEY` is optional. When present, the app enables
@@ -264,11 +248,8 @@ and run:
 npm run dev:cloud
 ```
 
-### Booth split-screen on Cloud
+### Booth QR code
 
-Point the right pane at a pre-filtered Runs view by setting
-`NEXT_PUBLIC_INNGEST_RUNS_URL` on Render (for example, the Runs URL filtered
-to the research agent's app/environment). Every "open in Inngest" link and
-the dashboard pane then land on just the demo's runs. Locally this is
-unnecessary — `npm run demo:booth` opens `http://localhost:8288/runs`, which
-only ever shows this app's functions.
+`NEXT_PUBLIC_BOOTH_CTA_URL` sets where the recap screen's QR code points
+(default `https://www.inngest.com/docs`). It is read at build time, so
+redeploy after changing it.

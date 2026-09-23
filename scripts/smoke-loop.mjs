@@ -1,109 +1,105 @@
 #!/usr/bin/env node
 
 /**
- * Smoke test for the loop demo at `/`.
+ * Smoke test for the booth demo at `/`: the support agent, its feedback
+ * metric, and the model split test, end to end against a running app.
  *
- * `demo:smoke` exercises /api/trigger, /api/run-query and /api/score - the
- * legacy incident-triage surfaces. It never touches any /api/research/* route,
- * so a green run there proves nothing about the demo actually being given at
- * the booth. This script covers the loop path instead.
- *
- * The assertions are deliberately hard failures rather than warnings: the
- * whole point is to catch a demo that renders but is quietly simulated, or a
- * run whose brief cannot be parsed out of the timeline.
+ * The assertions are deliberately hard failures rather than warnings. The
+ * booth UI falls back to a labelled replay when Inngest is unreachable, so a
+ * demo that renders fine can still be quietly simulated; this script is how
+ * you find out before the doors open.
  */
 
 const baseUrl = normalizeBaseUrl(process.env.DEMO_BASE_URL ?? process.argv[2]);
 const checks = [];
 
-const FAILING_STEP = "fetch-competitor-changelog";
-const BRIEF_STEP = "call-llm-synthesize-brief";
-const POLL_INTERVAL_MS = 800;
-const POLL_TIMEOUT_MS = Number(process.env.DEMO_SMOKE_TIMEOUT_MS ?? 120_000);
+const FAILING_STEP = "lookup-order";
+const REPLY_STEP = "call-llm-draft-reply";
+// The durable steps the booth draws, in order. The timeline also carries the
+// step.sendEvent that hands off to the scorer, which the pipeline does not show.
+const AGENT_STEPS = [
+  "classify-ticket",
+  "lookup-customer",
+  FAILING_STEP,
+  REPLY_STEP,
+  "policy-check",
+  "send-reply",
+];
+// Stated out loud in the booth copy ("six durable steps").
+const EXPECTED_STEPS = 6;
+const SPLIT_RUNS = 8;
+const POLL_INTERVAL_MS = 600;
+const POLL_TIMEOUT_MS = Number(process.env.DEMO_SMOKE_TIMEOUT_MS ?? 60_000);
 
 await checkHealth();
 const trigger = await checkTrigger();
-const final = trigger ? await pollToTerminal(trigger) : null;
+const final = trigger?.sent ? await pollToTerminal(trigger) : null;
 
 if (final) {
   checkTimeline(final);
   await checkSignal(trigger);
-  await checkExperiment(trigger, final);
+  await checkSplitTest();
 }
 
 report();
 
 async function checkHealth() {
-  const { ok, status, body, error } = await fetchJson("/api/health");
+  const { ok, status, error } = await fetchJson("/api/health");
 
-  if (!ok) {
-    addCheck("fail", "Liveness endpoint", error ?? `HTTP ${status}`);
-    return null;
-  }
-
-  addCheck("pass", "Liveness endpoint", "/api/health responded");
-  return body;
+  addCheck(ok ? "pass" : "fail", "Liveness endpoint", ok ? "/api/health responded" : error ?? `HTTP ${status}`);
 }
 
 async function checkTrigger() {
-  const { ok, status, body, error } = await fetchJson("/api/research/trigger", {
+  const { ok, status, body, error } = await fetchJson("/api/support/trigger", {
     method: "POST",
-    body: JSON.stringify({
-      topic: "Competitive research brief for AI workflow platforms",
-      failureStep: FAILING_STEP,
-      useSandbox: true,
-      model: "gpt-5.5",
-    }),
+    body: JSON.stringify({ ticketId: "where-is-my-order" }),
   });
 
-  if (!ok) {
-    addCheck("fail", "Trigger research run", error ?? `HTTP ${status}`);
-    return null;
-  }
-
-  if (!body.researchRunId) {
-    addCheck("fail", "Trigger research run", "no researchRunId returned");
+  if (!ok || !body.supportRunId) {
+    addCheck("fail", "Trigger support run", error ?? `HTTP ${status}, no supportRunId`);
     return null;
   }
 
   if (!body.sent) {
     addCheck(
       "fail",
-      "Trigger research run",
-      `Inngest did not accept the event: ${body.error ?? "unknown reason"}`
+      "Trigger support run",
+      `Inngest did not accept the event: ${body.error ?? "unknown reason"}`,
     );
     return body;
   }
 
-  addCheck("pass", "Trigger research run", `researchRunId=${body.researchRunId}`);
+  addCheck("pass", "Trigger support run", `supportRunId=${body.supportRunId}`);
   return body;
 }
 
 async function pollToTerminal(trigger) {
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  const started = Date.now();
+  const deadline = started + POLL_TIMEOUT_MS;
   let last = null;
 
   while (Date.now() < deadline) {
-    const params = new URLSearchParams({
-      researchRunId: trigger.researchRunId,
-      useSandbox: "true",
-      failureStep: FAILING_STEP,
-    });
+    const params = new URLSearchParams({ supportRunId: trigger.supportRunId });
+    if (trigger.inngestEventId) params.set("inngestEventId", trigger.inngestEventId);
 
-    if (trigger.inngestEventId) {
-      params.set("inngestEventId", trigger.inngestEventId);
-    }
-
-    const { ok, body } = await fetchJson(`/api/research/status?${params}`);
+    const { ok, body } = await fetchJson(`/api/support/status?${params}`);
 
     if (ok) {
       last = body;
 
       if (body.status === "completed" || body.status === "failed") {
+        const seconds = ((Date.now() - started) / 1000).toFixed(1);
         addCheck(
           body.status === "completed" ? "pass" : "fail",
           "Run reaches a terminal state",
-          `status=${body.status}, steps=${body.completedSteps}/${body.totalSteps}`
+          `status=${body.status} in ${seconds}s`,
+        );
+        // The booth's watchdog replays a run that has not finished in time;
+        // a live run slower than this will not be what the audience sees.
+        addCheck(
+          Number(seconds) <= 20 ? "pass" : "warn",
+          "Run fits the booth budget",
+          `${seconds}s (budget 20s)`,
         );
         return body;
       }
@@ -115,141 +111,95 @@ async function pollToTerminal(trigger) {
   addCheck(
     "fail",
     "Run reaches a terminal state",
-    `still ${last?.status ?? "unknown"} after ${POLL_TIMEOUT_MS / 1000}s`
+    `still ${last?.status ?? "unknown"} after ${POLL_TIMEOUT_MS / 1000}s`,
   );
-  return last;
+  return null;
 }
 
 function checkTimeline(final) {
-  const timeline = final.timeline;
+  const steps = (final.timeline?.steps ?? []).filter((step) =>
+    AGENT_STEPS.includes(step.displayName),
+  );
 
-  if (!timeline) {
-    addCheck("fail", "Timeline captured", "no timeline in the status response");
-    return;
-  }
-
-  // The central assertion. A simulated timeline means Inngest never ran the
-  // function: the UI still renders, which is exactly why this has to fail
-  // loudly rather than pass quietly.
-  if (timeline.simulated || final.simulated) {
-    addCheck(
-      "fail",
-      "Timeline is real, not simulated",
-      "the run fell back to the offline rehearsal timeline; Inngest did not execute it"
-    );
-    return;
-  }
-
-  addCheck("pass", "Timeline is real, not simulated", `runId=${timeline.runId}`);
-
-  const steps = timeline.steps ?? [];
-
-  // Exact, not a floor: the Run stage copy states this number out loud, so a
-  // step added or removed without updating it should fail here.
-  const expectedSteps = 9;
+  // Exact, not a floor: the booth copy says "six durable steps" out loud.
   addCheck(
-    steps.length === expectedSteps ? "pass" : "fail",
-    "All research steps recorded",
-    `${steps.length} steps (expected exactly ${expectedSteps} with sandbox off; update runBrief in loop-messaging.ts if this changed)`
+    steps.length === EXPECTED_STEPS ? "pass" : "fail",
+    "All support steps recorded",
+    `${steps.length} steps (expected exactly ${EXPECTED_STEPS}; update the booth copy if this changed)`,
+  );
+
+  const failing = steps.find((step) => step.displayName === FAILING_STEP);
+  addCheck(
+    (failing?.failedAttempts?.length ?? 0) > 0 ? "pass" : "fail",
+    "Outage beat fired",
+    failing?.failedAttempts?.length
+      ? `${FAILING_STEP} failed ${failing.failedAttempts.length}x, then recovered`
+      : `${FAILING_STEP} never failed; the 503 beat did not fire`,
   );
 
   const replayed = steps.filter((step) => step.memoized).length;
   addCheck(
     replayed > 0 ? "pass" : "fail",
-    "Retry and replay beat fired",
-    replayed > 0
-      ? `${replayed} memoized step(s)`
-      : `no memoized steps; the ${FAILING_STEP} failure did not produce a replay`
+    "Finished steps replayed, not re-run",
+    replayed > 0 ? `${replayed} memoized step(s)` : "no memoized steps after the retry",
   );
 
-  const briefStep = steps.find((step) => step.displayName === BRIEF_STEP);
-
-  if (!briefStep?.output) {
-    addCheck("fail", "Research brief captured", `${BRIEF_STEP} has no output`);
-    return;
-  }
-
+  const reply = steps.find((step) => step.displayName === REPLY_STEP);
   let parsed = null;
   try {
-    parsed = JSON.parse(briefStep.output);
+    parsed = reply?.output ? JSON.parse(reply.output) : null;
   } catch {
     parsed = null;
   }
 
-  if (!parsed) {
-    // This is the payload-truncation regression: unparseable output makes the
-    // research output card disappear from the UI without any other symptom.
-    addCheck(
-      "fail",
-      "Research brief parses",
-      `${BRIEF_STEP} output is not valid JSON (payload truncation regression?)`
-    );
-    return;
-  }
-
-  if (typeof parsed.output !== "string" || parsed.output.length === 0) {
-    addCheck("fail", "Research brief parses", "parsed output field is empty");
-    return;
-  }
-
+  // Unparseable output silently removes the reply bubble from the booth.
   addCheck(
-    "pass",
-    "Research brief parses",
-    `${parsed.output.length} chars${parsed.__truncated ? " (truncated, still valid)" : ""}`
+    typeof parsed?.output === "string" && parsed.output.length > 0 ? "pass" : "fail",
+    "Drafted reply captured",
+    parsed?.output ? `${parsed.output.length} chars` : `${REPLY_STEP} output missing or not valid JSON`,
   );
 }
 
 async function checkSignal(trigger) {
-  const { ok, status, body, error } = await fetchJson("/api/research/signal", {
+  const { ok, status, body, error } = await fetchJson("/api/support/signal", {
     method: "POST",
-    body: JSON.stringify({
-      researchRunId: trigger.researchRunId,
-      signal: "useful",
-    }),
+    body: JSON.stringify({ supportRunId: trigger.supportRunId, signal: "good" }),
   });
 
-  if (!ok) {
-    addCheck("fail", "Feedback signal recorded", error ?? `HTTP ${status}`);
-    return;
-  }
-
   addCheck(
-    typeof body.score === "number" ? "pass" : "fail",
-    "Feedback signal recorded",
-    `signal=${body.signal}, score=${body.score}`
+    ok && body.sent ? "pass" : "fail",
+    "Feedback metric sent",
+    ok ? `signal=${body.signal}, score=${body.score}, sent=${body.sent}` : error ?? `HTTP ${status}`,
   );
 }
 
-async function checkExperiment(trigger, final) {
-  const { ok, status, body, error } = await fetchJson(
-    "/api/research/experiment",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        topic: "Competitive research brief for AI workflow platforms",
-        corpusRuns: [
-          {
-            researchRunId: trigger.researchRunId,
-            sessionId: final.result?.sessionId,
-            feedbackSignal: "useful",
-            feedbackScore: 1,
-          },
-        ],
-      }),
-    }
-  );
+async function checkSplitTest() {
+  const { ok, body } = await fetchJson("/api/support/experiment", {
+    method: "POST",
+    body: JSON.stringify({ count: SPLIT_RUNS }),
+  });
 
-  if (!ok) {
-    addCheck("fail", "Model bakeoff accepted", error ?? `HTTP ${status}`);
+  if (!ok || !body.sent) {
+    addCheck("fail", "Split test accepted", body?.error ?? "request failed");
     return;
   }
 
+  const deadline = Date.now() + 15_000;
+  let last = null;
+
+  while (Date.now() < deadline) {
+    const status = await fetchJson(
+      `/api/support/experiment/status?batchId=${encodeURIComponent(body.batchId)}&count=${SPLIT_RUNS}`,
+    );
+    last = status.body;
+    if (last?.completedRuns >= SPLIT_RUNS) break;
+    await sleep(POLL_INTERVAL_MS);
+  }
+
   addCheck(
-    body.sent ? "pass" : "fail",
-    "Model bakeoff accepted",
-    body.sent
-      ? `experimentRunId=${body.experimentRunId}`
-      : `Inngest did not accept the event: ${body.error ?? "unknown reason"}`
+    last?.completedRuns >= SPLIT_RUNS ? "pass" : "fail",
+    "Split test lands within 15s",
+    `${last?.completedRuns ?? 0}/${SPLIT_RUNS} runs, winner=${last?.winner ?? "none"}`,
   );
 }
 

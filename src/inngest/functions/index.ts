@@ -1,23 +1,10 @@
-import { researchAgent } from "@/inngest/functions/research-agent";
-import { researchScoreRun } from "@/inngest/functions/research-score-run";
-import { researchScoreHeartbeat } from "@/inngest/functions/research-score-heartbeat";
-import { researchExperimentBakeoff } from "@/inngest/functions/research-experiment-bakeoff";
-// createScorer returns a real InngestFunction. A deferred scorer that is not
-// served cannot be invoked, which is why the demo's defer() beat previously
-// described code that never ran.
-import { researchOutcomeScorer } from "@/inngest/scorers/research-outcome-scorer";
+import { supportAgent } from "@/inngest/functions/support-agent";
+import { supportScoreRun } from "@/inngest/functions/support-score-run";
+import { supportExperiment } from "@/inngest/functions/support-experiment";
 
-export const functions = [
-  researchAgent,
-  researchScoreRun,
-  researchScoreHeartbeat,
-  researchExperimentBakeoff,
-  researchOutcomeScorer,
-];
+export const functions = [supportAgent, supportScoreRun, supportExperiment];
 
-export { researchAgent } from "@/inngest/functions/research-agent";
-export { researchScoreRun } from "@/inngest/functions/research-score-run";
-export { researchScoreHeartbeat } from "@/inngest/functions/research-score-heartbeat";
-export { researchExperimentBakeoff } from "@/inngest/functions/research-experiment-bakeoff";
-export { researchOutcomeScorer } from "@/inngest/scorers/research-outcome-scorer";
-export type { ResearchAgentResult } from "@/inngest/functions/research-agent";
+export { supportAgent } from "@/inngest/functions/support-agent";
+export { supportScoreRun } from "@/inngest/functions/support-score-run";
+export { supportExperiment } from "@/inngest/functions/support-experiment";
+export type { SupportAgentResult } from "@/inngest/functions/support-agent";
