@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Code2 } from "lucide-react";
 import { consoleCopy, keyHints } from "@/content/booth-copy";
+import { OutageSwitch } from "./Inbox";
 import type { RunPhase } from "./useAgentRun";
 
 /**
@@ -16,13 +17,52 @@ export function PresenterHud({
   phase,
   simulated,
   depth,
+  outage,
 }: {
   onToggleDepth: () => void;
   startedAt: number | null;
   phase: RunPhase;
   simulated: boolean;
   depth: boolean;
+  /**
+   * Portrait only: the outage switch moves here from the inbox, and the bar
+   * drops the driver's extras (phase, timer, key hint) for the space.
+   */
+  outage?: { on: boolean; onToggle: () => void };
 }) {
+  if (outage) {
+    return (
+      <footer className="acme-statusbar flex items-center justify-between gap-6 whitespace-nowrap px-5 text-[16px]">
+        <span className="inline-flex items-center gap-2 font-semibold">
+          <span className="acme-inngest-mark" aria-hidden />
+          {consoleCopy.builtOn}
+        </span>
+        <div className="flex items-center gap-5">
+          <label
+            className="inline-flex cursor-pointer items-center gap-2"
+            title={`${consoleCopy.outage.hint} (F)`}
+          >
+            {consoleCopy.outage.short}
+            <span className="acme-switch-small">
+              <OutageSwitch on={outage.on} onToggle={outage.onToggle} />
+            </span>
+          </label>
+          <button
+            type="button"
+            onClick={onToggleDepth}
+            data-active={depth}
+            className="acme-hud-toggle inline-flex items-center gap-2"
+            title="Toggle Under the hood (U)"
+            aria-label="Toggle Under the hood"
+          >
+            <Code2 className="size-4" />
+            <kbd className="acme-hud-key">U</kbd>
+          </button>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer className="acme-statusbar flex items-center justify-between gap-6 whitespace-nowrap px-6 text-[16px]">
       <span className="inline-flex items-center gap-2 font-semibold">

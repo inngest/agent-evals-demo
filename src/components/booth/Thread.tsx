@@ -57,12 +57,15 @@ export function Thread({
   followUpStage,
   feedback,
   onVote,
+  tall = false,
 }: {
   ticket: SupportTicket | null;
   turns: TurnView[];
   followUpStage: FollowUpStage;
   feedback: Feedback | null;
   onVote: (signal: "good" | "bad") => void;
+  /** Portrait console: the reply's status and vote share one line. */
+  tall?: boolean;
 }) {
   const body = React.useRef<HTMLDivElement>(null);
 
@@ -87,16 +90,20 @@ export function Thread({
   const votable = latest?.run.phase === "complete" && !awaitingFollowUp;
 
   return (
-    <section className="grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[var(--acme-panel)]">
+    <section className="acme-console-thread grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden bg-[var(--acme-panel)]">
       <header className="flex items-center justify-between gap-6 border-b border-[var(--acme-line)] px-10 py-5">
         <div className="flex min-w-0 items-center gap-5">
-          <Avatar name={ticket.customer} />
+          <span data-role="avatar">
+            <Avatar name={ticket.customer} />
+          </span>
           <div className="min-w-0">
             <div className="truncate text-[30px] font-semibold leading-tight">
               {ticket.title}
             </div>
             <div className="text-[21px] text-[var(--acme-muted)]">
-              {ticket.customer} · Ticket {ticket.number} · {ticket.tag}
+              <span data-role="aside">{ticket.customer} · </span>
+              Ticket {ticket.number}
+              <span data-role="aside"> · {ticket.tag}</span>
             </div>
           </div>
         </div>
@@ -126,11 +133,15 @@ export function Thread({
               votable={votable && turns.length === 1}
               feedback={feedback}
               onVote={onVote}
+              tall={tall}
             />
           ) : null}
 
           {ticket.followUp && followUpStage === "typing" ? (
-            <div className="flex items-center gap-3 pl-16 text-[20px] text-[var(--acme-muted)]">
+            <div
+              className="flex items-center gap-3 pl-16 text-[20px] text-[var(--acme-muted)]"
+              data-role="typing"
+            >
               <span className="acme-typing-dots" aria-hidden>
                 <span />
                 <span />
@@ -153,6 +164,7 @@ export function Thread({
               votable={votable}
               feedback={feedback}
               onVote={onVote}
+              tall={tall}
             />
           ) : null}
         </div>
@@ -169,11 +181,13 @@ function RunBlock({
   votable,
   feedback,
   onVote,
+  tall,
 }: {
   turn: TurnView;
   ticket: SupportTicket;
   /** A later turn exists: fold this run's activity to one line. */
   collapsed: boolean;
+  tall: boolean;
   votable: boolean;
   feedback: Feedback | null;
   onVote: (signal: "good" | "bad") => void;
@@ -231,6 +245,11 @@ function RunBlock({
           votable={votable}
           feedback={feedback}
           onVote={onVote}
+          // Portrait: status and vote on one line, in place of the three
+          // lines below.
+          footer={
+            tall && complete ? (escalated ? copy.escalation.note : copy.sent.label(ticket.customer)) : null
+          }
         />
       ) : null}
       {reply && collapsed ? (
@@ -241,13 +260,13 @@ function RunBlock({
         </div>
       ) : null}
 
-      {complete && escalated && !collapsed ? (
+      {complete && escalated && !collapsed && !tall ? (
         <div className="acme-escalation flex items-center gap-3 justify-self-end text-[21px]">
           <UserRound className="size-5" /> {copy.escalation.note}
         </div>
       ) : null}
 
-      {complete && !collapsed ? (
+      {complete && !collapsed && !tall ? (
         <div className="acme-sent flex flex-wrap items-center gap-x-4 gap-y-1 text-[21px]">
           <Send className="size-5" />
           <span className="font-semibold">
@@ -286,8 +305,8 @@ function ActivityRow({ view, model }: { view: StepView; model: string }) {
       <div className="min-w-0">
         {/* One line when there is room; the detail wraps under the label
             when there is not (beside the code drawer). */}
-        <div className="flex flex-wrap items-baseline gap-x-3">
-          <span className="text-[23px] font-semibold">{view.def.label}</span>
+        <div className="flex flex-wrap items-baseline gap-x-3" data-role="row-line">
+          <span className="shrink-0 text-[23px] font-semibold">{view.def.label}</span>
           <span className="acme-source">{view.def.source}</span>
           <span
             className="min-w-0 flex-[1_1_320px] truncate text-[20px] text-[var(--acme-muted)]"
@@ -325,7 +344,7 @@ function ActivityRow({ view, model }: { view: StepView; model: string }) {
         {state === "retrying" ? (
           <RetryCountdown />
         ) : state === "done" && view.durationMs !== undefined ? (
-          formatSeconds(view.durationMs)
+          <span data-role="duration">{formatSeconds(view.durationMs)}</span>
         ) : null}
       </div>
     </li>
@@ -347,6 +366,7 @@ function AgentReply({
   votable,
   feedback,
   onVote,
+  footer,
 }: {
   reply: string;
   agentName: string;
@@ -356,6 +376,8 @@ function AgentReply({
   votable: boolean;
   feedback: Feedback | null;
   onVote: (signal: "good" | "bad") => void;
+  /** Portrait: the sent or escalated line, shown beside the vote. */
+  footer: string | null;
 }) {
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] justify-items-end gap-3">
@@ -368,7 +390,28 @@ function AgentReply({
         </div>
         <div className="text-[24px] leading-[1.4]">{reply}</div>
       </div>
-      {votable ? (
+      {footer !== null ? (
+        <div className="flex w-full min-w-0 items-center justify-between gap-4 text-[21px]">
+          <span
+            className={`inline-flex min-w-0 items-center gap-3 font-semibold ${blocked ? "text-[var(--acme-warn)]" : "text-[var(--acme-ok)]"}`}
+          >
+            {blocked ? <UserRound className="size-5 shrink-0" /> : <Send className="size-5 shrink-0" />}
+            <span className="truncate">{footer}</span>
+          </span>
+          {votable ? (
+            <span className="flex shrink-0 items-center gap-3">
+              {feedback ? (
+                <Receipt feedback={feedback} />
+              ) : (
+                <>
+                  <VoteButton signal="good" feedback={feedback} onVote={onVote} />
+                  <VoteButton signal="bad" feedback={feedback} onVote={onVote} />
+                </>
+              )}
+            </span>
+          ) : null}
+        </div>
+      ) : votable ? (
         <div className="flex flex-wrap items-center justify-end gap-4 text-[21px]">
           <span className="text-[var(--acme-muted)]">{copy.feedback.prompt}</span>
           <VoteButton signal="good" feedback={feedback} onVote={onVote} />
@@ -438,9 +481,11 @@ function Message({
 }) {
   return (
     <div className="flex min-w-0 items-start gap-4">
-      <Avatar name={who} small />
+      <span data-role="avatar">
+        <Avatar name={who} small />
+      </span>
       <div className="acme-message min-w-0 max-w-[min(1180px,100%)]">
-        <div className="mb-1 text-[19px]">
+        <div className="mb-1 text-[19px]" data-role="byline">
           <span className="font-semibold">{who}</span>
           <span className="text-[var(--acme-muted)]"> · {when}</span>
         </div>

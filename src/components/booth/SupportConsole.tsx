@@ -227,7 +227,7 @@ export function SupportConsole({
         }}
         data-layout={stage.tall ? "tall" : "wide"}
       >
-        <header className="acme-topbar flex items-center justify-between gap-6 px-8">
+        <header className="acme-topbar flex items-center justify-between gap-6 px-8" data-tall={stage.tall}>
           <div className="flex items-center gap-4">
             <span className="acme-logo" aria-hidden>
               A
@@ -244,8 +244,10 @@ export function SupportConsole({
               data-active={showSplit}
               onClick={() => setShowSplit((current) => !current)}
               title="Split-test a model (S)"
+              aria-label={consoleCopy.split.button}
             >
-              <FlaskConical className="size-5" /> {consoleCopy.split.button}
+              <FlaskConical className="size-5" />
+              {stage.tall ? null : consoleCopy.split.button}
             </button>
           </div>
         </header>
@@ -281,6 +283,7 @@ export function SupportConsole({
             followUpStage={followUpStage}
             feedback={feedback}
             onVote={castVote}
+            tall={stage.tall}
           />
           {drawer ? <UnderTheHood snippet={snippet} compact={stage.tall} /> : null}
         </div>
@@ -291,6 +294,11 @@ export function SupportConsole({
           phase={latest.run.phase}
           simulated={latest.run.simulated}
           depth={depth}
+          outage={
+            stage.tall
+              ? { on: failureArmed, onToggle: () => setFailureArmed((current) => !current) }
+              : undefined
+          }
         />
 
         {showSplit ? (

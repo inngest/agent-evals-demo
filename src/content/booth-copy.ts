@@ -28,6 +28,7 @@ export const consoleCopy = {
   },
   outage: {
     label: "Simulate Order API outage",
+    short: "Order API outage",
     hint: "The order lookup returns a 503 once per run.",
   },
   cta: {

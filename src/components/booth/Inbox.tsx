@@ -43,18 +43,7 @@ export function Inbox({
     return status === "open" || status === "working";
   }).length;
 
-  const outageSwitch = (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={failureArmed}
-      className="acme-switch"
-      data-on={failureArmed}
-      onClick={onToggleFailure}
-    >
-      <span />
-    </button>
-  );
+  const outageSwitch = <OutageSwitch on={failureArmed} onToggle={onToggleFailure} />;
   const qr = (size: string) => (
     <div
       className={`acme-qr ${size} shrink-0 bg-white p-1.5`}
@@ -62,18 +51,46 @@ export function Inbox({
     />
   );
 
+  // Portrait, with a ticket open: the thread needs the room, so the inbox
+  // folds to one row of chips. The outage switch is in the status bar.
+  if (layout !== "sidebar" && activeId !== null) {
+    return (
+      <nav
+        className="grid min-w-0 grid-cols-4 gap-2 border-b border-[var(--acme-line)] bg-[var(--acme-sidebar)] px-4 py-3"
+        aria-label={copy.inbox.title}
+      >
+        {tickets.map((ticket, index) => {
+          const status = statusOf(ticket.id);
+          return (
+            <button
+              key={ticket.id}
+              type="button"
+              className="acme-chip grid min-w-0 text-left"
+              data-group={ticket.group}
+              data-active={ticket.id === activeId}
+              onClick={() => onPick(index)}
+              title={`${ticket.title} (${index + 1})`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="acme-chip-dot" data-status={status} aria-hidden />
+                <span className="truncate text-[19px] font-semibold">
+                  {ticket.customer.split(" ")[0]}
+                </span>
+              </span>
+              <span className="truncate text-[17px] text-[var(--acme-muted)]">{ticket.title}</span>
+            </button>
+          );
+        })}
+      </nav>
+    );
+  }
+
   if (layout !== "sidebar") {
     return (
       <aside className="grid min-w-0 gap-3 border-b border-[var(--acme-line)] bg-[var(--acme-sidebar)] px-5 pb-4 pt-4">
-        <header className="flex items-center justify-between gap-4 px-2">
-          <div className="flex items-baseline gap-4">
-            <h2 className="text-[24px] font-semibold">{copy.inbox.title}</h2>
-            <span className="text-[18px] text-[var(--acme-muted)]">{copy.inbox.open(open)}</span>
-          </div>
-          <label className="flex cursor-pointer items-center gap-3" title={`${copy.outage.hint} (F)`}>
-            <span className="text-[18px] leading-tight">{copy.outage.label}</span>
-            {outageSwitch}
-          </label>
+        <header className="flex items-baseline gap-4 px-2">
+          <h2 className="text-[24px] font-semibold">{copy.inbox.title}</h2>
+          <span className="text-[18px] text-[var(--acme-muted)]">{copy.inbox.open(open)}</span>
         </header>
         <div
           className="grid min-w-0 gap-4"
@@ -195,9 +212,11 @@ function TicketCard({
         <div className="min-w-0">
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-[20px] font-semibold">{ticket.customer}</span>
-            <span className="acme-status shrink-0" data-status={status}>
-              {copy.inbox.status[status]}
-            </span>
+            {status === "open" ? null : (
+              <span className="acme-status shrink-0" data-status={status}>
+                {copy.inbox.status[status]}
+              </span>
+            )}
           </div>
           <div className="truncate text-[19px]">{ticket.title}</div>
         </div>
@@ -231,6 +250,22 @@ function TicketCard({
           {copy.inbox.status[status]}
         </span>
       </div>
+    </button>
+  );
+}
+
+/** The outage feature flag: in the inbox footer, or the portrait status bar. */
+export function OutageSwitch({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      className="acme-switch"
+      data-on={on}
+      onClick={onToggle}
+    >
+      <span />
     </button>
   );
 }
