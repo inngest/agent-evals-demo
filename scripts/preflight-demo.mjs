@@ -57,7 +57,7 @@ async function checkServeEndpoint() {
   const count = body.function_count ?? 0;
   // The booth serves: support-agent, its metrics scorer, and the model
   // split test.
-  add(count >= 3 ? "pass" : "fail", "Inngest functions served",
+  add(count >= 4 ? "pass" : "fail", "Inngest functions served",
     `${count} function(s) registered`);
 }
 

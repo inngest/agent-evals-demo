@@ -2,8 +2,10 @@ import { RetryAfterError } from "inngest";
 import {
   getSupportStep,
   getSupportTicket,
+  getTicketOutputs,
   type SupportStepId,
   type SupportTicketId,
+  type SupportTurn,
 } from "@/content/support-demo";
 import { startPostSpan, startGenAISpan } from "./otel";
 import { recordStepInput } from "@/inngest/middlewares/step-tracker";
@@ -16,6 +18,7 @@ import {
 
 type SupportCallOptions = {
   ticketId: SupportTicketId;
+  turn: SupportTurn;
   /** The model this run narrates, for the gen_ai span. */
   model: string;
   attempt: number;
@@ -46,7 +49,7 @@ export async function runSupportCall(
 ) {
   const step = getSupportStep(id);
   const ticket = getSupportTicket(options.ticketId);
-  const canned = ticket.outputs[id];
+  const canned = getTicketOutputs(ticket, options.turn)[id];
 
   if (options.runId && options.input !== undefined) {
     recordStepInput(options.runId, id, options.input);
@@ -105,6 +108,7 @@ export async function runSupportCall(
     source: step.source,
     output: canned.output,
     tokens: canned.tokens,
+    flagged: canned.flagged === true,
   };
 }
 
@@ -119,10 +123,15 @@ async function runRealReply(
       `${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`,
     )
     .join("\n");
+  const ticket = getSupportTicket(options.ticketId);
+  const customerMessage =
+    options.turn === 2 && ticket.followUp
+      ? `${message}\nCustomer follow-up: ${ticket.followUp.message}`
+      : message;
   const completion = await completeChat({
     system:
       "You are a warm, concise customer-support agent for an online store. Reply to the customer in 2-3 sentences using only the facts provided. No sign-off.",
-    prompt: `${context}\n\nCustomer message: ${message}`,
+    prompt: `${context}\n\nCustomer message: ${customerMessage}`,
   });
 
   return {
@@ -131,5 +140,6 @@ async function runRealReply(
     source: `openrouter · ${completion.model}`,
     output: completion.text,
     tokens: completion.usage.totalTokens,
+    flagged: false,
   };
 }

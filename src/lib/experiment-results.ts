@@ -32,6 +32,10 @@ export type ExperimentModel = string;
 export type VariantResult = {
   model: ExperimentModel;
   ticketId: SupportTicketId;
+  /** 1 when the answer resolved the ticket with no follow-up or hand-off. */
+  firstContactResolution: number;
+  /** 1 when the answer passed the policy check. */
+  policyCompliance: number;
   qualityScore: number;
   tokenCount: number;
   costUsd: number;
@@ -40,6 +44,10 @@ export type VariantResult = {
 export type VariantAggregate = {
   variant: string;
   runs: number;
+  /** Share of this variant's tickets resolved on first contact, 0..1. */
+  fcrRate: number;
+  /** Share of this variant's answers that passed the policy check, 0..1. */
+  policyRate: number;
   qualityScore: number;
   costUsd: number;
   tokenCount: number;
@@ -77,9 +85,25 @@ const TOKEN_FACTOR: Record<ModelRole, number> = {
  */
 const TICKET_JITTER: Record<SupportTicketId, number> = {
   "where-is-my-order": 0.01,
-  "damaged-item": -0.015,
   "change-address": 0.005,
+  "damaged-item": -0.015,
+  "cancel-subscription": -0.01,
 };
+
+/**
+ * The business outcome, scripted by role like the quality: on the tickets
+ * that go badly today, the current model repeats today's failure (a refund
+ * over the limit, a misread intent) and the challenger gets them right.
+ */
+function outcomeFor(role: ModelRole, ticketId: SupportTicketId) {
+  const ticket = getSupportTicket(ticketId);
+  if (role === "challenger" || ticket.group === "good") {
+    return { firstContactResolution: 1, policyCompliance: 1 };
+  }
+
+  const policyCompliance = ticket.outputs["policy-check"].flagged ? 0 : 1;
+  return { firstContactResolution: 0, policyCompliance };
+}
 
 export function scoreVariant(
   model: ExperimentModel,
@@ -92,13 +116,14 @@ export function scoreVariant(
   return {
     model,
     ticketId: ticket.id,
+    ...outcomeFor(role, ticket.id),
     qualityScore: clamp01(round(BASE_QUALITY[role] + TICKET_JITTER[ticket.id], 3)),
     tokenCount,
     costUsd: round((tokenCount / 1000) * costPer1kTokens(model), 4),
   };
 }
 
-/** Which ticket split-test run `index` replays. Cycles the three presets. */
+/** Which ticket split-test run `index` replays. Cycles the preset tickets. */
 export function ticketForExperimentRun(index: number): SupportTicketId {
   return supportTickets[index % supportTickets.length]!.id;
 }
@@ -151,6 +176,8 @@ export function collectVariantResults(timelines: RunTimeline[]): VariantResult[]
           VARIANT_STEP_PREFIX.length,
         ) as ExperimentModel,
         ticketId: parsed.ticketId ?? ticketForExperimentRun(0),
+        firstContactResolution: parsed.firstContactResolution ?? 0,
+        policyCompliance: parsed.policyCompliance ?? 0,
         qualityScore: parsed.qualityScore ?? 0,
         tokenCount: parsed.tokenCount ?? 0,
         costUsd: parsed.costUsd ?? 0,
@@ -166,6 +193,8 @@ export function collectVariantResults(timelines: RunTimeline[]): VariantResult[]
     .map((result) => ({
       model: result.model,
       ticketId: result.ticketId,
+      firstContactResolution: result.firstContactResolution,
+      policyCompliance: result.policyCompliance,
       qualityScore: result.qualityScore,
       tokenCount: result.tokenCount,
       costUsd: result.costUsd,
@@ -178,21 +207,19 @@ export function aggregateVariantResults(
 ): ExperimentAggregate {
   const totals = new Map<
     string,
-    { runs: number; quality: number; cost: number; tokens: number }
+    { runs: number; fcr: number; policy: number; quality: number; cost: number; tokens: number }
   >();
+  const empty = () => ({ runs: 0, fcr: 0, policy: 0, quality: 0, cost: 0, tokens: 0 });
 
   for (const model of EXPERIMENT_MODELS) {
-    totals.set(model, { runs: 0, quality: 0, cost: 0, tokens: 0 });
+    totals.set(model, empty());
   }
 
   for (const result of results) {
-    const bucket = totals.get(result.model) ?? {
-      runs: 0,
-      quality: 0,
-      cost: 0,
-      tokens: 0,
-    };
+    const bucket = totals.get(result.model) ?? empty();
     bucket.runs += 1;
+    bucket.fcr += result.firstContactResolution;
+    bucket.policy += result.policyCompliance;
     bucket.quality += result.qualityScore;
     bucket.cost += result.costUsd;
     bucket.tokens += result.tokenCount;
@@ -203,6 +230,8 @@ export function aggregateVariantResults(
     ([variant, bucket]) => ({
       variant,
       runs: bucket.runs,
+      fcrRate: bucket.runs > 0 ? round(bucket.fcr / bucket.runs, 3) : 0,
+      policyRate: bucket.runs > 0 ? round(bucket.policy / bucket.runs, 3) : 0,
       // A variant with zero runs is reported as zero rather than hidden: an
       // empty row is information, a missing row looks like a bug.
       qualityScore: bucket.runs > 0 ? round(bucket.quality / bucket.runs, 3) : 0,

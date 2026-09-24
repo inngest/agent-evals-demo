@@ -1,8 +1,8 @@
 import QRCode from "qrcode";
-import { BoothStage } from "@/components/booth/BoothStage";
+import { SupportConsole } from "@/components/booth/SupportConsole";
 import { getHighlightedBoothSnippets } from "@/lib/highlight";
 
-/** Where the recap's QR code sends visitors. Override per event. */
+/** Where the inbox's QR code sends visitors. Override per event. */
 const CTA_URL =
   process.env.NEXT_PUBLIC_BOOTH_CTA_URL?.trim() || "https://www.inngest.com/docs";
 
@@ -17,5 +17,5 @@ export default async function Home() {
     }),
   ]);
 
-  return <BoothStage snippets={snippets} qrSvg={qrSvg} ctaUrl={CTA_URL} />;
+  return <SupportConsole snippets={snippets} qrSvg={qrSvg} />;
 }

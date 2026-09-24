@@ -1,8 +1,10 @@
 import {
   FAILURE_STEP_ID,
   getSupportTicket,
+  getTicketOutputs,
   supportSteps,
   type SupportTicketId,
+  type SupportTurn,
 } from "@/content/support-demo";
 import type { RunTimeline, TimelineStep } from "@/inngest/middlewares/step-tracker";
 
@@ -27,6 +29,7 @@ const SEND_EVENT_MS = 150;
 export type ReplayTimelineArgs = {
   runId: string;
   ticketId: SupportTicketId;
+  turn?: SupportTurn;
   elapsedMs: number;
   failureArmed: boolean;
   startedAt: number;
@@ -84,11 +87,13 @@ export function replayTimelineTotalMs(failureArmed: boolean): number {
 export function buildReplayTimeline({
   runId,
   ticketId,
+  turn = 1,
   elapsedMs,
   failureArmed,
   startedAt,
 }: ReplayTimelineArgs): RunTimeline {
   const ticket = getSupportTicket(ticketId);
+  const outputs = getTicketOutputs(ticket, turn);
   const segments = planSegments(failureArmed);
   const totalMs = replayTimelineTotalMs(failureArmed);
   const steps: TimelineStep[] = [];
@@ -103,8 +108,9 @@ export function buildReplayTimeline({
       id: def.id,
       label: def.label,
       source: def.source,
-      output: ticket.outputs[def.id].output,
-      tokens: ticket.outputs[def.id].tokens,
+      output: outputs[def.id].output,
+      tokens: outputs[def.id].tokens,
+      flagged: outputs[def.id].flagged === true,
     });
 
     if (segment.kind === "memoized") {

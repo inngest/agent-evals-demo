@@ -5,6 +5,7 @@ import {
   currentSupportModel,
 } from "@/content/support-demo";
 import { scoreVariant, variantStepName } from "@/lib/experiment-results";
+import { SCORE } from "@/lib/score-names";
 
 /** The experiment's wire id: also what the dashboard deep link targets. */
 export const SUPPORT_EXPERIMENT_ID = "support-agent-model-split-test";
@@ -46,17 +47,18 @@ export const supportExperiment = inngest.createFunction(
       },
     );
 
-    await inngest.score.experiment({
-      experiment: experimentRef,
-      name: "support_reply_quality",
-      value: result.qualityScore,
-    });
+    // The same business metrics every live run is scored on, so the
+    // experiment view compares variants on what the business cares about.
+    const scores: Array<[string, number]> = [
+      [SCORE.firstContactResolution, result.firstContactResolution],
+      [SCORE.policyCompliance, result.policyCompliance],
+      [SCORE.costPerTicket, result.costUsd],
+      [SCORE.replyQuality, result.qualityScore],
+    ];
 
-    await inngest.score.experiment({
-      experiment: experimentRef,
-      name: "support_cost_usd",
-      value: result.costUsd,
-    });
+    for (const [name, value] of scores) {
+      await inngest.score.experiment({ experiment: experimentRef, name, value });
+    }
 
     return {
       experimentRunId: event.data.experimentRunId,

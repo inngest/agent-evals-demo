@@ -261,153 +261,481 @@ button.demo-action-button:hover .demo-action-icon {
 ::-webkit-scrollbar-thumb { background: var(--rule-soft); }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink); }
 
-/* ─── Booth stage ──────────────────────────────────────────────────────────
-   Sized for a 1920×1080 canvas scaled to the display (BoothStage). Colour
-   carries state across the room: coral is failure, teal is recovered or
-   winning, ink is done. Lives here, not in globals.css, for the reason in
-   this file's header; button rules restate border and background because
-   the reset above beats Tailwind's layered utilities. */
+/* ─── Acme Support console ─────────────────────────────────────────────────
+   The booth app, styled as Acme's own helpdesk rather than as Inngest, so
+   the hand-off to the real Inngest dashboard reads as leaving the product.
+   Sized for a 1920×1080 canvas scaled to the display (SupportConsole).
+   Lives here, not in globals.css, for the reason in this file's header;
+   button rules restate border, background and padding because the reset
+   above beats Tailwind's layered utilities. */
 
-:root {
-  /* Teal that stays legible on the ink fill of a finished node. */
-  --teal-on-ink: #3ee0b5;
+.acme-console {
+  --acme-bg: #f3f4f7;
+  --acme-panel: #ffffff;
+  --acme-sidebar: #f8f9fb;
+  --acme-line: #e2e5eb;
+  --acme-text: #151a24;
+  --acme-muted: #5f6b7d;
+  --acme-accent: #4f46e5;
+  --acme-accent-soft: #eef0ff;
+  --acme-ok: #0f8a5f;
+  --acme-ok-soft: #e5f6ee;
+  --acme-bad: #d93a3f;
+  --acme-bad-soft: #fdecec;
+  --acme-warn: #9a5b00;
+  --acme-warn-soft: #fff4de;
+  background: var(--acme-bg);
+  color: var(--acme-text);
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
-.booth-screen {
-  animation: step-in 260ms ease both;
+.acme-topbar {
+  height: 84px;
+  border-bottom: 1px solid var(--acme-line);
+  background: var(--acme-panel);
 }
 
-button.booth-ticket {
-  border: 3px solid var(--ink);
-  background: var(--paper);
-  padding: 32px;
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease,
-    transform 140ms ease;
+.acme-logo {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--acme-accent);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
 }
 
-button.booth-ticket[data-focused="true"] {
-  border-color: var(--coral);
-  box-shadow: 8px 8px 0 var(--ink);
-  transform: translate(-4px, -4px);
+.acme-avatar {
+  border-radius: 999px;
+  background: var(--acme-accent-soft);
+  color: var(--acme-accent);
 }
 
-.booth-node {
-  border-color: var(--rule-soft);
-  background: var(--paper);
-  color: var(--muted-copy);
-  transition:
-    background 200ms ease,
-    border-color 200ms ease,
-    color 200ms ease;
+button.acme-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 22px;
+  border: 1px solid var(--acme-accent);
+  border-radius: 10px;
+  background: var(--acme-accent);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+  transition: background 140ms ease, border-color 140ms ease;
 }
 
-.booth-node[data-state="running"] {
-  border-color: var(--coral);
-  color: var(--ink);
-  animation: booth-node-pulse 1.1s ease-in-out infinite;
+button.acme-button[data-tone="quiet"] {
+  border-color: var(--acme-line);
+  background: var(--acme-panel);
+  color: var(--acme-text);
 }
 
-.booth-node[data-state="retrying"],
-.booth-node[data-state="errored"] {
-  border-color: var(--coral);
-  background: var(--coral);
-  color: var(--paper);
-  animation: booth-shake 420ms ease both;
+button.acme-button[data-tone="quiet"]:hover,
+button.acme-button[data-tone="quiet"][data-active="true"] {
+  border-color: var(--acme-accent);
+  color: var(--acme-accent);
 }
 
-.booth-node[data-state="done"] {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper);
+button.acme-icon-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--acme-muted);
+  padding: 0;
 }
 
-@keyframes booth-node-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 97, 66, 0.45); }
-  50% { box-shadow: 0 0 0 10px rgba(251, 97, 66, 0); }
+button.acme-icon-button:hover {
+  background: var(--acme-bg);
 }
 
-@keyframes booth-shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-8px); }
-  40% { transform: translateX(8px); }
-  60% { transform: translateX(-5px); }
-  80% { transform: translateX(5px); }
+/* Inbox */
+
+button.acme-ticket {
+  padding: 18px 18px 16px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  transition: background 140ms ease, border-color 140ms ease;
 }
 
-.booth-callout {
-  animation: slide-up 280ms ease both;
+button.acme-ticket:hover {
+  background: var(--acme-panel);
+  border-color: var(--acme-line);
 }
 
-.booth-bubble {
-  animation: slide-up 320ms ease both;
+button.acme-ticket[data-active="true"] {
+  background: var(--acme-panel);
+  border-color: var(--acme-accent);
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.12);
 }
 
-.booth-bar-running {
-  animation: pulse-dot 1s ease-in-out infinite;
+.acme-tag {
+  display: inline-flex;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--acme-bg);
+  color: var(--acme-muted);
+  font-size: 16px;
+  font-weight: 600;
 }
 
-button.booth-vote {
-  border: 3px solid var(--ink);
-  background: var(--paper);
-  transition: background 140ms ease, color 140ms ease;
+.acme-status {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--acme-muted);
 }
 
-button.booth-vote:hover {
-  background: var(--bone);
+.acme-status[data-status="working"] {
+  color: var(--acme-accent);
 }
 
-button.booth-vote[data-active="true"] {
-  background: var(--ink);
-  color: var(--paper);
+.acme-status[data-status="resolved"] {
+  color: var(--acme-ok);
 }
 
-button.booth-primary {
-  padding: 0 28px;
-  border: 3px solid var(--ink);
-  background: var(--coral);
-  color: var(--ink);
-  box-shadow: 6px 6px 0 var(--ink);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+.acme-status[data-status="escalated"] {
+  color: var(--acme-warn);
 }
 
-button.booth-primary:hover {
-  transform: translate(-2px, -2px);
-  box-shadow: 8px 8px 0 var(--ink);
+button.acme-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 56px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: #c9ced8;
+  padding: 0;
+  transition: background 160ms ease;
 }
 
-.booth-run-chip {
-  border: 2px dashed var(--rule-soft);
-  color: var(--paper);
+button.acme-switch span {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 160ms ease;
 }
 
-.booth-run-chip[data-filled="true"] {
-  border: 2px solid var(--ink);
-  background: var(--ink);
-  animation: bump 320ms ease;
+button.acme-switch[data-on="true"] {
+  background: var(--acme-bad);
 }
 
-[data-winner="true"] .booth-run-chip[data-filled="true"] {
-  border-color: var(--teal);
-  background: var(--teal);
+button.acme-switch[data-on="true"] span {
+  transform: translateX(24px);
 }
 
-.booth-qr svg {
+.acme-qr {
+  border: 1px solid var(--acme-line);
+  border-radius: 8px;
+}
+
+.acme-qr svg {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-button.booth-hud-dot {
-  padding: 2px 8px;
-  border: 1px solid transparent;
-  text-transform: uppercase;
+/* Thread */
+
+/* Bubbles wrap long words rather than push past their column. */
+.acme-message,
+.acme-reply {
+  overflow-wrap: anywhere;
 }
 
-button.booth-hud-dot[data-active="true"] {
-  border-color: var(--ink);
-  color: var(--ink);
+.acme-message {
+  padding: 16px 22px;
+  border-radius: 4px 18px 18px 18px;
+  background: var(--acme-bg);
+  animation: slide-up 280ms ease both;
+}
+
+.acme-activity {
+  border: 1px solid var(--acme-line);
+  border-radius: 16px;
+  background: var(--acme-sidebar);
+  padding-bottom: 8px;
+}
+
+.acme-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px;
+  margin: 0 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: var(--acme-muted);
+  animation: slide-up 240ms ease both;
+  transition: background 200ms ease, color 200ms ease;
+}
+
+.acme-row > svg {
+  margin-top: 1px;
+}
+
+.acme-row[data-state="running"] {
+  color: var(--acme-accent);
+}
+
+.acme-row[data-state="done"] {
+  color: var(--acme-ok);
+}
+
+.acme-row[data-state="done"] > div:nth-child(2) {
+  color: var(--acme-text);
+}
+
+.acme-row[data-state="retrying"],
+.acme-row[data-state="errored"] {
+  background: var(--acme-bad-soft);
+  color: var(--acme-bad);
+  animation: acme-shake 420ms ease both;
+}
+
+.acme-row[data-state="retrying"] [data-role="detail"],
+.acme-row[data-state="errored"] [data-role="detail"] {
+  color: var(--acme-bad);
+  font-weight: 600;
+}
+
+.acme-source {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--acme-muted);
+}
+
+.acme-recovered {
+  margin-top: 4px;
+  color: var(--acme-bad);
+}
+
+.acme-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.acme-pill[data-tone="ok"] { background: var(--acme-ok-soft); color: var(--acme-ok); }
+.acme-pill[data-tone="bad"] { background: var(--acme-bad); color: #fff; }
+.acme-pill[data-tone="warn"] { background: var(--acme-warn-soft); color: var(--acme-warn); }
+
+.acme-reply {
+  padding: 18px 24px;
+  border-radius: 18px 4px 18px 18px;
+  background: var(--acme-accent);
+  color: #fff;
+  animation: slide-up 320ms ease both;
+}
+
+button.acme-vote {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--acme-line);
+  border-radius: 999px;
+  background: var(--acme-panel);
+  color: var(--acme-muted);
+  padding: 0;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+button.acme-vote:hover {
+  border-color: var(--acme-accent);
+  color: var(--acme-accent);
+}
+
+button.acme-vote[data-active="true"] {
+  border-color: var(--acme-accent);
+  background: var(--acme-accent);
+  color: #fff;
+}
+
+.acme-sent {
+  justify-self: end;
+  color: var(--acme-ok);
+  animation: slide-up 280ms ease both;
+}
+
+@keyframes acme-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.acme-group {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--acme-ok);
+}
+
+.acme-group[data-group="bad"] {
+  color: var(--acme-bad);
+}
+
+/* The guardrail blocked the draft: the step worked, the outcome did not. */
+.acme-row[data-flagged="true"] {
+  background: var(--acme-warn-soft);
+  color: var(--acme-warn);
+}
+
+.acme-row[data-flagged="true"] [data-role="detail"] {
+  color: var(--acme-warn);
+  font-weight: 600;
+}
+
+.acme-reply[data-blocked="true"] {
+  border: 2px dashed var(--acme-warn);
+  background: var(--acme-warn-soft);
+  color: var(--acme-text);
+}
+
+.acme-escalation {
+  color: var(--acme-warn);
+  font-weight: 600;
+  animation: slide-up 280ms ease both;
+}
+
+.acme-typing-dots {
+  display: inline-flex;
+  gap: 5px;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: var(--acme-bg);
+}
+
+.acme-typing-dots span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--acme-muted);
+  animation: acme-typing 1s ease-in-out infinite;
+}
+
+.acme-typing-dots span:nth-child(2) { animation-delay: 150ms; }
+.acme-typing-dots span:nth-child(3) { animation-delay: 300ms; }
+
+@keyframes acme-typing {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-3px); }
+}
+
+/* Popover (split test, key hints) */
+
+.acme-popover {
+  border: 1px solid var(--acme-line);
+  border-radius: 18px;
+  background: var(--acme-panel);
+  box-shadow: 0 24px 60px rgba(20, 24, 33, 0.22);
+  animation: slide-up 220ms ease both;
+}
+
+.acme-progress {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--acme-bg);
+  overflow: hidden;
+}
+
+.acme-progress span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--acme-accent);
+  transition: width 300ms ease;
+}
+
+/* The hand-off to Inngest: Inngest's own ink and coral, so it reads as a
+   different product from Acme's indigo. */
+.inngest-link {
+  border-radius: 10px;
+  font-weight: 600;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.inngest-link[data-variant="button"] {
+  height: 52px;
+  padding: 0 20px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 20px;
+  box-shadow: inset 0 -3px 0 var(--coral);
+}
+
+.inngest-link[data-variant="button"]:hover {
+  background: #2a2430;
+}
+
+.inngest-link[data-variant="inline"] {
+  gap: 4px;
+  color: var(--coral);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Status bar and presenter controls */
+
+.acme-statusbar {
+  height: 40px;
+  border-top: 1px solid var(--acme-line);
+  background: var(--acme-panel);
+  color: var(--acme-muted);
+}
+
+.acme-inngest-mark {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--coral);
+}
+
+button.acme-hud-toggle {
+  padding: 2px 10px;
+  border: 1px solid var(--acme-line);
+  border-radius: 8px;
+  background: var(--acme-panel);
+}
+
+button.acme-hud-toggle:hover {
+  border-color: var(--acme-text);
+  color: var(--acme-text);
+}
+
+button.acme-hud-toggle[data-active="true"] {
+  border-color: var(--acme-text);
+  background: var(--acme-text);
+  color: #fff;
+}
+
+.acme-hud-key {
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .status-dot[data-state="idle"] {
@@ -418,53 +746,17 @@ button.booth-hud-dot[data-active="true"] {
   padding: 28px 40px;
 }
 
-button.booth-hud-dot:disabled {
-  cursor: not-allowed;
-  opacity: 0.35;
+/* The drawer sits above the thread, so nothing can paint over the code. */
+.booth-drawer {
+  position: relative;
+  z-index: 10;
 }
 
-/* The one HUD control a driver may need without remembering its key, so it
-   reads as a button rather than as status text. */
-button.booth-hud-toggle {
-  padding: 4px 10px;
-  border: 1px solid var(--muted-copy);
-  background: var(--paper);
-  text-transform: uppercase;
+/* Portrait console (split screen, phone): the inbox is a strip. */
+button.acme-ticket[data-compact] {
+  padding: 10px 14px;
 }
 
-button.booth-hud-toggle:hover {
-  border-color: var(--ink);
-  color: var(--ink);
-}
-
-button.booth-hud-toggle[data-active="true"] {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--paper);
-}
-
-.booth-hud-key {
-  border: 1px solid currentColor;
-  padding: 0 5px;
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.booth-inngest-link {
-  transition: background 140ms ease, color 140ms ease;
-}
-
-.booth-inngest-link:hover {
-  background: var(--ink);
-  color: var(--paper);
-}
-
-/* The chip for the ticket that just landed in the split test. */
-.booth-run-chip[data-latest="true"] {
-  outline: 3px solid var(--coral);
-  outline-offset: 2px;
-}
-
-.booth-feed {
-  animation: step-in 240ms ease both;
+[data-layout="tall"] .booth-drawer {
+  border-top: 1px solid var(--acme-line);
 }

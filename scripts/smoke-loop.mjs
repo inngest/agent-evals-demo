@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * Smoke test for the booth demo at `/`: the support agent, its feedback
- * metric, and the model split test, end to end against a running app.
+ * Smoke test for the booth demo at `/`: the support agent, its business
+ * scores (good and bad interactions), the feedback metric, and the model
+ * split test, end to end against a running app.
  *
  * The assertions are deliberately hard failures rather than warnings. The
  * booth UI falls back to a labelled replay when Inngest is unreachable, so a
@@ -30,6 +31,12 @@ const EXPECTED_STEPS = 6;
 const SPLIT_RUNS = 8;
 const POLL_INTERVAL_MS = 600;
 const POLL_TIMEOUT_MS = Number(process.env.DEMO_SMOKE_TIMEOUT_MS ?? 60_000);
+// Scorer step ids, mirrored from src/lib/score-names.ts.
+const SCORER = "support-agent-score-run,support-agent-resolution";
+const POLICY_SCORE_STEP = "attach-policy-compliance-score";
+const FCR_SCORE_STEP = "attach-first-contact-resolution";
+// The scorer's follow-up window (15s) plus slack.
+const FCR_TIMEOUT_MS = 25_000;
 
 await checkHealth();
 const trigger = await checkTrigger();
@@ -38,6 +45,13 @@ const final = trigger?.sent ? await pollToTerminal(trigger) : null;
 if (final) {
   checkTimeline(final);
   await checkSignal(trigger);
+  // Independent, and each waits on the scorer's follow-up window: run
+  // them side by side so the gate stays well under a minute.
+  await Promise.all([
+    checkGoodResolution(trigger),
+    checkPolicyEscalation(),
+    checkFollowUp(),
+  ]);
   await checkSplitTest();
 }
 
@@ -145,12 +159,7 @@ function checkTimeline(final) {
   );
 
   const reply = steps.find((step) => step.displayName === REPLY_STEP);
-  let parsed = null;
-  try {
-    parsed = reply?.output ? JSON.parse(reply.output) : null;
-  } catch {
-    parsed = null;
-  }
+  const parsed = parseOutput(reply);
 
   // Unparseable output silently removes the reply bubble from the booth.
   addCheck(
@@ -171,6 +180,129 @@ async function checkSignal(trigger) {
     "Feedback metric sent",
     ok ? `signal=${body.signal}, score=${body.score}, sent=${body.sent}` : error ?? `HTTP ${status}`,
   );
+}
+
+/** Good interaction: no follow-up arrives, so first-contact resolution = 1. */
+async function checkGoodResolution(trigger) {
+  const value = await scorerValue(trigger.supportRunId, FCR_SCORE_STEP, FCR_TIMEOUT_MS);
+
+  addCheck(
+    value === 1 ? "pass" : "fail",
+    "Good ticket scored resolved first contact",
+    value === undefined ? `${FCR_SCORE_STEP} not observed` : `first_contact_resolution=${value}`,
+  );
+}
+
+/** Bad interaction: the guardrail blocks the draft and escalates. */
+async function checkPolicyEscalation() {
+  const run = await triggerAndWait({ ticketId: "damaged-item", failureStep: "none" });
+  const policy = run?.timeline?.steps.find((step) => step.displayName === "policy-check");
+  const flagged = parseOutput(policy)?.flagged === true;
+
+  addCheck(
+    flagged ? "pass" : "fail",
+    "Policy check flags the over-limit refund",
+    run ? `policy-check flagged=${flagged}` : "damaged-item run did not complete",
+  );
+
+  if (!run) return;
+
+  const [policyScore, fcr] = await Promise.all([
+    scorerValue(run.supportRunId, POLICY_SCORE_STEP, 10_000),
+    scorerValue(run.supportRunId, FCR_SCORE_STEP, 10_000),
+  ]);
+
+  addCheck(
+    policyScore === 0 && fcr === 0 ? "pass" : "fail",
+    "Escalated ticket scored as a policy miss",
+    `policy_compliance=${policyScore ?? "missing"}, first_contact_resolution=${fcr ?? "missing"}`,
+  );
+}
+
+/** Bad interaction: the customer follows up, so the first reply scores 0. */
+async function checkFollowUp() {
+  const first = await triggerAndWait({ ticketId: "cancel-subscription", failureStep: "none" });
+
+  if (!first) {
+    addCheck("fail", "Customer follow-up runs as turn 2", "turn 1 did not complete");
+    return;
+  }
+
+  // A customer takes a moment to reply; the booth shows ~3s of typing.
+  await sleep(2_000);
+  const second = await triggerAndWait({
+    ticketId: "cancel-subscription",
+    turn: 2,
+    followUpOf: first.supportRunId,
+  });
+
+  addCheck(
+    second ? "pass" : "fail",
+    "Customer follow-up runs as turn 2",
+    second ? `turn 2 supportRunId=${second.supportRunId}` : "turn 2 did not complete",
+  );
+
+  const fcr = await scorerValue(first.supportRunId, FCR_SCORE_STEP, FCR_TIMEOUT_MS);
+
+  addCheck(
+    fcr === 0 ? "pass" : "fail",
+    "Followed-up reply scored not resolved",
+    fcr === undefined ? `${FCR_SCORE_STEP} not observed on turn 1` : `first_contact_resolution=${fcr}`,
+  );
+}
+
+async function triggerAndWait(payload) {
+  const { ok, body } = await fetchJson("/api/support/trigger", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  if (!ok || !body.sent) return null;
+
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    const params = new URLSearchParams({ supportRunId: body.supportRunId });
+    if (body.inngestEventId) params.set("inngestEventId", body.inngestEventId);
+
+    const status = await fetchJson(`/api/support/status?${params}`);
+
+    if (status.body?.status === "completed") {
+      return { ...status.body, supportRunId: body.supportRunId };
+    }
+    if (status.body?.status === "failed") return null;
+
+    await sleep(POLL_INTERVAL_MS);
+  }
+
+  return null;
+}
+
+/** A score's value, once the scorer's attach step for it has completed. */
+async function scorerValue(supportRunId, stepName, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  const params = new URLSearchParams({ supportRunId, functionName: SCORER, merge: "1" });
+
+  while (Date.now() < deadline) {
+    const { body } = await fetchJson(`/api/support/status?${params}`);
+    const step = (body.steps ?? []).find(
+      (item) => item.displayName === stepName && item.status === "completed",
+    );
+
+    if (step) return parseOutput(step)?.value;
+
+    await sleep(1_000);
+  }
+
+  return undefined;
+}
+
+function parseOutput(step) {
+  try {
+    return step?.output ? JSON.parse(step.output) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function checkSplitTest() {

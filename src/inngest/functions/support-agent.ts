@@ -43,6 +43,7 @@ export const supportAgent = inngest.createFunction(
     const data = event.data as Partial<SupportTicketReceivedData>;
     const supportRunId = data.supportRunId ?? `support-${runId}`;
     const ticket = getSupportTicket(data.ticketId);
+    const turn = data.turn ?? 1;
     // With OpenRouter configured, the real model id is the honest narrative:
     // it is what actually writes the reply. The payload's model only drives
     // the mock-mode story.
@@ -50,7 +51,7 @@ export const supportAgent = inngest.createFunction(
       ? OPENROUTER_MODEL
       : (data.model ?? currentSupportModel);
     const failStep: SupportStepId | undefined =
-      data.failureStep === "none"
+      data.failureStep === "none" || turn === 2
         ? undefined
         : (data.failureStep ?? FAILURE_STEP_ID);
     const sessionId =
@@ -58,6 +59,7 @@ export const supportAgent = inngest.createFunction(
     const call = (id: SupportStepId, input: unknown) =>
       runSupportCall(id, {
         ticketId: ticket.id,
+        turn,
         model,
         attempt,
         failStep,
@@ -68,8 +70,10 @@ export const supportAgent = inngest.createFunction(
     // Each step.run is a durability boundary: if the order API 503s, Inngest
     // retries that one step and replays the finished ones from memoized
     // state instead of calling the model again.
+    const message =
+      turn === 2 && ticket.followUp ? ticket.followUp.message : ticket.message;
     const intent = await step.run("classify-ticket", () =>
-      call("classify-ticket", { message: ticket.message, model }),
+      call("classify-ticket", { message, model }),
     );
     const customer = await step.run("lookup-customer", () =>
       call("lookup-customer", { customer: ticket.customer }),
@@ -85,17 +89,24 @@ export const supportAgent = inngest.createFunction(
         order: order.output,
       }),
     );
-    await step.run("policy-check", () =>
-      call("policy-check", { reply: reply.output }),
-    );
+    // The guardrail: a draft that breaks policy (a refund over the
+    // auto-approve limit) is never sent. It goes to a human instead.
+    const policy = await step.run("policy-check", async () => {
+      const result = await call("policy-check", { reply: reply.output });
+      return { ...result, passed: !result.flagged };
+    });
     await step.run("send-reply", () =>
-      call("send-reply", { customer: ticket.customer }),
+      call("send-reply", {
+        customer: ticket.customer,
+        action: policy.passed ? "reply" : "escalate-to-tier-2",
+      }),
     );
 
     const summary = buildSupportRunSummary({
       supportRunId,
       ticketId: ticket.id,
       model,
+      turn,
     });
 
     if (isCloud) {
@@ -108,6 +119,8 @@ export const supportAgent = inngest.createFunction(
           costUsd: summary.costUsd,
           qualityScore: summary.qualityScore,
           failureStep: failStep ?? "none",
+          turn,
+          escalated: summary.escalated,
           source: "booth-demo",
         },
         "userland.support",

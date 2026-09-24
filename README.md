@@ -2,17 +2,21 @@
 
 This repo holds the booth demo for [EVENT NAME] ([DATES], booth [BOOTH #]).
 
-`/` is a full-screen, keyboard-driven booth demo: an AI **customer-support
-agent** that survives an order-API outage (**durable execution**), shows every
-step it took (**observability**), and gets measured and split-tested across
-two models (**A/B testing**). It fits in 3 minutes for a business visitor, or
-5 with "Under the hood" (`U`) on for engineers. Both get the same five screens:
+`/` is **Acme Support**, a helpdesk whose AI **customer-support agent** is an
+Inngest function. Open a ticket and the agent's six durable steps appear in the
+thread as it works, including an order-API outage it survives (**durable
+execution**). Every run links straight to its real trace in the Inngest
+dashboard (**observability**). Two tickets go well and two go badly: a
+guardrail blocks an over-limit refund, and a customer follows up on a missed
+reply. Each run is scored on business metrics (first-contact resolution,
+policy compliance, cost, CSAT from the 👍/👎),
+and "Split-test a model" routes tickets across two models as an Inngest
+experiment (**A/B testing**).
 
-```
-Start (pick a ticket) → Durable → Observe → A/B test → Recap (ROI + QR)
-```
+The app sets the context; the demo itself lives in the Inngest dashboard. See
+`docs/demo-talk-track.md`. "Under the hood" (`U`) opens the code for engineers.
 
-The screens render on a fixed 1920×1080 stage that scales to the display, so
+The console renders on a fixed 1920×1080 stage that scales to the display, so
 the layout is identical on a TV, laptop, or projector.
 
 **What's real:**
@@ -99,9 +103,12 @@ in exactly one place, `src/lib/demo-target.ts`, which exports `DEMO_TARGET` and
 
 In `cloud` mode the app emits real primitives at these call sites:
 
-- **Run-level metrics:** `src/inngest/functions/support-score-run.ts` attaches
-  `support_reply_quality`, `support_cost_usd`, and the visitor's
-  `support_human_feedback` vote to the agent run with `step.score(...)`. This
+- **Business scores:** `src/inngest/functions/support-score-run.ts` attaches
+  `policy_compliance`, `cost_per_ticket`, `escalated_to_human` and the
+  visitor's `csat` vote to the agent run with `step.score(...)`.
+  `support-agent-resolution` waits durably (`step.waitForEvent`, 15s at the
+  booth) for a customer follow-up, then attaches `first_contact_resolution`.
+  Names live in `src/lib/score-names.ts`. This
   requires `scoreMiddleware()` on the client, which is registered
   unconditionally in `src/inngest/client.ts`.
 - **Run metadata:** `src/inngest/functions/support-agent.ts` writes
@@ -138,8 +145,8 @@ Real primitives (scores, experiments, sandboxes) require `inngest >= 4.20.0`
    ```
 
 The Cloud dashboard then shows `support-agent` runs with attached
-`support_*` scores, and the `support-agent-model-split-test` experiment with
-per-variant scores.
+business scores, and the `support-agent-model-split-test` experiment scored on
+`first_contact_resolution`, `policy_compliance` and `cost_per_ticket`.
 
 ## Production Inngest
 
@@ -252,13 +259,13 @@ npm run dev:cloud
 
 `NEXT_PUBLIC_DEMO_MODEL_CURRENT` (default `claude-opus-4.8`) and
 `NEXT_PUBLIC_DEMO_MODEL_CHALLENGER` (default `gpt-5.5`) name the two models the
-A/B screen compares. The current model also labels the main run. The names are
+split test compares. The current model also labels the main run. The names are
 labels only: the split test's quality and cost are scripted by role
 (`src/lib/demo-models.ts`, `src/lib/experiment-results.ts`), so the challenger
 always wins. They are read at build time.
 
 ### Booth QR code
 
-`NEXT_PUBLIC_BOOTH_CTA_URL` sets where the recap screen's QR code points
+`NEXT_PUBLIC_BOOTH_CTA_URL` sets where the inbox's QR code points
 (default `https://www.inngest.com/docs`). It is read at build time, so
 redeploy after changing it.

@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   currentSupportModel,
   type SupportTicketId,
+  type SupportTurn,
 } from "@/content/support-demo";
 import type { RunTimeline } from "@/inngest/middlewares/step-tracker";
 import { buildReplayTimeline } from "@/lib/replay-timeline";
@@ -40,6 +41,8 @@ export type RunPhase =
 export type AgentRun = {
   phase: RunPhase;
   ticketId: SupportTicketId | null;
+  /** 2 when this run answers the customer's follow-up. */
+  turn: SupportTurn;
   supportRunId: string | null;
   /** Inngest run id once known: the key for step.score and the trace link. */
   runId: string | null;
@@ -54,6 +57,7 @@ export type AgentRun = {
 const initialRun: AgentRun = {
   phase: "idle",
   ticketId: null,
+  turn: 1,
   supportRunId: null,
   runId: null,
   timeline: null,
@@ -94,17 +98,25 @@ export function useAgentRun() {
   }, []);
 
   const start = React.useCallback(
-    async (ticketId: SupportTicketId, failureArmed: boolean) => {
+    async (
+      ticketId: SupportTicketId,
+      failureArmed: boolean,
+      followUp?: { followUpOf: string | null },
+    ) => {
       const gen = ++generation.current;
       const isCurrent = () => generation.current === gen;
+      const turn: SupportTurn = followUp ? 2 : 1;
+      // A follow-up answers the customer, not the outage: never armed.
+      const armed = turn === 1 && failureArmed;
 
-      setRun({ ...initialRun, phase: "starting", ticketId });
+      setRun({ ...initialRun, phase: "starting", ticketId, turn });
 
       const replay = (reason: string, supportRunId: string) => {
         if (!isCurrent()) return;
         void runReplay({
           ticketId,
-          failureArmed,
+          turn,
+          failureArmed: armed,
           supportRunId,
           reason,
           isCurrent,
@@ -121,7 +133,10 @@ export function useAgentRun() {
           body: JSON.stringify({
             ticketId,
             model: currentSupportModel,
-            failureStep: failureArmed ? undefined : "none",
+            failureStep: armed ? undefined : "none",
+            ...(followUp
+              ? { turn: 2, followUpOf: followUp.followUpOf ?? undefined }
+              : {}),
           }),
         });
         trigger = (await response.json()) as TriggerResponse;
@@ -199,6 +214,7 @@ export function useAgentRun() {
 
 async function runReplay({
   ticketId,
+  turn,
   failureArmed,
   supportRunId,
   reason,
@@ -206,6 +222,7 @@ async function runReplay({
   setRun,
 }: {
   ticketId: SupportTicketId;
+  turn: SupportTurn;
   failureArmed: boolean;
   supportRunId: string;
   reason: string;
@@ -218,6 +235,7 @@ async function runReplay({
     const timeline = buildReplayTimeline({
       runId: `replay-${supportRunId.slice(0, 8)}`,
       ticketId,
+      turn,
       elapsedMs: Date.now() - startedAt,
       failureArmed,
       startedAt,

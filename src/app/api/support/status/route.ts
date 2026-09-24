@@ -32,6 +32,26 @@ export async function GET(request: Request) {
   if (functionName !== "support-agent") {
     const stepName = params.get("stepName") ?? undefined;
     const runs = getTimelinesForKey(supportRunId, functionName);
+
+    // Every step of every matching run, across one or more functions
+    // (comma separated), for the console's score chips.
+    if (params.get("merge") === "1") {
+      const merged = functionName
+        .split(",")
+        .flatMap((name) => getTimelinesForKey(supportRunId, name.trim()));
+
+      return NextResponse.json({
+        ok: true,
+        steps: merged.flatMap((run) =>
+          run.steps.map((step) => ({
+            displayName: step.displayName,
+            status: step.status,
+            output: step.output,
+          })),
+        ),
+      });
+    }
+
     const matched = stepName
       ? runs.find((run) =>
           run.steps.some(

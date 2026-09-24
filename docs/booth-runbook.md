@@ -9,19 +9,23 @@
 
 - Event: [EVENT NAME], [DATES].
 - Booth: [BOOTH #].
-- Story: Unbreakable agents, invisible infra. A customer-support agent at `/`
-  survives an order-API outage (durable execution), shows every step it took
-  (observability), and is measured and split-tested (A/B testing).
+- Story: Acme Support, a helpdesk whose AI agent is built on Inngest, at `/`.
+  The agent survives an order-API outage (durable execution). Every step
+  links to the real trace (observability). Votes and a model split test
+  land as scores and an experiment in Inngest (A/B testing). The app sets
+  the context; the demo lives in the Inngest dashboard.
 
 ## What Runs
 
 | Piece | Where |
 | --- | --- |
-| Booth UI (five screens, 1920×1080 stage) | `src/components/booth/` |
+| Acme Support console (1920×1080 stage) | `src/components/booth/SupportConsole.tsx` |
 | Scenario: tickets, steps, canned outputs | `src/content/support-demo.ts` |
-| Screen copy (business and technical lines) | `src/content/booth-copy.ts` |
+| Console copy | `src/content/booth-copy.ts` |
 | Agent function, `support-agent` | `src/inngest/functions/support-agent.ts` |
-| Metrics scorer, `support-agent-score-run` | `src/inngest/functions/support-score-run.ts` |
+| Business scores, `support-agent-score-run` (policy, cost, escalation, CSAT) | `src/inngest/functions/support-score-run.ts` |
+| First-contact resolution, `support-agent-resolution` (waits 15s for a follow-up) | `src/inngest/functions/support-score-run.ts` |
+| Score names | `src/lib/score-names.ts` |
 | Model split test, `support-agent-model-split-test` | `src/inngest/functions/support-experiment.ts` |
 | API routes | `/api/support/{trigger,status,signal,experiment,experiment/status}` |
 
@@ -40,11 +44,11 @@ The booth never waits on a slow run. Budgets live in
 | No steps captured within 5s | Labelled replay. |
 | Live run makes no progress for 25s | Labelled replay. |
 | Split test | 8 runs at 50/50. If nothing is captured in 5s, or not all 8 land in 15s, it switches to the labelled simulation. |
-| Vote | Optimistic on screen, then a receipt once the scorer's `attach-human-feedback-score` step is observed. If Inngest is unreachable it shows "Recorded on screen only". |
+| Vote | Optimistic on screen, then a receipt once the scorer's `attach-human-feedback-score` step is observed. If Inngest is unreachable it shows "Saved locally: Inngest unreachable". |
 
 A replay (`src/lib/replay-timeline.ts`) has the same step names, timings,
 503 and memoized replays as a live run, and always carries
-`simulated: true`. The UI shows it as a coral **Replay** chip.
+`simulated: true`. The console shows it as an **Offline replay** pill and hides every Inngest link.
 
 ## Preflight
 
@@ -62,6 +66,9 @@ It triggers a real ticket and fails unless all of the following hold:
 - All six steps were recorded.
 - `lookup-order` failed and recovered.
 - Finished steps were replayed rather than re-run.
+- The good ticket scored `first_contact_resolution = 1`.
+- The damaged-item refund was flagged, scoring `policy_compliance = 0` and `first_contact_resolution = 0`.
+- The cancel-subscription follow-up ran as turn 2, and turn 1 scored `first_contact_resolution = 0`.
 - The drafted reply parses.
 - The vote reached Inngest.
 - All 8 split-test runs landed within 15s.
@@ -69,7 +76,7 @@ It triggers a real ticket and fails unless all of the following hold:
 It warns if the run took longer than the 20s booth budget.
 
 `demo:preflight` checks configuration: the app is up, the serve endpoint
-lists the three functions, and the mode and keys are right. It does not run
+lists the four functions, and the mode and keys are right. It does not run
 the demo.
 
 For a JSON view of readiness:
@@ -86,10 +93,10 @@ npm run inngest:dev        # APP_URL=http://localhost:<port> if Next picked anot
 ```
 
 Open `http://localhost:3000` full screen. The local Inngest dashboard is at
-`http://localhost:8288`, and `D` in the demo opens it on the current run.
+`http://localhost:8288`. **View trace in Inngest** (or `D`) opens the current run.
 
 To rehearse the fallback, stop `inngest:dev` and pick a ticket. The run
-should replay within 5s with the Replay chip showing.
+should replay within 5s with the Offline replay pill showing.
 
 ## Cloud Setup
 
@@ -103,7 +110,7 @@ INNGEST_ENCRYPTION_KEY        # optional
 INNGEST_ENV                   # optional, defaults to production
 INNGEST_API_KEY
 NEXT_PUBLIC_INNGEST_DASHBOARD_URL
-NEXT_PUBLIC_BOOTH_CTA_URL     # where the recap QR code points; default https://www.inngest.com/docs
+NEXT_PUBLIC_BOOTH_CTA_URL     # where the inbox QR code points; default https://www.inngest.com/docs
 NEXT_PUBLIC_DEMO_MODEL_CURRENT     # split test "current" model; default claude-opus-4.8
 NEXT_PUBLIC_DEMO_MODEL_CHALLENGER  # split test "challenger" model; default gpt-5.5
 OPENROUTER_API_KEY            # optional: a real model writes the reply
@@ -124,7 +131,8 @@ Notes:
   model. Check that it still fits the 20s budget with `demo:smoke-loop`.
 - The Inngest app id is still `aie-research-agent-booth-demo`, kept so Cloud
   run history carries over. The function ids are new (`support-agent`,
-  `support-agent-score-run`, `support-agent-model-split-test`), so re-sync
+  `support-agent-score-run`, `support-agent-resolution`,
+  `support-agent-model-split-test`), so re-sync
   the app after deploying.
 
 Check the deployed app:

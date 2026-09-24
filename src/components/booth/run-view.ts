@@ -13,7 +13,7 @@ import type {
 
 /**
  * Pure derivations from a captured (or replayed) timeline to what the booth
- * draws: one view per pipeline node, the drafted reply, and the run totals.
+ * draws: one view per agent step, the drafted reply, and the run totals.
  * Kept out of the components so every screen reads the same numbers.
  */
 
@@ -32,6 +32,8 @@ export type StepView = {
   errorMessage?: string;
   output?: string;
   input?: string;
+  /** The policy check blocked the draft (the step itself succeeded). */
+  flagged: boolean;
   tokens: number;
   costUsd: number;
 };
@@ -77,6 +79,7 @@ export function buildStepViews(
       errorMessage: captured?.errorMessage,
       output: payload?.output,
       input: captured?.input,
+      flagged: payload?.flagged === true || payload?.passed === false,
       tokens,
       costUsd: (tokens / 1000) * costPer1kTokens(model),
     };
@@ -91,7 +94,13 @@ function nodeState(step: TimelineStep | undefined): NodeState {
   return "running";
 }
 
-type StepPayload = { output?: string; tokens?: number; source?: string };
+type StepPayload = {
+  output?: string;
+  tokens?: number;
+  source?: string;
+  flagged?: boolean;
+  passed?: boolean;
+};
 
 function parseStepOutput(step: TimelineStep | undefined): StepPayload | null {
   if (!step?.output) return null;
@@ -104,13 +113,14 @@ function parseStepOutput(step: TimelineStep | undefined): StepPayload | null {
   }
 }
 
+/** The policy check blocked the draft: the ticket went to a human. */
+export function isEscalated(views: StepView[]): boolean {
+  return views.some((view) => view.def.id === "policy-check" && view.flagged);
+}
+
 /** The drafted reply, as soon as the draft step completes. */
 export function replyText(views: StepView[]): string | null {
   return views.find((view) => view.def.id === REPLY_STEP_ID)?.output ?? null;
-}
-
-export function failureView(views: StepView[]): StepView | undefined {
-  return views.find((view) => view.def.id === FAILURE_STEP_ID);
 }
 
 export function runTotals(
@@ -131,19 +141,6 @@ export function runTotals(
     replayedSteps: views.filter((view) => view.memoized).length,
     retries: views.reduce((sum, view) => sum + view.failedAttempts.length, 0),
   };
-}
-
-/** "+7 pts quality, −34% cost": the split test's verdict in one line. */
-export function formatWinnerDelta(aggregate: {
-  qualityDelta: number;
-  costDelta: number;
-}): string {
-  const quality = `+${Math.round(aggregate.qualityDelta * 100)} pts quality`;
-
-  if (aggregate.costDelta === 0) return quality;
-
-  const sign = aggregate.costDelta < 0 ? "−" : "+";
-  return `${quality}, ${sign}${Math.round(Math.abs(aggregate.costDelta) * 100)}% cost`;
 }
 
 export function formatSeconds(ms: number): string {

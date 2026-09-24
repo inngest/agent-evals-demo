@@ -4,20 +4,15 @@ const current = JSON.stringify(currentSupportModel);
 const challenger = JSON.stringify(challengerSupportModel);
 
 /**
- * Code shown in the "Under the hood" drawer, one snippet per screen (two for
- * the A/B screen, which the drawer follows as the driver moves from the vote
- * to the split test).
+ * Code shown in the "Under the hood" drawer. The drawer follows what the
+ * console is doing: the agent's steps while a ticket is worked, the scorer
+ * after a vote, and the experiment while the split test is open.
  *
  * Trimmed from the real functions in src/inngest/functions/ so an engineer can
  * read each one in ten seconds. `@demo-highlight` markers pick the lines the
  * drawer emphasises.
  */
-export type BoothSnippetId =
-  | "durable"
-  | "observe"
-  | "abtest-feedback"
-  | "abtest-split"
-  | "recap";
+export type BoothSnippetId = "durable" | "scores" | "abtest-split";
 
 export type BoothSnippet = {
   id: BoothSnippetId;
@@ -46,38 +41,41 @@ const durableCode = `export const supportAgent = createFunction(
     const reply = await step.run("draft-reply", () =>
       llm.draftReply({ intent, customer, order })
     );
-    await step.run("policy-check", () => guardrails.check(reply));
-    await step.run("send-reply", () => helpdesk.reply(reply));
+    const policy = await step.run("policy-check", () =>
+      guardrails.check(reply) // e.g. refunds over $200 need a human
+    );
+    await step.run("send-reply", () =>
+      policy.passed ? helpdesk.reply(reply) : helpdesk.escalate(reply)
+    );
   }
 );`;
 
-const observeCode = `// Nothing to add. Every run, step, input, output,
-// retry and duration is traced by the platform.
-const order = await step.run("lookup-order", () =>
-  orders.get(event.data.orderId)
-);
-
-// Then ask questions across every run in Insights, with SQL:
-// @demo-highlight-start
-const ticketsToday = \`
-  SELECT count(*)
-  FROM events
-  WHERE name = 'support/run.completed'\`;
-// @demo-highlight-end`;
-
-const feedbackCode = `// The visitor's vote becomes a metric on THIS run.
-export const supportScoreRun = inngest.createFunction(
-  { id: "support-agent-score-run", triggers: [feedbackRecorded] },
+const scoresCode = `// Business metrics, attached to the run they judge.
+export const scoreRun = inngest.createFunction(
+  { id: "support-agent-score-run", triggers: [runCompleted] },
   async ({ event, step }) => {
+    const run = event.data;
+    await step.score("policy", { runId: run.runId,
+      name: "policy_compliance", value: run.policyPassed ? 1 : 0 });
+    await step.score("cost", { runId: run.runId,
+      name: "cost_per_ticket", value: run.costUsd });
+
     // @demo-highlight-start
-    await step.score("attach-human-feedback-score", {
-      runId: event.data.parentRunId,
-      name: "support_human_feedback",
-      value: event.data.signal === "good" ? 1 : 0,
+    // Did it resolve the ticket? Wait for the customer, durably.
+    const followUp = await step.waitForEvent("wait-for-customer-follow-up", {
+      event: "support/ticket.received",
+      if: \`async.data.followUpOf == '\${run.supportRunId}'\`,
+      timeout: "2d",
     });
+    await step.score("fcr", { runId: run.runId,
+      name: "first_contact_resolution",
+      value: followUp || run.escalated ? 0 : 1 });
     // @demo-highlight-end
   }
-);`;
+);
+
+// The thumbs up/down lands the same way:
+//   step.score(..., { name: "csat", value: signal === "good" ? 1 : 0 })`;
 
 const splitCode = `// A variant is just a function: model, prompt,
 // retriever, vendor, threshold.
@@ -97,16 +95,12 @@ const { result, experimentRef } = await group.experiment(
 );
 // @demo-highlight-end
 
+// Scored on the same business metrics as every live run.
 await inngest.score.experiment({
   experiment: experimentRef,
-  name: "support_reply_quality",
-  value: result.qualityScore,
+  name: "first_contact_resolution",
+  value: result.firstContactResolution,
 });`;
-
-const recapCode = `// The whole agent is ordinary code. Inngest adds:
-step.run(...)          // durable steps, retries, memoized replays
-step.score(...)        // metrics attached to the run
-group.experiment(...)  // split traffic, measure every variant`;
 
 export const boothSnippets: BoothSnippet[] = [
   {
@@ -117,18 +111,11 @@ export const boothSnippets: BoothSnippet[] = [
     code: durableCode,
   },
   {
-    id: "observe",
-    label: "Traces + Insights",
-    eyebrow: "for free",
-    description: "No instrumentation code. Query every run with SQL.",
-    code: observeCode,
-  },
-  {
-    id: "abtest-feedback",
-    label: "Human feedback",
-    eyebrow: "step.score",
-    description: "A vote becomes a metric on the exact run it judged.",
-    code: feedbackCode,
+    id: "scores",
+    label: "Business scores",
+    eyebrow: "step.score + waitForEvent",
+    description: "Policy, cost, first-contact resolution and CSAT on every run.",
+    code: scoresCode,
   },
   {
     id: "abtest-split",
@@ -136,12 +123,5 @@ export const boothSnippets: BoothSnippet[] = [
     eyebrow: "group.experiment",
     description: "Split real traffic across variants and score each one.",
     code: splitCode,
-  },
-  {
-    id: "recap",
-    label: "Primitives",
-    eyebrow: "the SDK",
-    description: "Three primitives on top of ordinary code.",
-    code: recapCode,
   },
 ];

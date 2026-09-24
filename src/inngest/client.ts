@@ -14,6 +14,7 @@ import type {
   SupportModel,
   SupportStepId,
   SupportTicketId,
+  SupportTurn,
 } from "@/content/support-demo";
 
 // ── 1. incident arrives → triggers the agent ──────────────────────────────
@@ -86,6 +87,13 @@ export type SupportTicketReceivedData = {
   ticketId: SupportTicketId;
   model: SupportModel;
   failureStep?: SupportStepId | "none";
+  /** 2 when this run answers the customer's follow-up. */
+  turn?: SupportTurn;
+  /**
+   * The supportRunId of the reply the customer followed up on. The scorer
+   * waits for this: a follow-up means that reply did not resolve the ticket.
+   */
+  followUpOf?: string;
   requestedAt: string;
   source: "booth-demo";
 };
@@ -98,6 +106,9 @@ export type SupportRunCompletedData = {
   ticketId: SupportTicketId;
   // Narrative model in mock mode, real OpenRouter model id when configured
   model: string;
+  turn: SupportTurn;
+  policyPassed: boolean;
+  escalated: boolean;
   qualityScore: number;
   tokenCount: number;
   costUsd: number;

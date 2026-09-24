@@ -59,16 +59,29 @@ export function openDashboard(href: string) {
 }
 
 /**
- * The booth's "open in Inngest" button: proof on demand, one click from any
- * screen. Opens the dashboard in its own window so the demo stays put.
+ * The console's "open in Inngest" link: the hand-off from the product to the
+ * real trace, score or experiment. Styled apart from Acme's own controls so
+ * the audience can see where the product ends and Inngest begins. Opens the
+ * dashboard in its own window so the console stays put.
  */
-export function InngestLink({ href, label }: { href: string; label: string }) {
+export function InngestLink({
+  href,
+  label,
+  variant = "button",
+}: {
+  href: string;
+  label: string;
+  /** "button" for headers and popovers, "inline" inside a row of text. */
+  variant?: "button" | "inline";
+}) {
   return (
     <DashboardLink
       href={href}
-      className="booth-inngest-link mono inline-flex items-center gap-2 border-2 border-[var(--ink)] bg-white px-3 py-1.5 text-[17px] uppercase"
+      className="inngest-link inline-flex shrink-0 items-center gap-2 whitespace-nowrap"
+      data-variant={variant}
     >
-      <ExternalLink className="size-5" /> {label}
+      {label}
+      <ExternalLink className={variant === "inline" ? "size-[0.9em]" : "size-5"} />
     </DashboardLink>
   );
 }

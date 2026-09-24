@@ -1,89 +1,67 @@
 "use client";
 
 import * as React from "react";
-import { Code2, Zap, ZapOff } from "lucide-react";
-import {
-  boothScreens,
-  keyHints,
-  type BoothScreenId,
-} from "@/content/booth-copy";
+import { Code2 } from "lucide-react";
+import { consoleCopy, keyHints } from "@/content/booth-copy";
 import type { RunPhase } from "./useAgentRun";
 
 /**
- * The driver's corner: elapsed time, where we are, run status, and whether
- * the outage is armed. Small and low-contrast on purpose: it is for the
- * person at the keyboard, not the audience.
+ * The console's status bar, which doubles as the driver's corner: the
+ * "Built on Inngest" mark, run status, elapsed demo time, and the Under the
+ * hood toggle for a driver who forgets the U key.
  */
 export function PresenterHud({
-  screen,
-  onJump,
-  canJumpAhead,
   onToggleDepth,
   startedAt,
   phase,
   simulated,
-  failureArmed,
   depth,
 }: {
-  screen: BoothScreenId;
-  onJump: (screen: BoothScreenId) => void;
-  /** False until a ticket is picked: later screens have no run to show. */
-  canJumpAhead: boolean;
   onToggleDepth: () => void;
   startedAt: number | null;
   phase: RunPhase;
   simulated: boolean;
-  failureArmed: boolean;
   depth: boolean;
 }) {
   return (
-    <div className="booth-hud mono pointer-events-auto absolute bottom-5 left-16 flex items-center gap-6 whitespace-nowrap text-[15px] uppercase text-[var(--muted-copy)]">
-      <ElapsedTimer startedAt={startedAt} />
-      <nav className="flex items-center gap-1.5" aria-label="Screens">
-        {boothScreens.map((item) => {
-          const locked = item.id !== "start" && !canJumpAhead;
-
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onJump(item.id)}
-              disabled={locked}
-              title={locked ? "Pick a ticket first" : undefined}
-              data-active={item.id === screen}
-              className="booth-hud-dot px-2 py-0.5"
-            >
-              {item.label}
-            </button>
-          );
-        })}
-      </nav>
-      <span className="inline-flex items-center gap-2">
-        <span
-          className="status-dot"
-          data-state={
-            phase === "complete" ? "complete" : phase === "failed" ? "error" : phase === "idle" ? "idle" : phase === "retrying" ? "retrying" : "running"
-          }
-        />
-        {simulated ? "replay" : phase}
+    <footer className="acme-statusbar flex items-center justify-between gap-6 whitespace-nowrap px-6 text-[16px]">
+      <span className="inline-flex items-center gap-2 font-semibold">
+        <span className="acme-inngest-mark" aria-hidden />
+        {consoleCopy.builtOn}
       </span>
-      <span className="inline-flex items-center gap-1.5">
-        {failureArmed ? <Zap className="size-4" /> : <ZapOff className="size-4" />}
-        {failureArmed ? "outage on" : "outage off"}
-      </span>
-      <button
-        type="button"
-        onClick={onToggleDepth}
-        data-active={depth}
-        className="booth-hud-toggle inline-flex items-center gap-2"
-        title="Toggle Under the hood (U)"
-      >
-        <Code2 className="size-4" />
-        Under the hood: {depth ? "on" : "off"}
-        <kbd className="booth-hud-key">U</kbd>
-      </button>
-      <span>? keys</span>
-    </div>
+      <div className="flex items-center gap-6">
+        <span className="inline-flex items-center gap-2">
+          <span
+            className="status-dot"
+            data-state={
+              phase === "complete"
+                ? "complete"
+                : phase === "failed"
+                  ? "error"
+                  : phase === "idle"
+                    ? "idle"
+                    : phase === "retrying"
+                      ? "retrying"
+                      : "running"
+            }
+          />
+          {simulated ? "replay" : phase}
+        </span>
+        <ElapsedTimer startedAt={startedAt} />
+        <button
+          type="button"
+          onClick={onToggleDepth}
+          data-active={depth}
+          className="acme-hud-toggle inline-flex items-center gap-2"
+          title="Toggle Under the hood (U)"
+        >
+          <Code2 className="size-4" />
+          Under the hood: {depth ? "on" : "off"}
+          <kbd className="acme-hud-key">U</kbd>
+        </button>
+        <span>? keys</span>
+      </div>
+    </footer>
   );
 }
 
@@ -103,7 +81,7 @@ function ElapsedTimer({ startedAt }: { startedAt: number | null }) {
   const late = seconds >= 240;
 
   return (
-    <span className="tabnum" style={late ? { color: "var(--coral)" } : undefined}>
+    <span className="tabnum" style={late ? { color: "var(--acme-bad)" } : undefined}>
       {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
     </span>
   );
@@ -112,12 +90,12 @@ function ElapsedTimer({ startedAt }: { startedAt: number | null }) {
 export function KeyHintsOverlay({ onClose }: { onClose: () => void }) {
   return (
     <div
-      className="absolute inset-0 z-50 grid place-items-center bg-[rgba(26,22,28,0.72)]"
+      className="absolute inset-0 z-50 grid place-items-center bg-[rgba(20,24,33,0.6)]"
       onClick={onClose}
     >
-      <div className="grid gap-4 border-[3px] border-[var(--ink)] bg-white p-10">
-        <h2 className="display text-[36px] font-semibold">Driver keys</h2>
-        <dl className="grid grid-cols-[auto_auto] gap-x-10 gap-y-3 text-[24px]">
+      <div className="acme-popover grid gap-5 p-10">
+        <h2 className="text-[34px] font-semibold">Driver keys</h2>
+        <dl className="grid grid-cols-[auto_auto] gap-x-10 gap-y-3 text-[23px]">
           {keyHints.map((hint) => (
             <React.Fragment key={hint.keys}>
               <dt className="mono font-semibold">{hint.keys}</dt>

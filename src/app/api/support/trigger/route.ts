@@ -31,7 +31,17 @@ export async function POST(request: Request) {
       ? body.ticketId
       : defaultSupportTicketId,
     model: normalizeModel(body.model),
-    failureStep: body.failureStep === "none" ? "none" : FAILURE_STEP_ID,
+    ...(body.turn === 2
+      ? {
+          turn: 2 as const,
+          // A follow-up answers the customer, not the outage: never armed.
+          failureStep: "none" as const,
+          ...(typeof body.followUpOf === "string" ? { followUpOf: body.followUpOf } : {}),
+        }
+      : {
+          turn: 1 as const,
+          failureStep: body.failureStep === "none" ? ("none" as const) : FAILURE_STEP_ID,
+        }),
     requestedAt,
     source: "booth-demo",
   };
