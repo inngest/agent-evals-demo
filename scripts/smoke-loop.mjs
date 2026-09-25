@@ -38,6 +38,8 @@ const QUALITY_SCORE_STEP = "attach-reply-quality-score";
 // The refund ticket's sandboxed step (src/lib/sandbox.ts): only the $49 jar.
 const SANDBOX_STEP = "compute-refund";
 const EXPECTED_REFUND_USD = 49;
+const CSAT_SCORE_STEP = "attach-human-feedback-score";
+const OBSERVED = "observed";
 // The scorer's follow-up window (15s) plus slack.
 const FCR_TIMEOUT_MS = 25_000;
 
@@ -183,6 +185,17 @@ async function checkSignal(trigger) {
     "Feedback metric sent",
     ok ? `signal=${body.signal}, score=${body.score}, sent=${body.sent}` : error ?? `HTTP ${status}`,
   );
+
+  if (!ok || !body.sent) return;
+
+  // The vote goes out the moment the run completes, so this also proves
+  // the CSAT wait was already listening.
+  const value = await scorerValue(trigger.supportRunId, CSAT_SCORE_STEP, 15_000);
+  addCheck(
+    value === 1 || value === OBSERVED ? "pass" : "fail",
+    "Vote attached as CSAT",
+    value === undefined ? `${CSAT_SCORE_STEP} not observed` : `csat=${value}`,
+  );
 }
 
 /** Good interaction: no follow-up arrives, so first-contact resolution = 1. */
@@ -190,9 +203,13 @@ async function checkGoodResolution(trigger) {
   const value = await scorerValue(trigger.supportRunId, FCR_SCORE_STEP, FCR_TIMEOUT_MS);
 
   addCheck(
-    value === 1 ? "pass" : "fail",
+    value === 1 ? "pass" : value === OBSERVED ? "warn" : "fail",
     "Good ticket scored resolved first contact",
-    value === undefined ? `${FCR_SCORE_STEP} not observed` : `first_contact_resolution=${value}`,
+    value === undefined
+      ? `${FCR_SCORE_STEP} not observed`
+      : value === OBSERVED
+        ? `${FCR_SCORE_STEP} ran; check the value in Inngest Scores`
+        : `first_contact_resolution=${value}`,
   );
 }
 
@@ -207,7 +224,7 @@ async function checkSandboxRefund() {
   const sandbox = steps.find((step) => step.displayName === SANDBOX_STEP);
   const parsed = parseOutput(sandbox);
   const refundUsd =
-    parsed?.refund?.refundUsd ?? parseStdout(parsed?.stdout)?.refundUsd;
+    parsed?.refund?.refundUsd ?? parseStdout(parsed?.result)?.refundUsd;
 
   addCheck(
     refundUsd === EXPECTED_REFUND_USD ? "pass" : sandbox || !run ? "fail" : "warn",
@@ -242,15 +259,27 @@ async function checkLowQuality() {
   const quality = await scorerValue(run.supportRunId, QUALITY_SCORE_STEP, 10_000);
 
   addCheck(
-    typeof quality === "number" && quality < 0.5 ? "pass" : "fail",
+    typeof quality === "number" && quality < 0.5
+      ? "pass"
+      : quality === OBSERVED
+        ? "warn"
+        : "fail",
     "Missed reply scored low quality",
-    `support_reply_quality=${quality ?? "missing"}`,
+    quality === OBSERVED
+      ? `${QUALITY_SCORE_STEP} ran; check the value in Inngest Scores`
+      : `support_reply_quality=${quality ?? "missing"}`,
   );
 }
 
-function parseStdout(stdout) {
+/** The sandbox command's JSON stdout; cloud sends it base64-encoded. */
+function parseStdout(result) {
   try {
-    return typeof stdout === "string" ? JSON.parse(stdout) : null;
+    if (typeof result?.stdout !== "string") return null;
+    const text =
+      result.encoding === "base64"
+        ? Buffer.from(result.stdout, "base64").toString("utf8")
+        : result.stdout;
+    return JSON.parse(text);
   } catch {
     return null;
   }
@@ -283,7 +312,11 @@ async function triggerAndWait(payload) {
   return null;
 }
 
-/** A score's value, once the scorer's attach step for it has completed. */
+/**
+ * A score's value, once the scorer's attach step for it has completed:
+ * OBSERVED when the step completed without a readable value (cloud), and
+ * undefined when it never completed.
+ */
 async function scorerValue(supportRunId, stepName, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   const params = new URLSearchParams({ supportRunId, functionName: SCORER, merge: "1" });
@@ -294,7 +327,9 @@ async function scorerValue(supportRunId, stepName, timeoutMs) {
       (item) => item.displayName === stepName && item.status === "completed",
     );
 
-    if (step) return parseOutput(step)?.value;
+    // Cloud's step.score steps carry no output: the score is attached, but
+    // its value is only visible in Inngest. OBSERVED says so.
+    if (step) return parseOutput(step)?.value ?? OBSERVED;
 
     await sleep(1_000);
   }

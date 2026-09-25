@@ -101,8 +101,8 @@ export function buildStepViews(
 
 /**
  * The sandboxed refund, when this run has one. Locally it is one simulated
- * step.run; in cloud it is the sandbox command step, whose output is the
- * command result with the script's JSON on stdout.
+ * step.run; in cloud it is the sandbox command step, whose output carries the
+ * command result with the script's JSON on stdout (base64 on the wire).
  */
 function sandboxView(timeline: RunTimeline | null): StepView | null {
   const captured = timeline?.steps.find(
@@ -134,8 +134,23 @@ function sandboxView(timeline: RunTimeline | null): StepView | null {
 
 function parseRefundUsd(output: string | undefined): number | null {
   const parsed = parseJson(output);
-  const refund = parsed?.refund ?? parseJson(parsed?.stdout)?.refund ?? parseJson(parsed?.stdout);
+  const refund = parsed?.refund ?? parseJson(commandStdout(parsed?.result));
   return typeof refund?.refundUsd === "number" ? refund.refundUsd : null;
+}
+
+function commandStdout(
+  result: { stdout?: unknown; encoding?: unknown } | undefined,
+): string | undefined {
+  if (typeof result?.stdout !== "string") return undefined;
+  if (result.encoding !== "base64") return result.stdout;
+
+  try {
+    return new TextDecoder().decode(
+      Uint8Array.from(atob(result.stdout), (char) => char.charCodeAt(0)),
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 function isSimulated(output: string | undefined): boolean {

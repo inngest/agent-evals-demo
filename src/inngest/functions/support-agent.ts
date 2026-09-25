@@ -73,6 +73,14 @@ export const supportAgent = inngest.createFunction(
         : (data.failureStep ?? FAILURE_STEP_ID);
     const sessionId =
       event.meta?.sessions?.[supportSessionKey] ?? supportSessionId;
+    // CSAT is deferred first thing, not at the end: its wait for the vote
+    // is then running long before the reply is on screen, so even an
+    // instant vote is caught. A deferred run knows this run as its parent
+    // and attaches its score back to it.
+    defer("score-csat", {
+      function: supportCsat,
+      data: { supportRunId, ticketId: ticket.id, turn },
+    });
     const call = (id: SupportStepId, input: unknown) =>
       runSupportCall(id, {
         ticketId: ticket.id,
@@ -175,19 +183,16 @@ export const supportAgent = inngest.createFunction(
       ),
     );
 
-    // The scores that are only known later. Each is a deferred function of
-    // this run: it starts from here, knows this run as its parent, and
-    // attaches its score back to it.
-    const deferred = {
-      supportRunId,
-      ticketId: ticket.id,
-      turn,
-      escalated: summary.escalated,
-    };
-    defer("score-csat", { function: supportCsat, data: deferred });
+    // First-contact resolution is only known later, and needs to know
+    // whether this run escalated: defer it now, as the run ends.
     defer("score-first-contact-resolution", {
       function: supportFcr,
-      data: deferred,
+      data: {
+        supportRunId,
+        ticketId: ticket.id,
+        turn,
+        escalated: summary.escalated,
+      },
     });
 
     return {

@@ -21,21 +21,26 @@ import {
  * run id travelling through the browser and back.
  *
  * Each waits durably as its first step: a wait only sees events that arrive
- * after it starts.
+ * after it starts. That is why the agent defers CSAT at the start of its run
+ * and FCR at the end.
  */
-export type SupportDeferredData = {
+export type SupportCsatData = {
   supportRunId: string;
   ticketId: string;
   turn: number;
-  escalated: boolean;
 };
 
-const schema = staticSchema<SupportDeferredData>();
+export type SupportFcrData = SupportCsatData & { escalated: boolean };
 
 /** CSAT: the visitor's 👍/👎 on the reply. The first vote counts. */
 export const supportCsat = createDefer(
   inngest,
-  { id: "support-agent-csat", name: "Support agent CSAT", retries: 2, schema },
+  {
+    id: "support-agent-csat",
+    name: "Support agent CSAT",
+    retries: 2,
+    schema: staticSchema<SupportCsatData>(),
+  },
   async ({ event, parents, step }) => {
     const data = event.data;
     const parentRunId = parents[0]?.runId;
@@ -77,7 +82,7 @@ export const supportFcr = createDefer(
     id: "support-agent-resolution",
     name: "Support agent first-contact resolution",
     retries: 2,
-    schema,
+    schema: staticSchema<SupportFcrData>(),
   },
   async ({ event, parents, step }) => {
     const data = event.data;
