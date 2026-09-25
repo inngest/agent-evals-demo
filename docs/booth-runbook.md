@@ -23,8 +23,9 @@
 | Scenario: tickets, steps, canned outputs | `src/content/support-demo.ts` |
 | Console copy | `src/content/booth-copy.ts` |
 | Agent function, `support-agent` | `src/inngest/functions/support-agent.ts` |
-| Business scores, `support-agent-score-run` (policy, cost, escalation, CSAT) | `src/inngest/functions/support-score-run.ts` |
-| First-contact resolution, `support-agent-resolution` (waits 15s for a follow-up) | `src/inngest/functions/support-score-run.ts` |
+| Business scores, `support-agent-score-run` (policy, cost, escalation) | `src/inngest/functions/support-score-run.ts` |
+| CSAT, `support-agent-csat` (deferred; waits for the vote) | `src/inngest/functions/support-deferred.ts` |
+| First-contact resolution, `support-agent-resolution` (deferred; waits 15s for a follow-up) | `src/inngest/functions/support-deferred.ts` |
 | Score names | `src/lib/score-names.ts` |
 | Model split test, `support-agent-model-split-test` | `src/inngest/functions/support-experiment.ts` |
 | API routes | `/api/support/{trigger,status,signal,experiment,experiment/status}` |
@@ -44,7 +45,7 @@ The booth never waits on a slow run. Budgets live in
 | No steps captured within 5s | Labelled replay. |
 | Live run makes no progress for 25s | Labelled replay. |
 | Split test | 8 runs at 50/50. If nothing is captured in 5s, or not all 8 land in 15s, it switches to the labelled simulation. |
-| Vote | Optimistic on screen, then a receipt once the scorer's `attach-human-feedback-score` step is observed. If Inngest is unreachable it shows "Saved locally: Inngest unreachable". |
+| Vote | Optimistic on screen, then a receipt once the `support-agent-csat` run's `attach-human-feedback-score` step is observed. If Inngest is unreachable it shows "Saved locally: Inngest unreachable". |
 
 A replay (`src/lib/replay-timeline.ts`) has the same step names, timings,
 503 and memoized replays as a live run, and always carries
@@ -131,7 +132,7 @@ Notes:
   model. Check that it still fits the 20s budget with `demo:smoke-loop`.
 - The Inngest app id is still `aie-research-agent-booth-demo`, kept so Cloud
   run history carries over. The function ids are new (`support-agent`,
-  `support-agent-score-run`, `support-agent-resolution`,
+  `support-agent-score-run`, `support-agent-csat`, `support-agent-resolution`,
   `support-agent-model-split-test`), so re-sync
   the app after deploying.
 
@@ -152,10 +153,16 @@ npx inngest-cli@latest api --prod sync-app \
 
 ## Sandboxes
 
-The Sandboxes beat is not part of the support-agent story. The flag
-(`NEXT_PUBLIC_DEMO_SANDBOX`), `src/lib/sandbox.ts`, and the
-`/api/demo/status` entitlement probe remain, but no function calls
-`step.sandbox` today.
+With `NEXT_PUBLIC_DEMO_SANDBOX=1`, the refund ticket (`3`) works out the
+refund by running a generated script in a sandbox (`src/lib/sandbox.ts`) instead
+of trusting the model's arithmetic. The policy check then judges that amount.
+In cloud mode these are real `step.sandbox` steps (create, `compute-refund`,
+destroy) and appear in the trace; locally a simulated `compute-refund` step
+stands in, labelled "simulated" in its output. The booth pipeline still draws
+six nodes; the sandbox steps show in the trace and in the Policy check output.
+A failed run destroys its sandbox in the agent's `onFailure`. The flag is off
+by default because the beta is gated per environment; `/api/demo/status`
+reports whether this one has it.
 
 ## Booth QA
 

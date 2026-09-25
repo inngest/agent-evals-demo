@@ -41,10 +41,16 @@ live. See `docs/booth-runbook.md` for the timing budget.
 
 ## Sandboxes (beta) are off by default
 
-The support-agent story does not use Sandboxes. The flag
-(`NEXT_PUBLIC_DEMO_SANDBOX`), `src/lib/sandbox.ts`, and the `/api/demo/status`
-entitlement probe remain for a future beat, but no function calls
-`step.sandbox` today.
+With `NEXT_PUBLIC_DEMO_SANDBOX=1`, the refund ticket (`3`) works out the
+refund by running a generated script in a sandbox (`src/lib/sandbox.ts`) instead
+of trusting the model's arithmetic. The policy check then judges that amount.
+In cloud mode these are real `step.sandbox` steps (create, `compute-refund`,
+destroy) and appear in the trace; locally a simulated `compute-refund` step
+stands in, labelled "simulated" in its output. The booth pipeline still draws
+six nodes; the sandbox steps show in the trace and in the Policy check output.
+A failed run destroys its sandbox in the agent's `onFailure`. The flag is off
+by default because the beta is gated per environment; `/api/demo/status`
+reports whether this one has it.
 
 ## Design System Source
 
@@ -104,10 +110,13 @@ in exactly one place, `src/lib/demo-target.ts`, which exports `DEMO_TARGET` and
 In `cloud` mode the app emits real primitives at these call sites:
 
 - **Business scores:** `src/inngest/functions/support-score-run.ts` attaches
-  `policy_compliance`, `cost_per_ticket`, `escalated_to_human` and the
-  visitor's `csat` vote to the agent run with `step.score(...)`.
-  `support-agent-resolution` waits durably (`step.waitForEvent`, 15s at the
-  booth) for a customer follow-up, then attaches `first_contact_resolution`.
+  `policy_compliance`, `cost_per_ticket` and `escalated_to_human` to the agent
+  run with `step.score(...)`. The scores known only later are deferred
+  functions of the agent run (`createDefer`, `src/inngest/functions/support-deferred.ts`):
+  `support-agent-csat` waits for the visitor's vote and
+  `support-agent-resolution` waits (15s at the booth) for a customer
+  follow-up. Each scores its parent run (`parents[0].runId`). Deferred
+  functions run on the local dev server too.
   Names live in `src/lib/score-names.ts`. This
   requires `scoreMiddleware()` on the client, which is registered
   unconditionally in `src/inngest/client.ts`.

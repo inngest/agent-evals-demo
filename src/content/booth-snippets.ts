@@ -41,8 +41,12 @@ const durableCode = `export const supportAgent = createFunction(
     const reply = await step.run("draft-reply", () =>
       llm.draftReply({ intent, customer, order })
     );
+    // Refund maths runs as code in a sandbox, not in the model's head.
+    const box = await step.sandbox.create("create-refund-sandbox");
+    const refund = await box.commands.run("compute-refund", refundScript);
+    await box.destroy("destroy-refund-sandbox");
     const policy = await step.run("policy-check", () =>
-      guardrails.check(reply) // e.g. refunds over $200 need a human
+      guardrails.check(reply, refund) // refunds over $200 need a human
     );
     await step.run("send-reply", () =>
       policy.passed ? helpdesk.reply(reply) : helpdesk.escalate(reply)
@@ -50,31 +54,31 @@ const durableCode = `export const supportAgent = createFunction(
   }
 );`;
 
-const scoresCode = `// Business metrics, attached to the run they judge.
-export const scoreRun = inngest.createFunction(
-  { id: "support-agent-score-run", triggers: [runCompleted] },
-  async ({ event, step }) => {
-    const run = event.data;
-    await step.score("policy", { runId: run.runId,
-      name: "policy_compliance", value: run.policyPassed ? 1 : 0 });
-    await step.score("cost", { runId: run.runId,
-      name: "cost_per_ticket", value: run.costUsd });
+const scoresCode = `// The agent's last lines: scores that are only known later
+// are deferred functions of this run.
+// @demo-highlight-start
+defer("score-csat", { function: csat, data: run });
+defer("score-fcr", { function: firstContactResolution, data: run });
+// @demo-highlight-end
 
-    // @demo-highlight-start
-    // Did it resolve the ticket? Wait for the customer, durably.
+// Did it resolve the ticket? Wait for the customer, durably.
+export const firstContactResolution = createDefer(inngest,
+  { id: "support-agent-resolution" },
+  async ({ event, parents, step }) => {
+    const run = event.data;
     const followUp = await step.waitForEvent("wait-for-customer-follow-up", {
       event: "support/ticket.received",
       if: \`async.data.followUpOf == '\${run.supportRunId}'\`,
       timeout: "2d",
     });
-    await step.score("fcr", { runId: run.runId,
+    // parents[0] is the agent run: the score lands on it.
+    await step.score("fcr", { runId: parents[0].runId,
       name: "first_contact_resolution",
       value: followUp || run.escalated ? 0 : 1 });
-    // @demo-highlight-end
   }
 );
 
-// The thumbs up/down lands the same way:
+// CSAT is the same shape: wait for the 👍/👎, then
 //   step.score(..., { name: "csat", value: signal === "good" ? 1 : 0 })`;
 
 const splitCode = `// A variant is just a function: model, prompt,
@@ -113,8 +117,8 @@ export const boothSnippets: BoothSnippet[] = [
   {
     id: "scores",
     label: "Business scores",
-    eyebrow: "step.score + waitForEvent",
-    description: "Policy, cost, first-contact resolution and CSAT on every run.",
+    eyebrow: "defer + step.score",
+    description: "Scores known later are deferred functions of the run they judge.",
     code: scoresCode,
   },
   {

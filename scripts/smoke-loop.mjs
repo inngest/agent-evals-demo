@@ -32,7 +32,7 @@ const SPLIT_RUNS = 8;
 const POLL_INTERVAL_MS = 600;
 const POLL_TIMEOUT_MS = Number(process.env.DEMO_SMOKE_TIMEOUT_MS ?? 60_000);
 // Scorer step ids, mirrored from src/lib/score-names.ts.
-const SCORER = "support-agent-score-run,support-agent-resolution";
+const SCORER = "support-agent-score-run,support-agent-resolution,support-agent-csat";
 const POLICY_SCORE_STEP = "attach-policy-compliance-score";
 const FCR_SCORE_STEP = "attach-first-contact-resolution";
 // The scorer's follow-up window (15s) plus slack.

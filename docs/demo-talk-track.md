@@ -60,7 +60,7 @@ The app shows none of the scores; those live in Inngest.
 
 1. In the app, the visitor clicks 👍 (`G`) on the good reply.
 2. Run a ticket under **Goes badly**:
-   - **`3`, Refund a damaged item.** The draft offers a $649 refund, and the policy check flags it because anything over $200 needs a human. The reply is **blocked**, not sent, and the ticket is escalated to Tier 2.
+   - **`3`, Refund a damaged item.** The draft offers a $649 refund, and the policy check flags it because anything over $200 needs a human. (With Sandboxes on, the refund is computed by a script the agent runs in a sandbox, not by the model's arithmetic: point at the sandbox steps in the trace.) The reply is **blocked**, not sent, and the ticket is escalated to Tier 2.
    - **`4`, Cancel my subscription.** The agent misreads it as a billing question. Sam writes back "That's not what I asked", and the agent runs again and gets it right.
 3. The visitor can 👎 (`B`) either one.
 4. Switch to the Inngest dashboard and open the **Scores** view. Compare the good run with the bad ones:
@@ -72,7 +72,8 @@ The app shows none of the scores; those live in Inngest.
 
 > Every run is scored in the terms your support lead uses. First-contact
 > resolution is Inngest waiting, durably, to see whether the customer comes
-> back (`support-agent-resolution`: 15s here, days in production). A
+> back (`support-agent-resolution`: 15s here, days in production). The
+> scores that come later are deferred functions of the run they judge. A
 > thumbs-down is the most honest eval you have, and the other two failures
 > needed no one to click anything.
 

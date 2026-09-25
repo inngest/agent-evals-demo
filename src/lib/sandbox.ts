@@ -15,168 +15,128 @@ import { isCloud } from "@/lib/demo-target";
 
 export type SandboxRunMode = "sandbox" | "simulated";
 
-export type ChangelogEntry = {
-  competitor: string;
-  title: string;
-  recent: boolean;
-  themes: string[];
+// One line of the order the refund is computed from. `damaged` lines are
+// refunded in full; shipping is refunded only when the whole order is.
+export type RefundLine = {
+  sku: string;
+  description: string;
+  unitUsd: number;
+  qty: number;
+  damaged: boolean;
 };
 
-export type ChangelogAnalysis = {
-  total_launches: number;
-  competitors: Array<{ name: string; launches: number; momentum: number }>;
-  top_themes: string[];
+export type RefundCalculation = {
+  refundUsd: number;
+  lines: Array<{ sku: string; refundUsd: number }>;
+  rule: string;
 };
 
-export type SandboxAnalysisResult = {
+export type SandboxRefundResult = {
   mode: SandboxRunMode;
   sandboxId: string;
   exitCode: number;
   stdout: string;
   stderr: string;
   truncated: boolean;
-  analysis: ChangelogAnalysis;
+  refund: RefundCalculation;
 };
 
-// The changelog corpus the (mocked) competitor API step returned. The
+// Order #47790, the refund ticket's order, as the order API returned it. The
 // generated script runs against this JSON deterministically.
-export const changelogCorpus: ChangelogEntry[] = [
+export const refundOrderLines: RefundLine[] = [
   {
-    competitor: "Temporal",
-    title: "Durable timers GA",
-    recent: false,
-    themes: ["durable-execution"],
+    sku: "BLND-PRO",
+    description: "Pro blender",
+    unitUsd: 624,
+    qty: 1,
+    damaged: true,
   },
   {
-    competitor: "Temporal",
-    title: "Workflow update patches",
-    recent: true,
-    themes: ["workflows"],
-  },
-  {
-    competitor: "Braintrust",
-    title: "Online evals dashboard",
-    recent: true,
-    themes: ["evals"],
-  },
-  {
-    competitor: "Braintrust",
-    title: "Experiment auto-routing",
-    recent: true,
-    themes: ["evals", "experiments"],
-  },
-  {
-    competitor: "Braintrust",
-    title: "Log import connectors",
-    recent: false,
-    themes: ["experiments"],
-  },
-  {
-    competitor: "BullMQ",
-    title: "Rate limiting improvements",
-    recent: false,
-    themes: ["queues"],
-  },
-  {
-    competitor: "BullMQ",
-    title: "Flow control primitives",
-    recent: true,
-    themes: ["queues", "retries"],
+    sku: "SHIP-STD",
+    description: "Standard shipping",
+    unitUsd: 25,
+    qty: 1,
+    damaged: false,
   },
 ];
 
 // The "model-generated" script: a stage prop, deterministic, never runs in
-// the app process. In cloud mode it executes inside a real sandbox.
-const generatedAnalysisScript = `#!/usr/bin/env python3
-"""Score competitor launch momentum from raw changelog entries."""
+// the app process. In cloud mode it executes inside a real sandbox. The point
+// of the beat: the agent does not do money arithmetic in its head, and the
+// code it writes does not run next to your secrets.
+const generatedRefundScript = `#!/usr/bin/env python3
+"""Compute the refund owed for an order with damaged items."""
 import json, sys
-from collections import Counter
+from decimal import Decimal, ROUND_HALF_UP
 
 with open(sys.argv[1]) as f:
-    entries = json.load(f)
+    lines = json.load(f)
 
-by_competitor = Counter(e["competitor"] for e in entries)
-recent = Counter(e["competitor"] for e in entries if e.get("recent"))
-themes = Counter(t for e in entries for t in e.get("themes", []))
+def usd(x):
+    return Decimal(str(x)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-analysis = {
-    "total_launches": sum(by_competitor.values()),
-    "competitors": [
-        {
-            "name": name,
-            "launches": launches,
-            "momentum": round(min(1.0, (launches + 2 * recent[name]) / 10), 2),
-        }
-        for name, launches in sorted(by_competitor.items())
-    ],
-    "top_themes": [t for t, _ in themes.most_common(3)],
-}
-print(json.dumps(analysis))
+goods = [l for l in lines if not l["sku"].startswith("SHIP-")]
+all_damaged = all(l["damaged"] for l in goods)
+
+refunds = []
+for l in lines:
+    is_ship = l["sku"].startswith("SHIP-")
+    owed = l["damaged"] or (is_ship and all_damaged)
+    refunds.append({"sku": l["sku"],
+                    "refundUsd": float(usd(l["unitUsd"] * l["qty"]) if owed else 0)})
+
+total = sum(Decimal(str(r["refundUsd"])) for r in refunds)
+print(json.dumps({
+    "refundUsd": float(usd(total)),
+    "lines": refunds,
+    "rule": "damaged items in full; shipping when every item is damaged",
+}))
 `;
 
-export function sandboxNameForRun(researchRunId: string): string {
-  return `research-${researchRunId}`;
+export function sandboxNameForRun(supportRunId: string): string {
+  return `refund-${supportRunId}`;
 }
 
 // One captured command: write the script + input via heredocs, then run it.
 // File upload is direct-client only, so durable steps embed both inline.
-export function buildAnalysisCommand(): string {
+export function buildRefundCommand(): string {
   return [
-    "cat > /tmp/analyze.py <<'PY'",
-    generatedAnalysisScript.trimEnd(),
+    "cat > /tmp/refund.py <<'PY'",
+    generatedRefundScript.trimEnd(),
     "PY",
-    "cat > /tmp/changelog.json <<'JSON'",
-    JSON.stringify(changelogCorpus),
+    "cat > /tmp/order.json <<'JSON'",
+    JSON.stringify(refundOrderLines),
     "JSON",
-    "python3 /tmp/analyze.py /tmp/changelog.json",
+    "python3 /tmp/refund.py /tmp/order.json",
   ].join("\n");
 }
 
 // JS mirror of the generated script. Used for the simulated local result so
 // the shape always matches what the real sandbox would print.
-function analyzeChangelogLocal(entries: ChangelogEntry[]): ChangelogAnalysis {
-  const byCompetitor = new Map<string, number>();
-  const recent = new Map<string, number>();
-  const themes = new Map<string, number>();
-
-  for (const entry of entries) {
-    byCompetitor.set(
-      entry.competitor,
-      (byCompetitor.get(entry.competitor) ?? 0) + 1,
-    );
-    if (entry.recent) {
-      recent.set(entry.competitor, (recent.get(entry.competitor) ?? 0) + 1);
-    }
-    for (const theme of entry.themes) {
-      themes.set(theme, (themes.get(theme) ?? 0) + 1);
-    }
-  }
+function computeRefundLocal(lines: RefundLine[]): RefundCalculation {
+  const goods = lines.filter((line) => !line.sku.startsWith("SHIP-"));
+  const allDamaged = goods.every((line) => line.damaged);
+  const refunds = lines.map((line) => {
+    const owed =
+      line.damaged || (line.sku.startsWith("SHIP-") && allDamaged);
+    return {
+      sku: line.sku,
+      refundUsd: owed ? round2(line.unitUsd * line.qty) : 0,
+    };
+  });
 
   return {
-    total_launches: entries.length,
-    competitors: [...byCompetitor.entries()]
-      .map(([name, launches]) => ({
-        name,
-        launches,
-        momentum: round2(Math.min(1, (launches + 2 * (recent.get(name) ?? 0)) / 10)),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
-    top_themes: [...themes.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([theme]) => theme),
+    refundUsd: round2(refunds.reduce((sum, line) => sum + line.refundUsd, 0)),
+    lines: refunds,
+    rule: "damaged items in full; shipping when every item is damaged",
   };
 }
 
-export function parseAnalysisStdout(stdout: string): ChangelogAnalysis | null {
+export function parseRefundStdout(stdout: string): RefundCalculation | null {
   try {
-    const parsed = JSON.parse(stdout) as ChangelogAnalysis;
+    const parsed = JSON.parse(stdout) as RefundCalculation;
 
-    if (
-      typeof parsed.total_launches === "number" &&
-      Array.isArray(parsed.competitors) &&
-      Array.isArray(parsed.top_themes)
-    ) {
+    if (typeof parsed.refundUsd === "number" && Array.isArray(parsed.lines)) {
       return parsed;
     }
 
@@ -190,18 +150,18 @@ export function parseAnalysisStdout(stdout: string): ChangelogAnalysis | null {
 // enabled by sandboxMiddleware(). Using the SDK's own type avoids drift.
 type SandboxStepContext = GetStepTools<typeof inngest>;
 
-// The one entry point the research agent calls. Cloud runs real durable
+// The one entry point the support agent calls. Cloud runs real durable
 // sandbox steps; local simulates inside a normal step so the trace keeps the
 // beat. Sandbox destroy stays on the success path as a normal step, per beta
 // guidance; leaked-sandbox cleanup lives in the function's onFailure handler.
-export async function runSandboxAnalysis(args: {
+export async function runSandboxRefund(args: {
   step: SandboxStepContext;
-  researchRunId: string;
-}): Promise<SandboxAnalysisResult> {
-  const name = sandboxNameForRun(args.researchRunId);
+  supportRunId: string;
+}): Promise<SandboxRefundResult> {
+  const name = sandboxNameForRun(args.supportRunId);
 
   if (isCloud) {
-    const sandbox = await args.step.sandbox.create("create-analysis-sandbox", {
+    const sandbox = await args.step.sandbox.create("create-refund-sandbox", {
       name,
       vcpu: 1,
       memoryMb: 1024,
@@ -209,16 +169,17 @@ export async function runSandboxAnalysis(args: {
     });
 
     const result = await sandbox.commands.run(
-      "run-generated-analysis",
-      buildAnalysisCommand(),
+      "compute-refund",
+      buildRefundCommand(),
       { cwd: "/tmp", timeout: "45s" }
     );
 
-    await sandbox.destroy("destroy-analysis-sandbox");
+    await sandbox.destroy("destroy-refund-sandbox");
 
-    const analysis =
-      parseAnalysisStdout(result.stdout) ??
-      analyzeChangelogLocal(changelogCorpus);
+    // A script that fails or prints garbage must not invent a refund: fall
+    // back to the audited local mirror, and the trace shows the bad exit.
+    const refund =
+      parseRefundStdout(result.stdout) ?? computeRefundLocal(refundOrderLines);
 
     return {
       mode: "sandbox",
@@ -227,24 +188,24 @@ export async function runSandboxAnalysis(args: {
       stdout: result.stdout,
       stderr: result.stderr,
       truncated: result.output.truncated,
-      analysis,
+      refund,
     };
   }
 
-  return args.step.run("run-generated-analysis", async () => {
+  return args.step.run("compute-refund", async () => {
     await sleep(650);
-    const analysis = analyzeChangelogLocal(changelogCorpus);
-    const stdout = `${JSON.stringify(analysis)}\n`;
+    const refund = computeRefundLocal(refundOrderLines);
+    const stdout = `${JSON.stringify(refund)}\n`;
 
     return {
       mode: "simulated",
-      sandboxId: `sbx-simulated-${args.researchRunId.slice(0, 8)}`,
+      sandboxId: `sbx-simulated-${args.supportRunId.slice(0, 8)}`,
       exitCode: 0,
       stdout,
       stderr: "",
       truncated: false,
-      analysis,
-    } satisfies SandboxAnalysisResult;
+      refund,
+    } satisfies SandboxRefundResult;
   });
 }
 
@@ -289,8 +250,8 @@ const globalSandboxAccess = globalThis as typeof globalThis & {
 /**
  * Ceiling on the entitlement probe. The Inngest client has no timeout of its
  * own, so without this a stalled uplink hangs every caller of
- * checkSandboxAccess - including the first paint of the loop demo, which
- * fetches /api/demo/status before it can label the sandbox toggle. Failing
+ * checkSandboxAccess - including /api/demo/status, which the preflight and
+ * the booth read before the doors open. Failing
  * closed to "simulated" after a short wait is always better than hanging.
  */
 const SANDBOX_PROBE_TIMEOUT_MS = 2500;

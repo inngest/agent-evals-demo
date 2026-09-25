@@ -14,8 +14,16 @@ import {
   supportTicketReceived,
   type SupportTicketReceivedData,
 } from "@/inngest/client";
+import { supportCsat, supportFcr } from "@/inngest/functions/support-deferred";
 import { runSupportCall } from "@/lib/mock-support";
 import { isCloud } from "@/lib/demo-target";
+import { SANDBOX_ENABLED } from "@/lib/feature-flags";
+import {
+  destroySandboxesNamed,
+  runSandboxRefund,
+  sandboxNameForRun,
+  type SandboxRefundResult,
+} from "@/lib/sandbox";
 import { isOpenRouterConfigured, OPENROUTER_MODEL } from "@/lib/openrouter";
 import {
   supportSessionKey,
@@ -33,12 +41,21 @@ export const supportAgent = inngest.createFunction(
     name: "Support agent",
     retries: 4,
     triggers: [supportTicketReceived],
+    // A run that dies between creating and destroying its sandbox would
+    // leave it running until its timeout. Sweep it up by name.
+    onFailure: async ({ event, runId }) => {
+      const original = event.data.event.data as Partial<SupportTicketReceivedData>;
+      await destroySandboxesNamed(
+        sandboxNameForRun(original.supportRunId ?? `support-${runId}`),
+      );
+    },
   },
   async ({
     event,
     step,
     attempt,
     runId,
+    defer,
   }): Promise<SupportAgentResult> => {
     const data = event.data as Partial<SupportTicketReceivedData>;
     const supportRunId = data.supportRunId ?? `support-${runId}`;
@@ -89,11 +106,30 @@ export const supportAgent = inngest.createFunction(
         order: order.output,
       }),
     );
+    // A refund is money arithmetic: the agent writes a script for it and runs
+    // it in a sandbox, not in its head and not in this process. The steps are
+    // durable like any other: every later re-entry replays the result instead
+    // of creating a new sandbox.
+    const refund: SandboxRefundResult | null =
+      SANDBOX_ENABLED && ticket.id === "damaged-item" && turn === 1
+        ? await runSandboxRefund({ step, supportRunId })
+        : null;
     // The guardrail: a draft that breaks policy (a refund over the
     // auto-approve limit) is never sent. It goes to a human instead.
     const policy = await step.run("policy-check", async () => {
-      const result = await call("policy-check", { reply: reply.output });
-      return { ...result, passed: !result.flagged };
+      const result = await call("policy-check", {
+        reply: reply.output,
+        ...(refund ? { refundUsd: refund.refund.refundUsd } : {}),
+      });
+      return {
+        ...result,
+        ...(refund
+          ? {
+              output: `${result.output} · $${refund.refund.refundUsd.toFixed(2)} computed in ${refund.mode === "sandbox" ? "a sandbox" : "a simulated sandbox"}`,
+            }
+          : {}),
+        passed: !result.flagged,
+      };
     });
     await step.run("send-reply", () =>
       call("send-reply", {
@@ -143,6 +179,21 @@ export const supportAgent = inngest.createFunction(
         },
       ),
     );
+
+    // The scores that are only known later. Each is a deferred function of
+    // this run: it starts from here, knows this run as its parent, and
+    // attaches its score back to it.
+    const deferred = {
+      supportRunId,
+      ticketId: ticket.id,
+      turn,
+      escalated: summary.escalated,
+    };
+    defer("score-csat", { function: supportCsat, data: deferred });
+    defer("score-first-contact-resolution", {
+      function: supportFcr,
+      data: deferred,
+    });
 
     return {
       ...summary,
