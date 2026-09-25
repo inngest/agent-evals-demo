@@ -49,7 +49,7 @@ const final = trigger?.sent ? await pollToTerminal(trigger) : null;
 
 if (final) {
   checkTimeline(final);
-  await checkSignal(trigger);
+  await checkSignal(trigger, final.runId);
   // Independent, and each waits on the scorer's follow-up window: run
   // them side by side so the gate stays well under a minute.
   await Promise.all([
@@ -174,10 +174,12 @@ function checkTimeline(final) {
   );
 }
 
-async function checkSignal(trigger) {
+async function checkSignal(trigger, runId) {
+  // The run the vote judges, as the console sends it. Without it, cloud
+  // CSAT has no agent run to score and records nothing.
   const { ok, status, body, error } = await fetchJson("/api/support/signal", {
     method: "POST",
-    body: JSON.stringify({ supportRunId: trigger.supportRunId, signal: "good" }),
+    body: JSON.stringify({ supportRunId: trigger.supportRunId, parentRunId: runId, signal: "good" }),
   });
 
   addCheck(
