@@ -24,7 +24,7 @@
 | Console copy | `src/content/booth-copy.ts` |
 | Agent function, `support-agent` | `src/inngest/functions/support-agent.ts` |
 | Business scores, `support-agent-score-run` (policy, cost, reply quality, escalation) | `src/inngest/functions/support-score-run.ts` |
-| CSAT, `support-agent-csat` (deferred; waits for the vote) | `src/inngest/functions/support-deferred.ts` |
+| CSAT, `support-agent-csat` (triggered by the vote event) | `src/inngest/functions/support-score-run.ts` |
 | First-contact resolution, `support-agent-resolution` (deferred; waits 15s for a follow-up) | `src/inngest/functions/support-deferred.ts` |
 | Score names | `src/lib/score-names.ts` |
 | Model split test, `support-agent-model-split-test` | `src/inngest/functions/support-experiment.ts` |

@@ -1,5 +1,6 @@
 import { codeToHtml, type ShikiTransformer } from "shiki";
 import { boothSnippets, type BoothSnippet } from "@/content/booth-snippets";
+import { refundScript } from "@/content/refund-sandbox";
 
 // Any snippet shape the CodeView can render.
 export type AnySnippet = {
@@ -18,6 +19,14 @@ export async function getHighlightedBoothSnippets(): Promise<
   HighlightedBoothSnippet[]
 > {
   return highlightSnippets<BoothSnippet>(boothSnippets);
+}
+
+/** The sandbox panel's refund script, highlighted once on the server. */
+export async function getHighlightedRefundScript(): Promise<string> {
+  return codeToHtml(refundScript.trimEnd(), {
+    lang: "python",
+    theme: "github-dark",
+  });
 }
 
 async function highlightSnippets<T extends { code: string }>(

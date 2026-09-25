@@ -1,5 +1,6 @@
 import {
   inngest,
+  supportFeedbackRecorded,
   supportRunCompleted,
   type SupportRunCompletedData,
 } from "@/inngest/client";
@@ -9,9 +10,9 @@ import { SCORE, SCORE_STEPS } from "@/lib/score-names";
 /**
  * Business metrics for every support run, attached to the run they judge.
  *
- * These are known the moment the agent finishes: policy, cost, escalation.
- * The customer's vote and first-contact resolution are not; the agent defers
- * a function for each (support-deferred.ts) that waits for the answer.
+ * These are known the moment the agent finishes: policy, cost, quality,
+ * escalation. First-contact resolution is not; the agent defers a function
+ * for it (support-deferred.ts) that waits for the customer.
  */
 export const supportScoreRun = inngest.createFunction(
   {
@@ -60,6 +61,32 @@ export const supportScoreRun = inngest.createFunction(
       costUsd: data.costUsd,
       replyQuality: data.qualityScore,
     };
+  },
+);
+
+/**
+ * CSAT: the visitor's 👍/👎, attached to the run it judges. Triggered by the
+ * vote itself, so a vote cast the instant the reply appears is never missed.
+ * The booth waits on this function's step as the receipt for the vote.
+ */
+export const supportCsat = inngest.createFunction(
+  {
+    id: "support-agent-csat",
+    name: "Support agent CSAT",
+    retries: 2,
+    triggers: [supportFeedbackRecorded],
+  },
+  async ({ event, step }) => {
+    const data = event.data;
+    const value = await attachScore(
+      step,
+      SCORE_STEPS.csat,
+      SCORE.csat,
+      data.signal === "good" ? 1 : 0,
+      data,
+    );
+
+    return { supportRunId: data.supportRunId, signal: data.signal, score: value };
   },
 );
 

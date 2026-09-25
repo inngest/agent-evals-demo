@@ -59,7 +59,7 @@ Point at these, in order:
 The app shows none of the scores; those live in Inngest.
 
 1. In the app, the visitor clicks 👍 (`G`) on the good reply.
-2. **`3`, Refund a damaged item.** The agent doesn't do the refund maths in its head: it writes a script and runs it in a sandbox (the **Sandboxed** row). Only the $49 jar is owed, the reply is drafted around that, and it passes policy. In the trace, point at the create, `compute-refund` and destroy sandbox steps.
+2. **`3`, Refund a damaged item.** The agent doesn't do the refund maths in its head: it runs a refund script in a sandbox (the **Sandboxed** row; its panel shows the script, the sandbox being created, run and destroyed, and the JSON it printed). The script is canned for the booth; in a real agent the model would write it. Only the $49 jar is owed, the reply is drafted around that, and it passes policy. In the trace, point at the create, `compute-refund` and destroy sandbox steps.
 3. **`4`, Cancel my subscription.** The agent reads it as a billing question and explains the charge instead of cancelling. Nothing on screen says it went badly; the visitor can 👎 (`B`) it.
 4. Switch to the Inngest dashboard and open the **Scores** view. Compare the good runs with ticket 4:
    - `support_reply_quality`: low on ticket 4.
@@ -68,8 +68,8 @@ The app shows none of the scores; those live in Inngest.
 
 > Every run is scored in the terms your support lead uses. First-contact
 > resolution is Inngest waiting, durably, to see whether the customer comes
-> back (`support-agent-resolution`: 15s here, days in production). The
-> scores that come later are deferred functions of the run they judge. The
+> back (`support-agent-resolution`: 15s here, days in production). It comes
+> later, so it's a deferred function of the run it judges. The
 > UI looked fine on ticket 4; the score is how you find out it wasn't.
 
 For a business audience:

@@ -29,8 +29,10 @@ the layout is identical on a TV, laptop, or projector.
 - in cloud mode, `step.score` and run metadata.
 
 **What's canned:** the tickets, the customer and order data, the reply
-(unless OpenRouter is configured), the per-model quality scores, and the
-model pricing.
+(unless OpenRouter is configured), the per-model quality scores, the
+model pricing, and the refund script on ticket 3 (a real agent would write
+it; in cloud mode it really runs in an Inngest sandbox, locally the run is
+simulated and labelled so).
 
 **When a live run can't make the booth budget**, the UI switches to a
 labelled replay and shows a "Replay" chip; it never passes a replay off as
@@ -113,12 +115,16 @@ In `cloud` mode the app emits real primitives at these call sites:
 - **Business scores:** `src/inngest/functions/support-score-run.ts` attaches
   `policy_compliance`, `cost_per_ticket`, `support_reply_quality` and
   `escalated_to_human` to the agent
-  run with `step.score(...)`. The scores known only later are deferred
-  functions of the agent run (`createDefer`, `src/inngest/functions/support-deferred.ts`):
-  `support-agent-csat` waits for the visitor's vote and
-  `support-agent-resolution` waits (15s at the booth) for a customer
-  follow-up. Each scores its parent run (`parents[0].runId`). Deferred
-  functions run on the local dev server too.
+  run with `step.score(...)`. CSAT comes from the vote: `support-agent-csat`
+  (same file) is triggered by `support/feedback.recorded` and attaches `csat`
+  to the run in `data.parentRunId`. It is event-triggered, not deferred,
+  because a deferred run starts only after its parent finishes, so it would
+  miss a vote cast the instant the reply appears. First-contact resolution
+  is a deferred function of the agent run (`createDefer`,
+  `src/inngest/functions/support-deferred.ts`): `support-agent-resolution`
+  waits (15s at the booth) for a customer follow-up and scores its parent
+  run (`parents[0].runId`). Deferred functions run on the local dev server
+  too.
   Names live in `src/lib/score-names.ts`. This
   requires `scoreMiddleware()` on the client, which is registered
   unconditionally in `src/inngest/client.ts`.

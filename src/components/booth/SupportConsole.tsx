@@ -43,9 +43,12 @@ const FOLLOW_UP_AFTER_MS = 3_200;
  */
 export function SupportConsole({
   snippets,
+  refundScriptHtml,
   qrSvg,
 }: {
   snippets: HighlightedBoothSnippet[];
+  /** The sandbox panel's refund script, highlighted on the server. */
+  refundScriptHtml: string;
   qrSvg: string;
 }) {
   const [depth, setDepth] = React.useState(false);
@@ -283,6 +286,7 @@ export function SupportConsole({
             followUpStage={followUpStage}
             feedback={feedback}
             onVote={castVote}
+            refundScriptHtml={refundScriptHtml}
             tall={stage.tall}
           />
           {drawer ? <UnderTheHood snippet={snippet} compact={stage.tall} /> : null}

@@ -22,9 +22,6 @@ export const SCORE = {
 export const FOLLOW_UP_WINDOW = "15s";
 export const FOLLOW_UP_WINDOW_MS = 15_000;
 
-/** How long the CSAT function waits for the visitor's vote. */
-export const VOTE_WINDOW = "10m";
-
 /** Scorer step ids: the console polls these as receipts. */
 export const SCORE_STEPS = {
   policyCompliance: "attach-policy-compliance-score",
@@ -32,7 +29,6 @@ export const SCORE_STEPS = {
   escalatedToHuman: "attach-escalated-score",
   waitForFollowUp: "wait-for-customer-follow-up",
   firstContactResolution: "attach-first-contact-resolution",
-  waitForVote: "wait-for-customer-vote",
   csat: "attach-human-feedback-score",
   replyQuality: "attach-reply-quality-score",
 } as const;

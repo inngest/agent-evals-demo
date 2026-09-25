@@ -1,6 +1,9 @@
 import { supportAgent } from "@/inngest/functions/support-agent";
-import { supportScoreRun } from "@/inngest/functions/support-score-run";
-import { supportCsat, supportFcr } from "@/inngest/functions/support-deferred";
+import {
+  supportCsat,
+  supportScoreRun,
+} from "@/inngest/functions/support-score-run";
+import { supportFcr } from "@/inngest/functions/support-deferred";
 import { supportExperiment } from "@/inngest/functions/support-experiment";
 
 export const functions = [
@@ -12,7 +15,10 @@ export const functions = [
 ];
 
 export { supportAgent } from "@/inngest/functions/support-agent";
-export { supportScoreRun } from "@/inngest/functions/support-score-run";
-export { supportCsat, supportFcr } from "@/inngest/functions/support-deferred";
+export {
+  supportCsat,
+  supportScoreRun,
+} from "@/inngest/functions/support-score-run";
+export { supportFcr } from "@/inngest/functions/support-deferred";
 export { supportExperiment } from "@/inngest/functions/support-experiment";
 export type { SupportAgentResult } from "@/inngest/functions/support-agent";

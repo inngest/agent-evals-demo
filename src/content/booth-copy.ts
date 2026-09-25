@@ -57,6 +57,16 @@ export const consoleCopy = {
     recovered: "Recovered on retry",
     kept: "Cached",
     sandboxed: "Sandboxed",
+    sandbox: {
+      show: "Show sandbox",
+      hide: "Hide sandbox",
+      script: "Refund script",
+      lifecycle: "Lifecycle",
+      output: "Output",
+      waiting: "Waiting for the script…",
+      simulated:
+        "Simulated locally: no sandbox is created. Cloud mode runs this script in an Inngest sandbox.",
+    },
     flagged: "Escalated to a human",
     reply: (model: string, tokens: number) =>
       `${model} · ${tokens.toLocaleString("en-US")} tokens`,

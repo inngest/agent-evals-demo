@@ -5,6 +5,8 @@ import {
   Bot,
   Box,
   Check,
+  ChevronDown,
+  ChevronRight,
   CircleAlert,
   History,
   LoaderCircle,
@@ -28,6 +30,7 @@ import {
   isEscalated,
   replyText,
   runTotals,
+  type SandboxDetail,
   type StepView,
 } from "./run-view";
 import type { Feedback } from "./useAbTest";
@@ -62,6 +65,7 @@ export function Thread({
   followUpStage,
   feedback,
   onVote,
+  refundScriptHtml,
   tall = false,
 }: {
   ticket: SupportTicket | null;
@@ -69,6 +73,8 @@ export function Thread({
   followUpStage: FollowUpStage;
   feedback: Feedback | null;
   onVote: (signal: "good" | "bad") => void;
+  /** The sandbox panel's refund script, highlighted on the server. */
+  refundScriptHtml: string;
   /** Portrait console: the reply's status and vote share one line. */
   tall?: boolean;
 }) {
@@ -76,7 +82,13 @@ export function Thread({
 
   // Keep the newest activity in view, as a chat does.
   const progress = [
-    ...turns.map((turn) => turn.views.map((view) => view.state).join()),
+    ...turns.map((turn) =>
+      turn.views
+        .map((view) =>
+          [view.state, ...(view.sandbox?.stages.map((stage) => stage.state) ?? [])].join(),
+        )
+        .join(),
+    ),
     ...turns.map((turn) => turn.run.phase),
     followUpStage,
     feedback?.receipt,
@@ -138,6 +150,7 @@ export function Thread({
               votable={votable && turns.length === 1}
               feedback={feedback}
               onVote={onVote}
+              refundScriptHtml={refundScriptHtml}
               tall={tall}
             />
           ) : null}
@@ -169,6 +182,7 @@ export function Thread({
               votable={votable}
               feedback={feedback}
               onVote={onVote}
+              refundScriptHtml={refundScriptHtml}
               tall={tall}
             />
           ) : null}
@@ -186,6 +200,7 @@ function RunBlock({
   votable,
   feedback,
   onVote,
+  refundScriptHtml,
   tall,
 }: {
   turn: TurnView;
@@ -196,6 +211,7 @@ function RunBlock({
   votable: boolean;
   feedback: Feedback | null;
   onVote: (signal: "good" | "bad") => void;
+  refundScriptHtml: string;
 }) {
   const { run, views, traceUrl } = turn;
   const complete = run.phase === "complete";
@@ -228,9 +244,20 @@ function RunBlock({
             ) : null}
           </div>
           <ol className="grid">
-            {started.map((view) => (
-              <ActivityRow key={view.def.id} view={view} model={run.model} />
-            ))}
+            {started.map((view) =>
+              view.sandbox ? (
+                // Keyed by run, so a manual toggle doesn't carry to the next ticket.
+                <SandboxRow
+                  key={`${run.supportRunId}-sandbox`}
+                  view={view}
+                  sandbox={view.sandbox}
+                  complete={complete}
+                  scriptHtml={refundScriptHtml}
+                />
+              ) : (
+                <ActivityRow key={view.def.id} view={view} model={run.model} />
+              ),
+            )}
             {started.length === 0 ? (
               <li className="acme-row" data-state="running">
                 <LoaderCircle className="size-7 animate-spin" />
@@ -297,6 +324,25 @@ function EmptyThread() {
 }
 
 function ActivityRow({ view, model }: { view: StepView; model: string }) {
+  const flagged = view.state === "done" && view.flagged;
+
+  return (
+    <li className="acme-row" data-state={view.state} data-flagged={flagged}>
+      <RowHeader view={view} model={model} />
+    </li>
+  );
+}
+
+/** The three cells of an activity row: icon, label and detail, pills. */
+function RowHeader({
+  view,
+  model,
+  trailing,
+}: {
+  view: StepView;
+  model: string;
+  trailing?: React.ReactNode;
+}) {
   const { state } = view;
   const summary =
     view.def.id === REPLY_STEP_ID && state === "done"
@@ -305,7 +351,7 @@ function ActivityRow({ view, model }: { view: StepView; model: string }) {
   const flagged = state === "done" && view.flagged;
 
   return (
-    <li className="acme-row" data-state={state} data-flagged={flagged}>
+    <>
       {flagged ? <ShieldAlert className="size-7" /> : <RowIcon state={state} />}
       <div className="min-w-0">
         {/* One line when there is room; the detail wraps under the label
@@ -356,7 +402,96 @@ function ActivityRow({ view, model }: { view: StepView; model: string }) {
         ) : state === "done" && view.durationMs !== undefined ? (
           <span data-role="duration">{formatSeconds(view.durationMs)}</span>
         ) : null}
+        {trailing}
       </div>
+    </>
+  );
+}
+
+/**
+ * The sandboxed refund: the row, plus a panel with the script, the sandbox's
+ * lifecycle and what the script printed. Open while the agent works, folded
+ * to the row once the run completes; a click overrides either.
+ */
+function SandboxRow({
+  view,
+  sandbox,
+  complete,
+  scriptHtml,
+}: {
+  view: StepView;
+  sandbox: SandboxDetail;
+  complete: boolean;
+  scriptHtml: string;
+}) {
+  const [manual, setManual] = React.useState<boolean | null>(null);
+  const open = manual ?? !complete;
+  const text = copy.activity.sandbox;
+
+  return (
+    <li className="acme-sandbox-item">
+      <div className="acme-row" data-state={view.state}>
+        <RowHeader
+          view={view}
+          model=""
+          trailing={
+            <button
+              type="button"
+              className="acme-sandbox-toggle"
+              aria-expanded={open}
+              aria-label={open ? text.hide : text.show}
+              title={open ? text.hide : text.show}
+              onClick={() => setManual(!open)}
+            >
+              {open ? <ChevronDown className="size-6" /> : <ChevronRight className="size-6" />}
+            </button>
+          }
+        />
+      </div>
+      {open ? (
+        <div className="acme-sandbox">
+          <div className="grid min-w-0 content-start gap-2">
+            <div className="acme-sandbox-caption">{text.script}</div>
+            <div
+              className="code-html acme-sandbox-code"
+              dangerouslySetInnerHTML={{ __html: scriptHtml }}
+            />
+          </div>
+          <div className="grid min-w-0 content-start gap-4">
+            <div className="grid gap-2">
+              <div className="acme-sandbox-caption">{text.lifecycle}</div>
+              <ol className="grid gap-1">
+                {sandbox.stages.map((stage) => (
+                  <li key={stage.id} className="acme-sandbox-stage" data-state={stage.state}>
+                    <RowIcon state={stage.state} />
+                    <span>{stage.label}</span>
+                    <span className="tabnum text-[var(--acme-muted)]">
+                      {stage.state === "done" && stage.durationMs !== undefined
+                        ? formatSeconds(stage.durationMs)
+                        : stage.state === "pending"
+                          ? ""
+                          : copy.activity.running}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              {sandbox.simulated ? (
+                <p className="acme-sandbox-note">{text.simulated}</p>
+              ) : null}
+            </div>
+            <div className="grid min-w-0 gap-2">
+              <div className="acme-sandbox-caption">{text.output}</div>
+              {sandbox.output ? (
+                <pre className="acme-sandbox-output">
+                  {JSON.stringify(sandbox.output, null, 2)}
+                </pre>
+              ) : (
+                <p className="acme-sandbox-note">{text.waiting}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </li>
   );
 }

@@ -14,7 +14,7 @@ import {
   supportTicketReceived,
   type SupportTicketReceivedData,
 } from "@/inngest/client";
-import { supportCsat, supportFcr } from "@/inngest/functions/support-deferred";
+import { supportFcr } from "@/inngest/functions/support-deferred";
 import { runSupportCall } from "@/lib/mock-support";
 import { isCloud } from "@/lib/demo-target";
 import { SANDBOX_ENABLED } from "@/lib/feature-flags";
@@ -73,14 +73,6 @@ export const supportAgent = inngest.createFunction(
         : (data.failureStep ?? FAILURE_STEP_ID);
     const sessionId =
       event.meta?.sessions?.[supportSessionKey] ?? supportSessionId;
-    // CSAT is deferred first thing, not at the end: its wait for the vote
-    // is then running long before the reply is on screen, so even an
-    // instant vote is caught. A deferred run knows this run as its parent
-    // and attaches its score back to it.
-    defer("score-csat", {
-      function: supportCsat,
-      data: { supportRunId, ticketId: ticket.id, turn },
-    });
     const call = (id: SupportStepId, input: unknown) =>
       runSupportCall(id, {
         ticketId: ticket.id,

@@ -7,6 +7,7 @@ import {
   supportSteps,
   type ActivityStep,
 } from "@/content/support-demo";
+import type { RefundCalculation } from "@/content/refund-sandbox";
 import type {
   FailedAttempt,
   RunTimeline,
@@ -38,6 +39,8 @@ export type StepView = {
   flagged: boolean;
   tokens: number;
   costUsd: number;
+  /** The sandboxed refund's lifecycle and output (that row only). */
+  sandbox?: SandboxDetail;
 };
 
 export type RunTotals = {
@@ -99,43 +102,87 @@ export function buildStepViews(
   return views;
 }
 
+/** One step of the sandbox's life, as the trace records it. */
+export type SandboxStage = {
+  id: string;
+  label: string;
+  state: NodeState;
+  durationMs?: number;
+};
+
+export type SandboxDetail = {
+  /** Local mode: one step.run stands in for create, run and destroy. */
+  simulated: boolean;
+  stages: SandboxStage[];
+  /** What the script printed, once it has run. */
+  output: RefundCalculation | null;
+};
+
+const SANDBOX_STAGES = [
+  { id: "create-refund-sandbox", label: "Create sandbox" },
+  { id: SANDBOX_STEP_ID, label: "Run refund script" },
+  { id: "destroy-refund-sandbox", label: "Destroy sandbox" },
+] as const;
+
 /**
- * The sandboxed refund, when this run has one. Locally it is one simulated
- * step.run; in cloud it is the sandbox command step, whose output carries the
- * command result with the script's JSON on stdout (base64 on the wire).
+ * The sandboxed refund, when this run has one. In cloud it is three durable
+ * steps (create, run the script, destroy); the command step's output carries
+ * the script's JSON on stdout, base64 on the wire. Locally it is one
+ * simulated step.run.
  */
 function sandboxView(timeline: RunTimeline | null): StepView | null {
-  const captured = timeline?.steps.find(
-    (step) => step.displayName === SANDBOX_STEP_ID,
-  );
-  if (!captured) return null;
+  const captured = SANDBOX_STAGES.map((stage) => ({
+    ...stage,
+    step: timeline?.steps.find((step) => step.displayName === stage.id),
+  }));
+  const seen = captured.filter((stage) => stage.step);
+  if (seen.length === 0) return null;
 
-  const refundUsd = parseRefundUsd(captured.output);
+  const run = captured[1]!.step;
+  const simulated = parseJson(run?.output)?.mode === "simulated";
+  const stages = (simulated ? [captured[1]!] : captured).map((stage) => ({
+    id: stage.id,
+    label: stage.label,
+    state: nodeState(stage.step),
+    durationMs: stage.step?.durationMs,
+  }));
+  const last = stages[stages.length - 1]!;
+  const output = parseRefund(run?.output);
+  const first = seen[0]!.step!;
+  const failed = seen.find(
+    (stage) => stage.step?.status === "retrying" || stage.step?.status === "errored",
+  )?.step;
 
   return {
     def: sandboxStep,
-    state: nodeState(captured),
+    // Done only when the sandbox is gone, not just when the script ran.
+    state: failed ? nodeState(failed) : last.state === "done" ? "done" : "running",
     memoized: false,
     recovered: false,
-    startedAt: captured.startedAt,
-    durationMs: captured.durationMs,
-    failedAttempts: captured.failedAttempts ?? [],
-    errorMessage: captured.errorMessage,
+    startedAt: first.startedAt,
+    durationMs: stages.every((stage) => stage.durationMs !== undefined)
+      ? stages.reduce((sum, stage) => sum + (stage.durationMs ?? 0), 0)
+      : undefined,
+    failedAttempts: [],
+    errorMessage: failed?.errorMessage,
     output:
-      refundUsd === null
+      output === null
         ? undefined
-        : `$${refundUsd.toFixed(2)} refund${isSimulated(captured.output) ? " · simulated locally" : ""}`,
-    input: captured.input,
+        : `$${output.refundUsd.toFixed(2)} refund${simulated ? " · simulated locally" : ""}`,
+    input: run?.input,
     flagged: false,
     tokens: 0,
     costUsd: 0,
+    sandbox: { simulated, stages, output },
   };
 }
 
-function parseRefundUsd(output: string | undefined): number | null {
+function parseRefund(output: string | undefined): RefundCalculation | null {
   const parsed = parseJson(output);
   const refund = parsed?.refund ?? parseJson(commandStdout(parsed?.result));
-  return typeof refund?.refundUsd === "number" ? refund.refundUsd : null;
+  return typeof refund?.refundUsd === "number" && Array.isArray(refund.lines)
+    ? (refund as RefundCalculation)
+    : null;
 }
 
 function commandStdout(
@@ -151,10 +198,6 @@ function commandStdout(
   } catch {
     return undefined;
   }
-}
-
-function isSimulated(output: string | undefined): boolean {
-  return parseJson(output)?.mode === "simulated";
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

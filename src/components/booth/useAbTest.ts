@@ -11,7 +11,7 @@ import {
 import { getDeepLink } from "@/lib/inngest-dashboard";
 import { wait } from "./useAgentRun";
 
-// Mirror the CSAT deferred function in support-deferred.ts. Not imported: that
+// Mirror supportCsat in support-score-run.ts. Not imported: that
 // module pulls the server-side Inngest client into the browser bundle.
 const FEEDBACK_STEP = "attach-human-feedback-score";
 const SCORER_FUNCTION = "support-agent-csat";

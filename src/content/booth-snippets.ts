@@ -54,10 +54,9 @@ const durableCode = `export const supportAgent = createFunction(
   }
 );`;
 
-const scoresCode = `// The agent's last lines: scores that are only known later
-// are deferred functions of this run.
+const scoresCode = `// The agent's last line: a score that is only known later
+// is a deferred function of this run.
 // @demo-highlight-start
-defer("score-csat", { function: csat, data: run });
 defer("score-fcr", { function: firstContactResolution, data: run });
 // @demo-highlight-end
 
@@ -78,7 +77,7 @@ export const firstContactResolution = createDefer(inngest,
   }
 );
 
-// CSAT is the same shape: wait for the 👍/👎, then
+// The 👍/👎 triggers its own scorer, attached to the same run:
 //   step.score(..., { name: "csat", value: signal === "good" ? 1 : 0 })`;
 
 const splitCode = `// A variant is just a function: model, prompt,

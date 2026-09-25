@@ -1,14 +1,18 @@
 import QRCode from "qrcode";
 import { SupportConsole } from "@/components/booth/SupportConsole";
-import { getHighlightedBoothSnippets } from "@/lib/highlight";
+import {
+  getHighlightedBoothSnippets,
+  getHighlightedRefundScript,
+} from "@/lib/highlight";
 
 /** Where the inbox's QR code sends visitors. Override per event. */
 const CTA_URL =
   process.env.NEXT_PUBLIC_BOOTH_CTA_URL?.trim() || "https://www.inngest.com/docs";
 
 export default async function Home() {
-  const [snippets, qrSvg] = await Promise.all([
+  const [snippets, refundScriptHtml, qrSvg] = await Promise.all([
     getHighlightedBoothSnippets(),
+    getHighlightedRefundScript(),
     QRCode.toString(CTA_URL, {
       type: "svg",
       margin: 0,
@@ -17,5 +21,11 @@ export default async function Home() {
     }),
   ]);
 
-  return <SupportConsole snippets={snippets} qrSvg={qrSvg} />;
+  return (
+    <SupportConsole
+      snippets={snippets}
+      refundScriptHtml={refundScriptHtml}
+      qrSvg={qrSvg}
+    />
+  );
 }
