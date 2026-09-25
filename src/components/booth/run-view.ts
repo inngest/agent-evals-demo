@@ -1,9 +1,11 @@
 import {
   FAILURE_STEP_ID,
   REPLY_STEP_ID,
+  SANDBOX_STEP_ID,
   costPer1kTokens,
+  sandboxStep,
   supportSteps,
-  type SupportStep,
+  type ActivityStep,
 } from "@/content/support-demo";
 import type {
   FailedAttempt,
@@ -20,7 +22,7 @@ import type {
 export type NodeState = "pending" | "running" | "retrying" | "done" | "errored";
 
 export type StepView = {
-  def: SupportStep;
+  def: ActivityStep;
   state: NodeState;
   /** Finished before the outage and replayed from memoized state after it. */
   memoized: boolean;
@@ -57,7 +59,7 @@ export function buildStepViews(
       (step.status === "retrying" || (step.failedAttempts?.length ?? 0) > 0),
   );
 
-  return supportSteps.map((def, index) => {
+  const views: StepView[] = supportSteps.map((def, index) => {
     const captured = timeline?.steps.find((step) => step.displayName === def.id);
     const payload = parseStepOutput(captured);
     const tokens = payload?.tokens ?? 0;
@@ -84,6 +86,70 @@ export function buildStepViews(
       costUsd: (tokens / 1000) * costPer1kTokens(model),
     };
   });
+
+  const sandbox = sandboxView(timeline);
+  if (sandbox) {
+    views.splice(
+      views.findIndex((view) => view.def.id === "policy-check"),
+      0,
+      sandbox,
+    );
+  }
+
+  return views;
+}
+
+/**
+ * The sandboxed refund, when this run has one. Locally it is one simulated
+ * step.run; in cloud it is the sandbox command step, whose output is the
+ * command result with the script's JSON on stdout.
+ */
+function sandboxView(timeline: RunTimeline | null): StepView | null {
+  const captured = timeline?.steps.find(
+    (step) => step.displayName === SANDBOX_STEP_ID,
+  );
+  if (!captured) return null;
+
+  const refundUsd = parseRefundUsd(captured.output);
+
+  return {
+    def: sandboxStep,
+    state: nodeState(captured),
+    memoized: false,
+    recovered: false,
+    startedAt: captured.startedAt,
+    durationMs: captured.durationMs,
+    failedAttempts: captured.failedAttempts ?? [],
+    errorMessage: captured.errorMessage,
+    output:
+      refundUsd === null
+        ? undefined
+        : `$${refundUsd.toFixed(2)} refund${isSimulated(captured.output) ? " · simulated locally" : ""}`,
+    input: captured.input,
+    flagged: false,
+    tokens: 0,
+    costUsd: 0,
+  };
+}
+
+function parseRefundUsd(output: string | undefined): number | null {
+  const parsed = parseJson(output);
+  const refund = parsed?.refund ?? parseJson(parsed?.stdout)?.refund ?? parseJson(parsed?.stdout);
+  return typeof refund?.refundUsd === "number" ? refund.refundUsd : null;
+}
+
+function isSimulated(output: string | undefined): boolean {
+  return parseJson(output)?.mode === "simulated";
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseJson(text: unknown): any {
+  if (typeof text !== "string") return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 function nodeState(step: TimelineStep | undefined): NodeState {

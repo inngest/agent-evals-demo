@@ -56,6 +56,7 @@ export const consoleCopy = {
     retryNow: "Retrying now…",
     recovered: "Recovered on retry",
     kept: "Cached",
+    sandboxed: "Sandboxed",
     flagged: "Escalated to a human",
     reply: (model: string, tokens: number) =>
       `${model} · ${tokens.toLocaleString("en-US")} tokens`,

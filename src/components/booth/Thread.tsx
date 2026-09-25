@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Bot,
+  Box,
   Check,
   CircleAlert,
   History,
@@ -16,7 +17,11 @@ import {
   UserRound,
 } from "lucide-react";
 import { consoleCopy, inngestLinks } from "@/content/booth-copy";
-import { REPLY_STEP_ID, type SupportTicket } from "@/content/support-demo";
+import {
+  REPLY_STEP_ID,
+  SANDBOX_STEP_ID,
+  type SupportTicket,
+} from "@/content/support-demo";
 import { InngestLink } from "./DashboardLink";
 import {
   formatSeconds,
@@ -331,6 +336,11 @@ function ActivityRow({ view, model }: { view: StepView; model: string }) {
         ) : null}
       </div>
       <div className="tabnum flex shrink-0 items-center gap-4 text-[20px] text-[var(--acme-muted)]">
+        {view.def.id === SANDBOX_STEP_ID ? (
+          <span className="acme-pill" data-tone="accent">
+            <Box className="size-4" /> {copy.activity.sandboxed}
+          </span>
+        ) : null}
         {view.memoized ? (
           <span className="acme-pill" data-tone="ok">
             <History className="size-4" /> {copy.activity.kept}

@@ -52,6 +52,26 @@ export type SupportStep = {
   latencyMs: number;
 };
 
+/**
+ * The refund ticket's sandboxed calculation (lib/sandbox.ts). Not one of the
+ * six steps every ticket runs: it only exists when Sandboxes are enabled, so
+ * the thread draws it only when the run's timeline has it.
+ */
+export const SANDBOX_STEP_ID = "compute-refund";
+
+export type ActivityStep = Omit<SupportStep, "id"> & {
+  id: SupportStepId | typeof SANDBOX_STEP_ID;
+};
+
+export const sandboxStep: ActivityStep = {
+  id: SANDBOX_STEP_ID,
+  label: "Compute refund",
+  source: "Python",
+  kind: "logic",
+  detail: "Run the agent's refund script in an isolated sandbox.",
+  latencyMs: 650,
+};
+
 export const supportSteps: SupportStep[] = [
   {
     id: "classify-ticket",

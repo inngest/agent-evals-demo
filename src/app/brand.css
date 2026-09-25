@@ -538,6 +538,7 @@ button.acme-switch[data-on="true"] span {
 .acme-pill[data-tone="ok"] { background: var(--acme-ok-soft); color: var(--acme-ok); }
 .acme-pill[data-tone="bad"] { background: var(--acme-bad); color: #fff; }
 .acme-pill[data-tone="warn"] { background: var(--acme-warn-soft); color: var(--acme-warn); }
+.acme-pill[data-tone="accent"] { background: var(--acme-accent-soft); color: var(--acme-accent); }
 
 .acme-reply {
   padding: 18px 24px;

@@ -121,15 +121,7 @@ export const supportAgent = inngest.createFunction(
         reply: reply.output,
         ...(refund ? { refundUsd: refund.refund.refundUsd } : {}),
       });
-      return {
-        ...result,
-        ...(refund
-          ? {
-              output: `${result.output} · $${refund.refund.refundUsd.toFixed(2)} computed in ${refund.mode === "sandbox" ? "a sandbox" : "a simulated sandbox"}`,
-            }
-          : {}),
-        passed: !result.flagged,
-      };
+      return { ...result, passed: !result.flagged };
     });
     await step.run("send-reply", () =>
       call("send-reply", {
