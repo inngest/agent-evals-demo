@@ -486,7 +486,11 @@ function SandboxRow({
                   {JSON.stringify(sandbox.output, null, 2)}
                 </pre>
               ) : (
-                <p className="acme-sandbox-note">{text.waiting}</p>
+                <p className="acme-sandbox-note">
+                  {sandbox.stages.some((stage) => stage.id === SANDBOX_STEP_ID && stage.state === "done")
+                    ? text.noOutput
+                    : text.waiting}
+                </p>
               )}
             </div>
           </div>

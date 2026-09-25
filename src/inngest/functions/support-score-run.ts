@@ -68,16 +68,25 @@ export const supportScoreRun = inngest.createFunction(
  * CSAT: the visitor's 👍/👎, attached to the run it judges. Triggered by the
  * vote itself, so a vote cast the instant the reply appears is never missed.
  * The booth waits on this function's step as the receipt for the vote.
+ * One vote per run: the first wins, so a reply never carries two CSATs.
  */
 export const supportCsat = inngest.createFunction(
   {
     id: "support-agent-csat",
     name: "Support agent CSAT",
     retries: 2,
+    idempotency: "event.data.supportRunId",
     triggers: [supportFeedbackRecorded],
   },
   async ({ event, step }) => {
     const data = event.data;
+
+    // In cloud, a score without a run ID lands on this function's own run.
+    // No real agent run to judge (a replay, say): record nothing.
+    if (isCloud && !getScoreTargetRunId(data.parentRunId)) {
+      return { supportRunId: data.supportRunId, signal: data.signal, skipped: "no agent run" };
+    }
+
     const value = await attachScore(
       step,
       SCORE_STEPS.csat,

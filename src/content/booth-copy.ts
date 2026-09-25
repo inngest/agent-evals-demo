@@ -64,6 +64,8 @@ export const consoleCopy = {
       lifecycle: "Lifecycle",
       output: "Output",
       waiting: "Waiting for the script…",
+      noOutput:
+        "The script printed no valid refund, so the agent used the audited local calculation.",
       simulated:
         "Simulated locally: no sandbox is created. Cloud mode runs this script in an Inngest sandbox.",
     },

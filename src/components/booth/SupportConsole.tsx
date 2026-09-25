@@ -146,10 +146,13 @@ export function SupportConsole({
   const castVote = React.useCallback(
     (signal: "good" | "bad") => {
       if (!complete) return;
+      // One vote per reply, as CSAT keeps only the first. A vote that never
+      // reached Inngest can be cast again.
+      if (feedback && feedback.receipt !== "offline") return;
       // The vote judges the conversation's last reply, so it scores that run.
       void vote(signal, { supportRunId: latest.run.supportRunId, runId: latest.run.runId });
     },
-    [complete, latest.run.runId, latest.run.supportRunId, vote],
+    [complete, feedback, latest.run.runId, latest.run.supportRunId, vote],
   );
 
   const runSplit = React.useCallback(() => {

@@ -149,6 +149,7 @@ function sandboxView(timeline: RunTimeline | null): StepView | null {
   const last = stages[stages.length - 1]!;
   const output = parseRefund(run?.output);
   const first = seen[0]!.step!;
+  const failedAttempts = seen.flatMap((stage) => stage.step?.failedAttempts ?? []);
   const failed = seen.find(
     (stage) => stage.step?.status === "retrying" || stage.step?.status === "errored",
   )?.step;
@@ -158,12 +159,12 @@ function sandboxView(timeline: RunTimeline | null): StepView | null {
     // Done only when the sandbox is gone, not just when the script ran.
     state: failed ? nodeState(failed) : last.state === "done" ? "done" : "running",
     memoized: false,
-    recovered: false,
+    recovered: failedAttempts.length > 0,
     startedAt: first.startedAt,
     durationMs: stages.every((stage) => stage.durationMs !== undefined)
       ? stages.reduce((sum, stage) => sum + (stage.durationMs ?? 0), 0)
       : undefined,
-    failedAttempts: [],
+    failedAttempts,
     errorMessage: failed?.errorMessage,
     output:
       output === null
