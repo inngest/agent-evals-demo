@@ -18,14 +18,17 @@
 //   rendered "Environment not found", so session links fall back to Runs.
 
 // ⬇⬇⬇ SWAP TO CLOUD URLS HERE ⬇⬇⬇
-// For the booth on local: leave as-is. For Cloud, prefer setting
-// NEXT_PUBLIC_INNGEST_DASHBOARD_URL to the env dashboard URL, for example:
-// https://app.inngest.com/env/production. A bare https://app.inngest.com value
-// is normalized to /env/production for the production booth.
+// Default is Inngest Cloud when no env var is set, so a deployment with no
+// configuration deep-links to the real dashboard instead of localhost. Local
+// dev keeps the local dev-server UI: `npm run dev` injects
+// NEXT_PUBLIC_INNGEST_DASHBOARD_URL=http://localhost:8288 when unset. Override
+// either side with an explicit env var, for example
+// https://app.inngest.com/env/production (bare https://app.inngest.com is
+// normalized to /env/production).
 const configuredDashboardBase =
   process.env.NEXT_PUBLIC_INNGEST_DASHBOARD_BASE?.trim() ||
   process.env.NEXT_PUBLIC_INNGEST_DASHBOARD_URL?.trim() ||
-  "http://localhost:8288";
+  "https://app.inngest.com";
 const DASHBOARD_BASE = normalizeDashboardBase(configuredDashboardBase);
 const INSIGHTS_URL = process.env.NEXT_PUBLIC_INNGEST_INSIGHTS_URL?.trim();
 // ⬆⬆⬆ SWAP TO CLOUD URLS HERE ⬆⬆⬆

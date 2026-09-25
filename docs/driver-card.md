@@ -1,99 +1,61 @@
 # Booth Driver Card
 
-Print or keep this visible beside the demo laptop. This is the one-page version
-of `docs/demo-talk-track.md`.
+This is the one-page version of `docs/demo-talk-track.md`. Keep it beside the keyboard.
+
+Event: [EVENT NAME], [DATES], booth [BOOTH #].
 
 ## Before A Shift
 
-- Demo app is on the left.
-- Inngest Runs is on the right, filtered to the demo app/environment.
-- One Inngest run detail or trace tab is ready.
-- Seeded history is visible before the first walkthrough.
-- Fallback recording link is available.
-- Browser notifications are off.
+- The TV shows `/` full screen. You should see the Acme Support inbox and "Pick a ticket from the inbox".
+  - Split screen with the dashboard works too: a portrait window switches to a stacked layout, with the inbox on top and the code drawer below.
+- The "Simulate Order API outage" switch (bottom of the inbox) is **on**.
+- The Inngest dashboard is open in a second window. Runs, Scores and Experiments are bookmarked.
+- `npm run demo:smoke-loop` passed against the booth URL today.
 
-## Opener
+## Keys
 
-Ask:
+| Key | Action |
+| --- | --- |
+| `1` `2` `3` | Open a ticket that goes well (3: refund computed in a sandbox) |
+| `4` | Open the ticket that goes badly (a missed reply; only its score shows it) |
+| `G` / `B` | Vote helpful / not helpful |
+| `S` | Open the split test; press again to start it |
+| `D` | Open the trace (or the experiment) in Inngest |
+| `U` | Toggle Under the hood (code) |
+| `F` | Toggle the outage |
+| `R` | Reset |
+| `Esc` | Close |
+| `?` | Show the keys |
 
-> What are you using today to know if your agents are actually working in
-> production?
+Everything is also clickable with the mouse.
 
-Then route the story:
+## The Path (about 3 minutes)
 
-- Evals-savvy: get to `Save`, `Scores`, and Insights-backed history quickly.
-- Durability-naive: turn on `Opus offline`, show retry recovery, then show the
-  trace.
-- Observability-focused: spend more time in Inngest Runs and step traces.
-- Exec or walk-by: use the 90-second loop and the final payoff line.
+1. **App.** "This is Acme's support desk; the agent is built on Inngest. Pick a ticket."
+   Narrate the rows: the order API 503, "Retrying in 3s", "Cached", recovered, sent.
+2. **Inngest.** Click **View trace in Inngest**.
+   Show the failed attempt, the retry, the memoized steps, and the step I/O and tokens.
+   "One click from the product to the answer."
+3. **App.** The visitor votes 👍 on the good reply.
+4. **App.** Press `3`: the agent computes the $49 refund in a sandbox (the **Sandboxed** row) and replies. Press `4`: the reply misses the point, and the screen doesn't say so.
+   **Inngest:** open Scores. Ticket 4's `support_reply_quality` is low. First-contact resolution is a durable wait for the customer.
+5. **App, then Inngest.** **Split-test a model**, then **Start**, then at 8/8 **Compare in Inngest**. Talk ROI in the experiment view.
+6. **Close.** Point at the QR code, hand over the free-month card, and press `R`.
 
-## 90-Second Loop
+Engineer? Press `U`. The drawer shows the code for whatever is on screen.
 
-1. "Teams are shipping agents. The hard part is knowing whether they are
-   getting better in production."
-2. Click `Ask agent`.
-3. Show generated SQL and rows.
-4. Point to Inngest Runs: "This is a real durable workflow."
-5. Open `Trace` or the Inngest run detail.
-6. Click `Save`.
-7. Show `Scores`.
-8. Close: "Run the agent durably, observe every step, and turn behavior into
-   eval signals."
-9. If they are interested: "Want me to get you on Patrick's calendar while you
-   are here?"
-   Use `https://www.inngest.com/events/ai-engineer-worlds-fair-2026`.
-
-## 2-3 Minute Path
-
-1. Run the canonical ask:
-   "Show me everyone who signed up in the last two weeks but hasn't activated
-   yet."
-2. Show the SQL and result rows.
-3. Show Inngest `write-query`, `generate-sql`, and `run-query`.
-4. Turn on `Opus offline`, run again, and show retry recovery.
-5. Open `Code` and point at `step.run`.
-6. Click `Save`; the app switches to `Scores`.
-7. Show `score-query-signal` and `app/query.scored` in Inngest.
-8. If Cloud Insights is ready, show the historic score query/chart.
-9. If the visitor is qualified or comparing eval stacks, hand off to Patrick
-   instead of extending the walkthrough.
-   Use the event page calendar:
-   `https://www.inngest.com/events/ai-engineer-worlds-fair-2026`.
+Score names: `first_contact_resolution`, `policy_compliance`, `escalated_to_human`, `cost_per_ticket`, `support_reply_quality`, `csat`.
 
 ## Safe Claims
 
-- "The orchestration and Inngest events are real."
-- "The LLM, SaaS data, and score values are synthetic for the booth."
-- "Saved and discarded behavior becomes an online eval signal."
-- "Inngest gives the durable run, trace, retry recovery, and event history."
-- "Patrick can go deeper on how this maps to your agents."
-
-Avoid:
-
-- "The final Scores product is shipped."
-- "This is customer data."
-- "The local seeded trend is production Insights data."
+- Real: the durable steps, retries, traces, scores and traffic split.
+- Props: the tickets, the replies, which tickets go badly, the split-test results and the prices. The winner is scripted.
+- The follow-up window is 15s at the booth. In production it would be days.
+- Don't say "GPT beats Claude" or "this is what it costs".
+- Never call an **Offline replay** run live.
 
 ## Recovery
 
-- Wrong local port: run `npm run demo:doctor`.
-- No Inngest runs: check `/api/demo/status`, event keys, signing key, and
-  Cloud app sync.
-- Seed failed: rerun the tokenized `npm run demo:seed`.
-- Score history is not Insights-backed: this is not the final live path. Use
-  the emergency fallback framing and keep the story on emitted
-  `app/query.scored` events.
-- Wi-Fi or auth is unstable: use the fallback recording.
-
-## Driver Sign-Off
-
-Each approved driver should complete:
-
-- One 90-second loop without notes.
-- One 2-3 minute path while using both panes.
-- One retry recovery run.
-- One Patrick handoff line.
-- One fallback handoff.
-
-Record driver names and dates in `docs/booth-qa-checklist.md` or the relevant
-Linear issue before booth staffing is finalized.
+- **"Offline replay" pill, no trace button.** Keep going, say it's a replay, and check `/api/demo/status` after the visitor leaves.
+- **Odd state.** Press `R` and open a ticket again.
+- **Wi-Fi gone.** Use the fallback recording.

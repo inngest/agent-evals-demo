@@ -17,7 +17,7 @@ when that banner is in use.
 ## Do Not Record Until
 
 - Final demo URL passes `npm run demo:preflight`.
-- Final demo URL passes `npm run demo:smoke`.
+- Final demo URL passes `npm run demo:smoke-loop`.
 - Cloud history is seeded for the real demo app/environment.
 - Inngest dashboard filters are set and ready.
 - The talk track in `docs/demo-talk-track.md` is approved.
@@ -60,7 +60,7 @@ For the silent loop, keep captions short and product-facing:
 Narration:
 
 > This is the loop: run the agent durably, observe every step, and turn real
-> user behavior into eval signals.
+> user behavior into conversion signals.
 
 ## 2-3 Minute Driven Shot List
 

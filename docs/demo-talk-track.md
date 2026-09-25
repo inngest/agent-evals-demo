@@ -1,237 +1,129 @@
-# Demo Talk Track
+# Booth Demo Talk Track
 
-Use this as the driver script for Lauren/Riley/DevRel dry runs and booth
-handoffs. It assumes the app is on the left side of the screen and Inngest is
-on the right.
+The demo is a sandwich:
 
-## Source Signals
+1. Start in **Acme Support**, a helpdesk everyone recognises, so the visitor knows what the agent does.
+2. Click over to the **real Inngest dashboard** as soon as possible. The demo mostly lives there.
+3. Come back to the app only to trigger the next thing: a vote, then a split test.
 
-- `PRD.md`: the story is durable -> observable -> optimize, with a real
-  Inngest workflow and mocked app data. The booth interaction should make a
-  qualified visitor want to book a follow-up demo with Patrick.
-- Notion outline, June 2026: the booth needs one linear story that can run
-  live, loop on TVs, and adapt to the visitor's evals/observability context.
-- Slack, June 5, 2026: Dan's feedback was that the trace and scoring chart
-  should be viewed in the Inngest dashboard as the Inngest product demo side.
-- Slack, June 11, 2026: Jack asked for a team walkthrough so everyone can see
-  which parts of the loop need focus before AI Engineer World's Fair.
-- Slack, June 12, 2026 in `#event-ai-eng-world-fair-sf`: Lauren asked about
-  booth training, Sterling said he would show the demo to the engineering team
-  on Monday, June 15, 2026, and suggested booth training no earlier than mid
-  next week.
-- Slack, June 5 and June 12, 2026 in `#event-ai-eng-world-fair-sf`: the booth
-  is `U-G26`, opens Monday, June 29, 2026 at 4 PM, and the public conference
-  page can be used in pre-event outbound.
-- Slack, May 29, 2026 in `#event-ai-eng-world-fair-sf`: Lauren and Tony aligned
-  on one encompassing Insights-agent demo that covers durability,
-  observability, and optimization in a production-style use case.
-- Slack, May 27-28, 2026 in `#event-ai-eng-world-fair-sf`: evals soft launch
-  is planned for June 29, and booth solution tags are Durability,
-  Observability, and Optimization.
-- Slack, June 4, 2026: Scores dashboard/API work was still being designed, so
-  the live claim should be about emitted score/eval signals and Insights-backed
-  history once the Cloud query is configured.
-- GitHub, June 12, 2026: the public repo has no open PRs or issues; the current
-  demo updates are local working-tree changes until they are published.
+The app is context. Inngest is the product.
 
-## Marketing-Safe Status
+- Driver one-pager: `docs/driver-card.md`.
+- Setup and fallbacks: `docs/booth-runbook.md`.
 
-The demo shell is working locally. The app can run the Insights-style agent,
-send real Inngest events, show durable workflow activity, seed realistic local
-run history, and emit score/eval signals from saved behavior.
+## Before The Visitor Arrives
 
-Do not claim that the final public Scores dashboard/API is complete. The safer
-phrasing is:
+- **App (TV, full screen):** `/`. It shows the inbox and "Pick a ticket from the inbox".
+- **Inngest dashboard (second window or tab):**
+  - Local: `http://localhost:8288`.
+  - Cloud: your env's Runs page.
+- **Bookmark these in the dashboard:**
+  - **Runs**, filtered to `support-agent`.
+  - **Scores / Insights**, for `first_contact_resolution`, `policy_compliance`, `csat` and `cost_per_ticket`.
+  - **Experiments**, for `support-agent-model-split-test` (Cloud only; the local dev server has no experiments page).
+- **Outage switch:** "Simulate Order API outage" at the bottom of the inbox is **on**.
 
-> We are showing how production behavior becomes an eval signal, and how that
-> signal can be inspected historically in Inngest.
+## Opener (10s)
 
-The demo is not conference-safe until the Cloud deploy, Cloud app sync, Cloud
-seed history, real Insights score query, hardware QA, and fallback recording are
-complete.
+> How are you keeping your agents reliable while the models, prompts and APIs under them keep changing?
 
-## Booth Layout
+## 1. The product (30s, in the app)
 
-- Booth location: `U-G26`.
-- First live booth shift: Monday, June 29, 2026 at 4 PM.
-- Left: `agent-evals-booth-demo`.
-- Right: Inngest Runs view filtered to the conference demo app/environment.
-- Keep a run details page or trace ready in a second Inngest tab when doing the
-  2-3 minute live walkthrough.
-- On a 32-inch display, keep both windows full height and roughly 50/50 width.
-- On 16-inch and 14-inch laptops, bias the app slightly wider until the SQL,
-  buttons, tabs, and Scores panel remain readable.
+> This is Acme's support desk. Their AI agent answers tickets, and it's
+> built on Inngest. Pick one.
 
-## Audience Routing
+Start with a ticket under **Goes well**: the visitor picks one, or you press `1` or `2`. Narrate the activity as it appears:
 
-Open with:
+> It reads the ticket, looks up the customer, looks up the order… and the order API just went down. That's a 503.
+> Inngest retries that one step in 3 seconds. The two steps before it are
+> cached, not re-run: no second model call, no repeat spend.
+> Recovered. It drafts the reply, runs it through a policy guardrail, and sends it.
 
-> What are you using today to know if your agents are actually working in
-> production?
+## 2. The trace (60–90s, in Inngest)
 
-Use the answer to decide what to emphasize:
+Click **View trace in Inngest**, or press `D`. It's there from the moment the run starts.
 
-- Evals-savvy: spend less time on SQL and get to `Save`, `Scores`, and
-  Insights-backed score history.
-- Durability-naive: show `Opus offline`, retry recovery, and the Inngest run
-  trace before going deep on scores.
-- Observability-focused: keep Inngest Runs visible and narrate step inputs,
-  outputs, timing, replay, and history.
-- Exec or walk-by: use the 90-second loop and the payoff line.
+> Here's that exact run. Every step in the app is a step here, named the way the code names it.
 
-Payoff line:
+Point at these, in order:
 
-> Durable, observable, optimized - all this close to your code, without
-> deciding upfront everything you need to measure.
+- The failed `lookup-order` attempt with its 503, and the retry that succeeded.
+- The steps that were memoized rather than re-executed.
+- Step inputs and outputs, plus the model call's tokens and duration (OTel `gen_ai` span).
 
-If the visitor shows buying intent, hand off with:
+> Nobody wrote logging for this. When a customer asks "what happened to my
+> ticket?", this is the answer, and it took one click to get here.
 
-> Patrick is talking with teams at the event about exactly this. Want me to get
-> you on his calendar while you are here?
+## 3. Good vs bad interactions, scored in Inngest (60–90s, app, then Inngest)
 
-Use the event page calendar for the handoff:
-`https://www.inngest.com/events/ai-engineer-worlds-fair-2026`.
+The app shows none of the scores; those live in Inngest.
 
-## Preflight
+1. In the app, the visitor clicks 👍 (`G`) on the good reply.
+2. **`3`, Refund a damaged item.** The agent doesn't do the refund maths in its head: it runs a refund script in a sandbox (the **Sandboxed** row; its panel shows the script, the sandbox being created, run and destroyed, and the JSON it printed). The script is canned for the booth; in a real agent the model would write it. Only the $49 jar is owed, the reply is drafted around that, and it passes policy. In the trace, point at the create, `compute-refund` and destroy sandbox steps.
+3. **`4`, Cancel my subscription.** The agent reads it as a billing question and explains the charge instead of cancelling. Nothing on screen says it went badly; the visitor can 👎 (`B`) it.
+4. Switch to the Inngest dashboard and open the **Scores** view. Compare the good runs with ticket 4:
+   - `support_reply_quality`: low on ticket 4.
+   - `csat`: from the vote.
+   - `first_contact_resolution`, `policy_compliance`, `escalated_to_human` and `cost_per_ticket` on every run.
 
-Local rehearsal:
+> Every run is scored in the terms your support lead uses. First-contact
+> resolution is Inngest waiting, durably, to see whether the customer comes
+> back (`support-agent-resolution`: 15s here, days in production). It comes
+> later, so it's a deferred function of the run it judges. The
+> UI looked fine on ticket 4; the score is how you find out it wasn't.
 
-```bash
-npm run demo:doctor
-npm run lint
-npm run build
-DEMO_BASE_URL=http://localhost:3001 npm run demo:preflight
-DEMO_BASE_URL=http://localhost:3001 npm run demo:smoke
-DEMO_BASE_URL=http://localhost:3001 DEMO_SMOKE_SEED=1 npm run demo:smoke
-DEMO_BASE_URL=http://localhost:3001 npm run demo:viewport
-```
+For a business audience:
 
-Cloud rehearsal:
+> This ties adoption and satisfaction to specific agent behaviour, not just to token spend.
 
-```bash
-DEMO_BASE_URL=https://<vercel-domain> npm run demo:preflight
-DEMO_BASE_URL=https://<vercel-domain> npm run demo:smoke
-DEMO_BASE_URL=https://<vercel-domain> DEMO_SEED_TOKEN=<token> npm run demo:seed
-```
+## 4. Split test a model (45s, app, then Inngest)
 
-The Cloud preflight is not green for the booth until:
+Click **Split-test a model** (`S`), then **Start split test** (`S` again).
 
-- `canSendCloudEvents=true`
-- `canServeCloudInngest=true`
-- `seedEndpointProtected=true`
-- `demoOpsTokenConfigured=true`
-- score history source is `inngest-insights`
+> Would a different model do better? Eight live tickets, including the
+> ones that go badly today, are routed 50/50 and scored on the same
+> business metrics.
 
-## 90-Second Loop
+When it reaches 8 of 8, click **Compare in Inngest** (Cloud) and walk through the experiment view:
 
-Use this when someone is walking by or the booth is loud.
+- the variants side by side;
+- first-contact resolution, policy compliance and cost per ticket;
+- which to promote.
 
-1. Open with the problem: "Teams are shipping agents, but the hard part is
-   knowing whether they are actually getting better in production."
-2. Click `Ask agent`. The app generates SQL and returns mock SaaS user rows.
-3. Point right to Inngest: "This is a real Inngest function, so every step is
-   durable and inspectable."
-4. Open or point at the Inngest run/trace. Show `generate-sql` and `run-query`.
-5. Click `Save`. Open `Scores`.
-6. Close with: "Saving the useful answer becomes an online eval signal. Inngest
-   gives us the durable execution, the trace, and the history we need to
-   improve it."
-7. If the visitor is in a hurry, end with the payoff line from Audience
-   Routing.
+This is where the ROI conversation happens, in the product.
 
-## 2-3 Minute Live Walkthrough
+> A variant is just a function: a model, a prompt, a retriever, a vendor.
 
-1. Start with the ask:
-   "Show me everyone who signed up in the last two weeks but hasn't activated
-   yet."
-2. Click `Ask agent`.
-   - App claim: an agent generated and ran the SQL.
-   - Inngest claim: the work is represented as a durable run, not just a
-     foreground request.
-3. Click `Run query` if rows are not already visible.
-   - App claim: the business task is simple and legible.
-   - Keep the data world generic SaaS: `users` plus `events`.
-4. Open `Trace`, then open Inngest on the right.
-   - Show `write-query`.
-   - Show steps for `generate-sql` and `run-query`.
-   - If retry mode is on, show the failed step and recovery.
-5. Open `Demo Controls`, turn on `Opus offline`, keep `Retry failures` at `1`,
-   then click `Run again`.
-   - Talk track: "The model/API can fail. The user does not have to rebuild the
-     orchestration around that failure."
-   - Show Inngest retrying and recovering on the right.
-6. Open `Code`.
-   - Point at `step.run`.
-   - Keep this brief: "The code is thin because Inngest owns the durable step
-     boundary."
-7. Click `Save`, then open `Scores`.
-   - App claim: saved/discarded behavior is treated as a product signal.
-   - The demo app switches to Scores after Save so the score/eval beat is
-     visible immediately.
-   - Inngest claim: the durable `score-query-signal` function emits the
-     downstream `app/query.scored` event.
-8. Move back to the Inngest side.
-   - Show seeded historical runs.
-   - Show score-signal activity.
-   - If Cloud Insights is configured, show the historic score query/chart.
-9. Close with the buyer bridge:
-   "This is the loop we want teams to leave with: run the agent durably, observe
-   every step, and turn real user behavior into eval signals."
-10. If the visitor is qualified or wants to compare against their current eval
-    stack, offer the Patrick follow-up handoff instead of extending the demo.
+## 5. Close (15s)
 
-## What To Show In Inngest
+Point at the QR code in the inbox ("Try Inngest free"). Hand over the free-month card.
 
-- Runs list with seeded history.
-- `write-query` runs from `app/query.requested`.
-- `score-query-signal` runs from `app/query.saved`.
-- Step trace with inputs, outputs, timing, and retry recovery.
-- `app/query.scored` events or Insights rows when Cloud query is configured.
+> Focus on your agent. Inngest makes it durable, shows you every step, and tells you whether it's any good.
 
-## Driver Training
+Press `R` before the next visitor.
 
-- Approve 2-3 primary drivers before booth staffing is finalized.
-- Each driver should complete the 90-second loop, the 2-3 minute walkthrough,
-  the `Opus offline` retry path, the Patrick follow-up handoff, and the
-  fallback handoff.
-- Use `docs/driver-card.md` as the printed or pinned booth reference.
-- Record driver sign-off in `docs/booth-qa-checklist.md` or Linear.
+## For Engineers
 
-## Claims To Avoid
+Press `U` at any point. The code drawer follows what's on screen:
 
-- Do not say the final Scores dashboard/API is fully shipped unless product has
-  confirmed that status.
-- Do not imply the demo is using a real LLM or real customer data.
-- Do not call the seeded local chart production Insights data.
-- Do not rely on the local dev server for the live conference path unless Cloud
-  is unavailable and the fallback path is explicitly chosen.
+- `step.run` for the agent's steps;
+- `step.score` plus `step.waitForEvent` once a run completes;
+- `group.experiment` while the split test is open.
 
-## Dry-Run Acceptance
+Walk the code, then show the same names in the trace.
 
-The stakeholder dry run is ready when:
+## Adapting
 
-- Engineering walkthrough feedback from Monday, June 15, 2026 has been
-  incorporated or explicitly deferred.
-- Booth training is scheduled no earlier than mid-week once Cloud readiness is
-  green; fallback approval is tracked separately for recording only.
-- Lauren/Riley/DevRel agree on the 90-second and 2-3 minute script.
-- Drivers know when to offer the Patrick follow-up handoff and when to keep the
-  interaction short.
-- The app and Inngest can be shown side by side on 32-inch, 16-inch, and
-  14-inch layouts without awkward clipping.
-- `npm run demo:preflight` and `npm run demo:smoke` pass against the final demo
-  URL.
-- Cloud Runs shows seeded history for the actual demo app.
-- Scores history is confirmed as `inngest-insights` for the final live booth
-  path.
-- A 90-second loop and 2-3 minute contingency recording exist.
+- **"Only care about evals":** run one good and one bad ticket, vote, split-test, and spend the time in the Scores and Experiments pages.
+- **"Only care about reliability":** run two tickets, one with the outage off (the switch, or `F`), and compare the traces.
+- **Three minutes, tops:** steps 1 and 2 are the demo. Everything else is optional.
 
-## If Something Breaks
+## Safe Claims
 
-- If Inngest has no runs, use `/api/demo/status` and check Cloud event/signing
-  keys.
-- If seeding fails, rerun the tokenized `npm run demo:seed` command.
-- If score history is not Insights-backed, this is not the final live booth
-  path. Keep any emergency walkthrough on emitted score events and seeded trend,
-  then switch to the contingency framing.
-- If network or Cloud auth is flaky, switch to the contingency recording.
+- The durable steps, retries, traces, scores and traffic splitting are real Inngest primitives on a real run.
+- The tickets, customer data, model outputs, quality scores and prices are booth props. The split test's winner is scripted by role.
+- **Offline replay** in the thread header means Inngest wasn't reachable. Say so; there's no trace link on a replay.
+
+## Questions To Note
+
+Jot recurring questions in the booth-notes Slack thread after each good conversation. They shape the follow-up.

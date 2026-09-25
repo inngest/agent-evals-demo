@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: agent-evals-demo
+    runtime: node
+    plan: starter
+    region: oregon
+    autoDeploy: true
+    buildCommand: npm ci && npm run build && cp -r .next/static .next/standalone/.next/static
+    startCommand: node .next/standalone/server.js
+    # Zero-I/O liveness probe. Must NOT be /api/demo/status: that endpoint
+    # calls the Inngest API, so a slow uplink would restart the instance and
+    # wipe the in-memory step timelines the demo is showing.
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DEMO_TARGET
+        value: cloud
+      - key: INNGEST_API_BASE_URL
+        value: https://api.inngest.com
+      - key: NEXT_PUBLIC_INNGEST_DASHBOARD_URL
+        value: https://app.inngest.com/env/ai-conf-2026-demo-f615cff3
+      - key: INNGEST_EVENT_KEY
+        sync: false
+      - key: INNGEST_SIGNING_KEY
+        sync: false
+      - key: INNGEST_ENCRYPTION_KEY
+        sync: false
+      - key: INNGEST_ENV
+        sync: false
+      - key: INNGEST_API_KEY
+        sync: false
+      - key: INNGEST_INSIGHTS_SCORE_QUERY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        sync: false
+      # Sandboxes (beta) are off unless explicitly enabled. Only set this to
+      # "1" for an environment confirmed to have the beta entitlement.
+      - key: NEXT_PUBLIC_DEMO_SANDBOX
+        value: "0"
+      - key: NEXT_PUBLIC_INNGEST_RUNS_URL
+        sync: false
+      - key: NEXT_PUBLIC_INNGEST_INSIGHTS_URL
+        sync: false

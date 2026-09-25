@@ -1,18 +1,59 @@
-# Agent Evals Booth Demo
+# Inngest Booth Demo — Unbreakable agents, invisible infra.
 
-This demo follows `PRD.md`: a Next.js App Router app with a real Inngest v4 workflow and mocked LLM, query, and scoring surfaces.
+This repo holds the booth demo for [EVENT NAME] ([DATES], booth [BOOTH #]).
 
-For dry-run and booth ops, use `docs/booth-runbook.md`. For the Lauren/Riley
-stakeholder walkthrough and booth driver script, use `docs/demo-talk-track.md`.
-For the experimental split-screen booth-control pivot, use
-`docs/split-screen-control-panel-prd.md`.
-For the printable booth driver card, use `docs/driver-card.md`.
-For display sign-off and fallback capture, use
-`docs/booth-qa-checklist.md` and `docs/contingency-recording.md`. For the
-strict requirement-by-requirement status, use `docs/demo-readiness-audit.md`.
-For the production Cloud handoff, use `docs/cloud-auth-request.md` and
-`docs/cloud-handoff.md`. For the publish/review handoff, use
-`docs/review-handoff.md`.
+`/` is **Acme Support**, a helpdesk whose AI **customer-support agent** is an
+Inngest function. Open a ticket and the agent's six durable steps appear in the
+thread as it works, including an order-API outage it survives (**durable
+execution**). Every run links straight to its real trace in the Inngest
+dashboard (**observability**). Three tickets go well, one of them a refund
+the agent computes in a sandbox (**Sandboxes**), and one goes badly: the reply
+misses the point, which only its reply-quality score shows. Each run is
+scored on business metrics (first-contact resolution, policy compliance,
+cost, reply quality, CSAT from the 👍/👎),
+and "Split-test a model" routes tickets across two models as an Inngest
+experiment (**A/B testing**).
+
+The app sets the context; the demo itself lives in the Inngest dashboard. See
+`docs/demo-talk-track.md`. "Under the hood" (`U`) opens the code for engineers.
+
+The console renders on a fixed 1920×1080 stage that scales to the display, so
+the layout is identical on a TV, laptop, or projector.
+
+**What's real:**
+
+- the Inngest function (`support-agent`) and its six durable steps;
+- the 503 retry and memoized replay;
+- the captured step timeline;
+- `group.experiment` traffic splitting;
+- in cloud mode, `step.score` and run metadata.
+
+**What's canned:** the tickets, the customer and order data, the reply
+(unless OpenRouter is configured), the per-model quality scores, the
+model pricing, and the refund script on ticket 3 (a real agent would write
+it; in cloud mode it really runs in an Inngest sandbox, locally the run is
+simulated and labelled so).
+
+**When a live run can't make the booth budget**, the UI switches to a
+labelled replay and shows a "Replay" chip; it never passes a replay off as
+live. See `docs/booth-runbook.md` for the timing budget.
+
+- Driver script: `docs/demo-talk-track.md`.
+- Printable card: `docs/driver-card.md`.
+- Booth ops: `docs/booth-runbook.md`.
+
+## Sandboxes (beta)
+
+The refund ticket (`3`) works out the refund by running a generated script
+in a sandbox (`src/lib/sandbox.ts`) instead of trusting the model's
+arithmetic: only the cracked $49 jar is owed, and the reply is drafted
+around that amount. The thread shows it as its own "Compute refund" row with a
+**Sandboxed** pill. In cloud mode these are real `step.sandbox` steps
+(create, `compute-refund`, destroy); they need the beta, which is gated per
+environment, so cloud runs them only with `NEXT_PUBLIC_DEMO_SANDBOX=1` and
+`/api/demo/status` reports whether this environment has it. Locally a
+simulated `compute-refund` step always runs, and its row says "simulated
+locally". A failed run destroys its sandbox in the agent's `onFailure`.
 
 ## Design System Source
 
@@ -27,7 +68,17 @@ The app-specific layout mirrors the simplified Insights surface described in the
 
 ## Local Development
 
-Run the Next app and the local Inngest dev server in separate terminals:
+The one-command booth path kills any stale demo processes, starts both
+servers, waits for health, and prints the split-screen URLs:
+
+```bash
+npm run demo:booth
+```
+
+On macOS it also opens both panes in your browser (`--no-open` to skip).
+`Ctrl+C` stops both servers.
+
+To run the pieces manually in separate terminals instead:
 
 ```bash
 npm run dev
@@ -44,21 +95,9 @@ at that app URL:
 APP_URL=http://localhost:3001 npm run inngest:dev
 ```
 
-If you are unsure which port is the current demo app, run:
-
-```bash
-npm run demo:doctor
-```
-
-It scans the common local ports, reports the detected app URL, confirms the
-local Inngest dev server, and shows the exact preflight/local-ready commands to
-run next. It also prints the missing Cloud handoff exports so the production
-setup can resume without hunting through the docs.
-
-For the booth split-screen, keep the demo app on one side and open the Inngest
-dev server at `http://localhost:8288` on the other. The app's **Seed 14 runs**
-button sends real `write-query` and score-signal events so the Runs list has
-history to show.
+Open `http://localhost:3000` full screen. Picking a ticket sends a real
+`support/ticket.received` event; press `D` during the demo to open that run in
+the Inngest dev server (`http://localhost:8288`).
 
 ## Cloud mode (`DEMO_TARGET`)
 
@@ -68,22 +107,32 @@ in exactly one place, `src/lib/demo-target.ts`, which exports `DEMO_TARGET` and
 
 | `DEMO_TARGET` | Behavior |
 |---------------|----------|
-| `local` (default, or unset) | Faked/seeded path. Scores, sessions, and experiments come from `src/content/seed-data.ts` and the local history store. Offline-safe, deterministic, dev-server only. Behaviorally identical to the booth build. No real eval primitive fires. |
-| `cloud` | Emits the **real** Inngest eval primitives so scores and experiments land in the Inngest Cloud dashboard. Registers against Cloud (`isDev=false`, keys from env). |
+| `local` (default, or unset) | Dev-server path. The agent, retries, timeline and `group.experiment` are real; `step.score` and `step.metadata` are replaced by same-named `step.run` steps so the timeline looks identical. |
+| `cloud` | Emits the **real** Inngest scoring primitives so scores and experiments land in the Inngest Cloud dashboard. Registers against Cloud (`isDev=false`, keys from env). |
 
-In `cloud` mode the app emits real primitives at three call sites:
+In `cloud` mode the app emits real primitives at these call sites:
 
-- **Run-level score (Act 1 → 2):** `src/inngest/functions/triage-agent.ts` writes the
-  localization score with a durable, run-level `step.score(...)` (no `stepId`, so it
-  attaches to the run). This requires `scoreMiddleware()` on the client, which is
-  registered unconditionally in `src/inngest/client.ts`.
-- **Deferred outcome scorer (Act 2 hero):** `src/inngest/scorers/localization-scorer.ts`
-  defines a `createScorer(...)` deferred function. `src/inngest/functions/score-incident.ts`
-  triggers it with `defer(id, { function, data })` when an RCA is saved. The scorer
-  returns `{ name, value, runId }` and the SDK writes it via `client.score(...)`.
-- **Experiment (Act 3):** `src/inngest/functions/experiment-bakeoff.ts` runs a real
-  `group.experiment(...)` (GPT-5.5 vs claude-opus-4.8) and calls `inngest.score(...)`
-  inside each variant so the score auto-associates with the experiment + variant.
+- **Business scores:** `src/inngest/functions/support-score-run.ts` attaches
+  `policy_compliance`, `cost_per_ticket`, `support_reply_quality` and
+  `escalated_to_human` to the agent
+  run with `step.score(...)`. CSAT comes from the vote: `support-agent-csat`
+  (same file) is triggered by `support/feedback.recorded` and attaches `csat`
+  to the run in `data.parentRunId`. It is event-triggered, not deferred,
+  because a deferred run starts only after its parent finishes, so it would
+  miss a vote cast the instant the reply appears. First-contact resolution
+  is a deferred function of the agent run (`createDefer`,
+  `src/inngest/functions/support-deferred.ts`): `support-agent-resolution`
+  waits (15s at the booth) for a customer follow-up and scores its parent
+  run (`parents[0].runId`). Deferred functions run on the local dev server
+  too.
+  Names live in `src/lib/score-names.ts`. This
+  requires `scoreMiddleware()` on the client, which is registered
+  unconditionally in `src/inngest/client.ts`.
+- **Run metadata:** `src/inngest/functions/support-agent.ts` writes
+  `step.metadata(...)` for Insights to group by.
+- **Split test:** `src/inngest/functions/support-experiment.ts` runs a
+  `group.experiment(...)` (claude-opus-4.8 vs gpt-5.5, 50/50) and scores each
+  variant with `inngest.score.experiment(...)`. This runs in both modes.
 
 The faked branch is always the fallback. Every real-primitive call site is wrapped
 `if (isCloud) { ...real... } else { ...existing faked... }`, and the faked branch is
@@ -93,43 +142,28 @@ unchanged from the local build.
 sets `isDev=false`. The client derives `isDev` from `isCloud` (`isDev: !isCloud`), so
 **do not also set `INNGEST_DEV` in cloud mode** — let the flag drive it.
 
-### Sessions are deferred (BLOCKED)
-
-The **sessions** view stays faked in **both** modes this pass. The sessions primitive is
-not in the pinned SDK tag (`inngest@pr-1521`, which resolves to `4.4.1-pr-1521.15`); it
-ships in a different base (`pr-1547` / `4.6.1`). `seededSessions` in
-`src/content/seed-data.ts` and the session deep-link in `src/lib/inngest-dashboard.ts`
-keep reading seed data in both modes. There is no `if (isCloud)` branch for sessions.
-
-> BLOCKED: needs the unified scoring + sessions SDK tag (pr-1547 / base 4.6.1).
-> Owner: Jakob. Do not wire a real sessions primitive against pr-1521 — it does not
-> exist there. Revisit when the unified tag lands.
-
 ### SDK pin for cloud mode
 
-Real primitives require `inngest@pr-1521` (`npm i inngest@pr-1521`, resolves to
-`4.4.1-pr-1521.15`). The default `^4.5.0` pin has none of these primitives. Installing
-the pin is a separate step (it is not run as part of this docs pass).
+Real primitives (scores, experiments, sandboxes) require `inngest >= 4.20.0`
+(pinned in `package.json`). The old `inngest@pr-1521` pin is obsolete;
+4.20.0 ships the scoring primitives plus the sandbox middleware.
 
 ### Running cloud mode
 
 1. Set `DEMO_TARGET=cloud`, `INNGEST_EVENT_KEY`, and `INNGEST_SIGNING_KEY`. Leave
    `INNGEST_DEV` unset/false.
-2. Deploy to Vercel (see "Production Inngest" below) and sync the `/api/inngest`
+2. Deploy to Render (see "Production Inngest" below) and sync the `/api/inngest`
    serve endpoint with Inngest Cloud.
-3. Seed the Cloud corpus of real runs, scores, and experiments:
+3. Prove the deployed demo end to end (a real run, the vote metric, and the
+   split test):
 
    ```bash
-   DEMO_TARGET=cloud npm run demo:seed-cloud
+   DEMO_BASE_URL=https://<render-domain> npm run demo:smoke-loop
    ```
 
-   The seeder is idempotent (deterministic event ids dedupe re-runs) and refuses to run
-   unless `DEMO_TARGET=cloud` and the keys are present. Use `--dry-run` (or `DRY_RUN=1`)
-   to print the planned events without sending anything.
-
-After seeding, the Cloud dashboard shows: a triage run with a run-level localization
-score, a deferred outcome score on the run when an RCA is saved, and a real
-`group.experiment` with per-variant scores. Sessions remain faked.
+The Cloud dashboard then shows `support-agent` runs with attached
+business scores, and the `support-agent-model-split-test` experiment scored on
+`first_contact_resolution`, `policy_compliance` and `cost_per_ticket`.
 
 ## Production Inngest
 
@@ -137,6 +171,11 @@ The app is wired for Inngest Cloud the same way the swag-store apps are:
 
 - `INNGEST_EVENT_KEY` sends events from API routes.
 - `INNGEST_SIGNING_KEY` authenticates the `/api/inngest` serve endpoint.
+- `OPENROUTER_API_KEY` is optional. When set, the support agent's
+  `call-llm-draft-reply` step calls [OpenRouter](https://openrouter.ai) for
+  real (real text, real token counts); unset, it stays mocked. `OPENROUTER_MODEL` overrides the default
+  (`openai/gpt-5.5`), and `OPENROUTER_BASE_URL` retargets the API. The 503
+  failure-injection beat and memoized replays behave identically either way.
 - `INNGEST_ENCRYPTION_KEY` is optional. When present, the app enables
   `@inngest/middleware-encryption` for encrypted Inngest payload storage.
 - `INNGEST_ENV` is optional for targeting a non-default Cloud environment.
@@ -147,85 +186,103 @@ The app is wired for Inngest Cloud the same way the swag-store apps are:
 - `NEXT_PUBLIC_INNGEST_INSIGHTS_URL` optionally points every "Open Insights"
   button at a saved Cloud Insights query. If omitted, the app opens the generic
   Insights route for the configured dashboard environment.
-- `INNGEST_API_KEY` + `INNGEST_INSIGHTS_SCORE_QUERY` are optional. When both
-  are present, `/api/score` reads the Scores panel from Inngest Insights.
-  Without them, the panel uses deterministic seeded demo signals. See
-  `docs/insights-score-query.md` for the event contract and Cloud query setup.
-- `DEMO_SEED_TOKEN` protects `/api/demo/seed` and `/api/demo/reset` in
-  production. Local dev can use the in-app controls without a token; deployed
-  seeding should use the runbook command. The token is ignored outside
-  production so copied Cloud env vars do not break local rehearsals.
 
-For Vercel production, set these environment variables on the project and leave
-`INNGEST_DEV` unset. To emit the real eval primitives, also set `DEMO_TARGET=cloud`
-(omit it or set `local` to keep the faked path):
+## Deploy to Render
+
+The repo ships a Render blueprint (`render.yaml` at the repo root) that
+creates the Web Service with everything below preconfigured: Node runtime,
+`npm ci && npm run build` build, `npm run start` start command, and
+`/api/health` as the health check. The production env vars are split
+between blueprint defaults (`DEMO_TARGET=cloud`, the Inngest API base, the
+dashboard URL) and prompted secrets.
+
+### Create the service (blueprint)
+
+1. Push this repo to GitHub.
+2. In the Render dashboard: **New → Blueprint**, select the repo. Render
+   reads `render.yaml` and prompts for the secret values:
+   - `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY` (required, from your Inngest
+     Cloud environment's "Keys" page)
+   - The rest are optional (`INNGEST_ENCRYPTION_KEY`, `INNGEST_ENV`,
+     `INNGEST_API_KEY`,
+     `NEXT_PUBLIC_INNGEST_RUNS_URL`, `NEXT_PUBLIC_INNGEST_INSIGHTS_URL`) —
+     leave blank to skip.
+3. Apply. First build takes a few minutes; the service goes live once
+   `/api/health` passes the health check.
+
+### Create the service (manual, without the blueprint)
+
+**New → Web Service**, connect the repo, then:
+
+- Runtime: Node
+- Build command: `npm ci && npm run build`
+- Start command: `npm run start`
+- Health check path: `/api/health` (a static, zero-I/O liveness route). Do
+  **not** point it at `/api/demo/status`: that endpoint calls the Inngest API,
+  so a slow uplink would fail the check, restart the instance, and wipe the
+  in-memory step timelines mid-demo.
+- Instance type: Starter or higher. Avoid the free tier — it spins down
+  between requests, and a cold start mid-booth ruins the timing.
+- Environment: set the env vars from the blueprint or the list above
+  (`NODE_VERSION=22`, `DEMO_TARGET=cloud`, and the keys).
+
+### Register the app with Inngest Cloud
+
+After the first deploy, add the serve endpoint in the Inngest dashboard
+(**Apps → Add App** or the environment's Apps page) with your Render URL:
 
 ```txt
-DEMO_TARGET=cloud
-INNGEST_EVENT_KEY=
-INNGEST_SIGNING_KEY=
-INNGEST_ENCRYPTION_KEY=
-INNGEST_ENV=
-INNGEST_API_KEY=
-INNGEST_API_BASE_URL=https://api.inngest.com
-INNGEST_INSIGHTS_SCORE_QUERY=
-DEMO_SEED_TOKEN=
-NEXT_PUBLIC_INNGEST_DASHBOARD_URL=https://app.inngest.com/env/production
-NEXT_PUBLIC_INNGEST_RUNS_URL=
-NEXT_PUBLIC_INNGEST_INSIGHTS_URL=
+https://<render-domain>/api/inngest
 ```
 
-The original POC URL, `https://agent-evals-demo.vercel.app`, is live but is not
-the current demo build until it is redeployed from this worktree. As of June 12,
-2026, `demo:preflight` fails against that URL because the new status/seed APIs
-are absent and the Inngest serve endpoint is missing production env.
+Inngest syncs the functions, and the `/api/inngest` handler authenticates
+with `INNGEST_SIGNING_KEY`. Leave `INNGEST_DEV` unset in Render —
+`DEMO_TARGET=cloud` drives `isDev` (see "Cloud mode" above).
 
-After deploy, sync/register the Inngest app in Cloud with:
+### Post-deploy checks
 
-```txt
-https://<vercel-domain>/api/inngest
-```
-
-Preflight the deployed app with:
+Preflight the deployed app:
 
 ```bash
-DEMO_BASE_URL=https://<vercel-domain> npm run demo:preflight
+DEMO_BASE_URL=https://<render-domain> npm run demo:preflight
 ```
 
-Smoke-test the foreground golden path with:
+Smoke-test the foreground golden path:
 
 ```bash
-DEMO_BASE_URL=https://<vercel-domain> npm run demo:smoke
-```
-
-Check booth split-screen pane sizes with:
-
-```bash
-DEMO_BASE_URL=https://<vercel-domain> npm run demo:viewport
+DEMO_BASE_URL=https://<render-domain> npm run demo:smoke-loop
 ```
 
 For non-secret deployment diagnostics, inspect:
 
 ```txt
-https://<vercel-domain>/api/demo/status
+https://<render-domain>/api/demo/status
 ```
 
-To see the current production handoff blockers and the exact Vercel env
-commands to run next, use:
+To see the current production handoff blockers, use:
 
 ```bash
-npm run demo:cloud-handoff
+npm run demo:cloud-ready
 ```
 
-Seed the deployed app with:
-
-```bash
-DEMO_BASE_URL=https://<vercel-domain> DEMO_SEED_TOKEN=<token> npm run demo:seed
-```
-
-To smoke-test Cloud auth from localhost, export the same Cloud keys locally and
-run:
+To smoke-test Cloud auth from localhost, export the same Cloud keys locally
+and run:
 
 ```bash
 npm run dev:cloud
 ```
+
+### Split-test models
+
+`NEXT_PUBLIC_DEMO_MODEL_CURRENT` (default `claude-opus-4.8`) and
+`NEXT_PUBLIC_DEMO_MODEL_CHALLENGER` (default `gpt-5.5`) name the two models the
+split test compares. The current model also labels the main run. The names are
+labels only: the split test's quality and cost are scripted by role
+(`src/lib/demo-models.ts`, `src/lib/experiment-results.ts`), so the challenger
+always wins. They are read at build time.
+
+### Booth QR code
+
+`NEXT_PUBLIC_BOOTH_CTA_URL` sets where the inbox's QR code points
+(default `https://www.inngest.com/docs`). It is read at build time, so
+redeploy after changing it.

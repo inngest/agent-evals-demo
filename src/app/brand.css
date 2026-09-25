@@ -260,3 +260,677 @@ button.demo-action-button:hover .demo-action-icon {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--rule-soft); }
 ::-webkit-scrollbar-thumb:hover { background: var(--ink); }
+
+/* ─── Acme Support console ─────────────────────────────────────────────────
+   The booth app, styled as Acme's own helpdesk rather than as Inngest, so
+   the hand-off to the real Inngest dashboard reads as leaving the product.
+   Sized for a 1920×1080 canvas scaled to the display (SupportConsole).
+   Lives here, not in globals.css, for the reason in this file's header;
+   button rules restate border, background and padding because the reset
+   above beats Tailwind's layered utilities. */
+
+.acme-console {
+  --acme-bg: #f3f4f7;
+  --acme-panel: #ffffff;
+  --acme-sidebar: #f8f9fb;
+  --acme-line: #e2e5eb;
+  --acme-text: #151a24;
+  --acme-muted: #5f6b7d;
+  --acme-accent: #4f46e5;
+  --acme-accent-soft: #eef0ff;
+  --acme-ok: #0f8a5f;
+  --acme-ok-soft: #e5f6ee;
+  --acme-bad: #d93a3f;
+  --acme-bad-soft: #fdecec;
+  --acme-warn: #9a5b00;
+  --acme-warn-soft: #fff4de;
+  background: var(--acme-bg);
+  color: var(--acme-text);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.acme-topbar {
+  height: 84px;
+  border-bottom: 1px solid var(--acme-line);
+  background: var(--acme-panel);
+}
+
+.acme-logo {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--acme-accent);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.acme-avatar {
+  border-radius: 999px;
+  background: var(--acme-accent-soft);
+  color: var(--acme-accent);
+}
+
+button.acme-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 22px;
+  border: 1px solid var(--acme-accent);
+  border-radius: 10px;
+  background: var(--acme-accent);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 600;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+button.acme-button[data-tone="quiet"] {
+  border-color: var(--acme-line);
+  background: var(--acme-panel);
+  color: var(--acme-text);
+}
+
+button.acme-button[data-tone="quiet"]:hover,
+button.acme-button[data-tone="quiet"][data-active="true"] {
+  border-color: var(--acme-accent);
+  color: var(--acme-accent);
+}
+
+button.acme-icon-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--acme-muted);
+  padding: 0;
+}
+
+button.acme-icon-button:hover {
+  background: var(--acme-bg);
+}
+
+/* Inbox */
+
+button.acme-ticket {
+  padding: 18px 18px 16px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+button.acme-ticket:hover {
+  background: var(--acme-panel);
+  border-color: var(--acme-line);
+}
+
+button.acme-ticket[data-active="true"] {
+  background: var(--acme-panel);
+  border-color: var(--acme-accent);
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.12);
+}
+
+.acme-tag {
+  display: inline-flex;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--acme-bg);
+  color: var(--acme-muted);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.acme-status {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--acme-muted);
+}
+
+.acme-status[data-status="working"] {
+  color: var(--acme-accent);
+}
+
+.acme-status[data-status="resolved"] {
+  color: var(--acme-ok);
+}
+
+.acme-status[data-status="escalated"] {
+  color: var(--acme-warn);
+}
+
+button.acme-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 56px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: #c9ced8;
+  padding: 0;
+  transition: background 160ms ease;
+}
+
+button.acme-switch span {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #fff;
+  transition: transform 160ms ease;
+}
+
+button.acme-switch[data-on="true"] {
+  background: var(--acme-bad);
+}
+
+button.acme-switch[data-on="true"] span {
+  transform: translateX(24px);
+}
+
+.acme-qr {
+  border: 1px solid var(--acme-line);
+  border-radius: 8px;
+}
+
+.acme-qr svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Thread */
+
+/* Bubbles wrap long words rather than push past their column. */
+.acme-message,
+.acme-reply {
+  overflow-wrap: anywhere;
+}
+
+.acme-message {
+  padding: 16px 22px;
+  border-radius: 4px 18px 18px 18px;
+  background: var(--acme-bg);
+  animation: slide-up 280ms ease both;
+}
+
+.acme-activity {
+  border: 1px solid var(--acme-line);
+  border-radius: 16px;
+  background: var(--acme-sidebar);
+  padding-bottom: 8px;
+}
+
+.acme-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px;
+  margin: 0 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: var(--acme-muted);
+  animation: slide-up 240ms ease both;
+  transition: background 200ms ease, color 200ms ease;
+}
+
+.acme-row > svg {
+  margin-top: 1px;
+}
+
+.acme-row[data-state="running"] {
+  color: var(--acme-accent);
+}
+
+.acme-row[data-state="done"] {
+  color: var(--acme-ok);
+}
+
+.acme-row[data-state="done"] > div:nth-child(2) {
+  color: var(--acme-text);
+}
+
+.acme-row[data-state="retrying"],
+.acme-row[data-state="errored"] {
+  background: var(--acme-bad-soft);
+  color: var(--acme-bad);
+  animation: acme-shake 420ms ease both;
+}
+
+.acme-row[data-state="retrying"] [data-role="detail"],
+.acme-row[data-state="errored"] [data-role="detail"] {
+  color: var(--acme-bad);
+  font-weight: 600;
+}
+
+/* The sandboxed refund's panel: script | lifecycle and output. */
+.acme-sandbox-toggle {
+  display: grid;
+  place-items: center;
+  margin: -4px -6px -4px 0;
+  padding: 4px;
+  border-radius: 8px;
+  color: var(--acme-muted);
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.acme-sandbox-toggle:hover {
+  background: var(--acme-accent-soft);
+  color: var(--acme-accent);
+}
+
+.acme-sandbox {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 20px;
+  margin: 2px 8px 10px 66px;
+  padding: 16px;
+  border: 1px solid var(--acme-accent-soft);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--acme-accent-soft) 45%, var(--acme-panel));
+  animation: slide-up 240ms ease both;
+}
+
+.acme-sandbox-caption {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--acme-muted);
+}
+
+.acme-sandbox-code {
+  max-height: 300px;
+  overflow: auto;
+  border-radius: 8px;
+}
+
+.acme-sandbox-code pre {
+  padding: 16px 20px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.acme-sandbox-stage {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 19px;
+  color: var(--acme-muted);
+}
+
+.acme-sandbox-stage > svg {
+  width: 22px;
+  height: 22px;
+}
+
+.acme-sandbox-stage[data-state="running"] { color: var(--acme-accent); }
+.acme-sandbox-stage[data-state="done"] > svg { color: var(--acme-ok); }
+.acme-sandbox-stage[data-state="done"] > span:first-of-type { color: var(--acme-text); }
+.acme-sandbox-stage[data-state="retrying"],
+.acme-sandbox-stage[data-state="errored"] { color: var(--acme-bad); }
+
+.acme-sandbox-output {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 12px 16px;
+  border: 1px solid var(--acme-line);
+  border-radius: 8px;
+  background: var(--acme-panel);
+  color: var(--acme-text);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 16px;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.acme-sandbox-note {
+  font-size: 18px;
+  line-height: 1.4;
+  color: var(--acme-muted);
+}
+
+[data-layout="tall"] .acme-sandbox {
+  grid-template-columns: minmax(0, 1fr);
+  margin-left: 8px;
+}
+
+.acme-source {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--acme-muted);
+}
+
+.acme-recovered {
+  margin-top: 4px;
+  color: var(--acme-bad);
+}
+
+.acme-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.acme-pill[data-tone="ok"] { background: var(--acme-ok-soft); color: var(--acme-ok); }
+.acme-pill[data-tone="bad"] { background: var(--acme-bad); color: #fff; }
+.acme-pill[data-tone="warn"] { background: var(--acme-warn-soft); color: var(--acme-warn); }
+.acme-pill[data-tone="accent"] { background: var(--acme-accent-soft); color: var(--acme-accent); }
+
+.acme-reply {
+  padding: 18px 24px;
+  border-radius: 18px 4px 18px 18px;
+  background: var(--acme-accent);
+  color: #fff;
+  animation: slide-up 320ms ease both;
+}
+
+button.acme-vote {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--acme-line);
+  border-radius: 999px;
+  background: var(--acme-panel);
+  color: var(--acme-muted);
+  padding: 0;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+button.acme-vote:hover {
+  border-color: var(--acme-accent);
+  color: var(--acme-accent);
+}
+
+button.acme-vote[data-active="true"] {
+  border-color: var(--acme-accent);
+  background: var(--acme-accent);
+  color: #fff;
+}
+
+.acme-sent {
+  justify-self: end;
+  color: var(--acme-ok);
+  animation: slide-up 280ms ease both;
+}
+
+@keyframes acme-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.acme-group {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--acme-ok);
+}
+
+.acme-group[data-group="bad"] {
+  color: var(--acme-bad);
+}
+
+/* The guardrail blocked the draft: the step worked, the outcome did not. */
+.acme-row[data-flagged="true"] {
+  background: var(--acme-warn-soft);
+  color: var(--acme-warn);
+}
+
+.acme-row[data-flagged="true"] [data-role="detail"] {
+  color: var(--acme-warn);
+  font-weight: 600;
+}
+
+.acme-reply[data-blocked="true"] {
+  border: 2px dashed var(--acme-warn);
+  background: var(--acme-warn-soft);
+  color: var(--acme-text);
+}
+
+.acme-escalation {
+  color: var(--acme-warn);
+  font-weight: 600;
+  animation: slide-up 280ms ease both;
+}
+
+.acme-typing-dots {
+  display: inline-flex;
+  gap: 5px;
+  padding: 12px 16px;
+  border-radius: 999px;
+  background: var(--acme-bg);
+}
+
+.acme-typing-dots span {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--acme-muted);
+  animation: acme-typing 1s ease-in-out infinite;
+}
+
+.acme-typing-dots span:nth-child(2) { animation-delay: 150ms; }
+.acme-typing-dots span:nth-child(3) { animation-delay: 300ms; }
+
+@keyframes acme-typing {
+  0%, 100% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-3px); }
+}
+
+/* Popover (split test, key hints) */
+
+.acme-popover {
+  border: 1px solid var(--acme-line);
+  border-radius: 18px;
+  background: var(--acme-panel);
+  box-shadow: 0 24px 60px rgba(20, 24, 33, 0.22);
+  animation: slide-up 220ms ease both;
+}
+
+.acme-progress {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--acme-bg);
+  overflow: hidden;
+}
+
+.acme-progress span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--acme-accent);
+  transition: width 300ms ease;
+}
+
+/* The hand-off to Inngest: Inngest's own ink and coral, so it reads as a
+   different product from Acme's indigo. */
+.inngest-link {
+  border-radius: 10px;
+  font-weight: 600;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.inngest-link[data-variant="button"] {
+  height: 52px;
+  padding: 0 20px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 20px;
+  box-shadow: inset 0 -3px 0 var(--coral);
+}
+
+.inngest-link[data-variant="button"]:hover {
+  background: #2a2430;
+}
+
+.inngest-link[data-variant="inline"] {
+  gap: 4px;
+  color: var(--coral);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Status bar and presenter controls */
+
+.acme-statusbar {
+  height: 40px;
+  border-top: 1px solid var(--acme-line);
+  background: var(--acme-panel);
+  color: var(--acme-muted);
+}
+
+.acme-inngest-mark {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--coral);
+}
+
+button.acme-hud-toggle {
+  padding: 2px 10px;
+  border: 1px solid var(--acme-line);
+  border-radius: 8px;
+  background: var(--acme-panel);
+}
+
+button.acme-hud-toggle:hover {
+  border-color: var(--acme-text);
+  color: var(--acme-text);
+}
+
+button.acme-hud-toggle[data-active="true"] {
+  border-color: var(--acme-text);
+  background: var(--acme-text);
+  color: #fff;
+}
+
+.acme-hud-key {
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 5px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.status-dot[data-state="idle"] {
+  background: var(--pending, #c7c2be);
+}
+
+.booth-drawer .code-html pre {
+  padding: 28px 40px;
+}
+
+/* The drawer sits above the thread, so nothing can paint over the code. */
+.booth-drawer {
+  position: relative;
+  z-index: 10;
+}
+
+/* Portrait console (split screen, phone): the inbox is a strip. */
+button.acme-ticket[data-compact] {
+  padding: 10px 14px;
+}
+
+[data-layout="tall"] .booth-drawer {
+  border-top: 1px solid var(--acme-line);
+}
+
+.acme-topbar[data-tall="true"] {
+  height: 68px;
+}
+
+.acme-topbar[data-tall="true"] button.acme-button {
+  height: 46px;
+  padding: 0 14px;
+}
+
+/* Portrait with a ticket open: the inbox as one row of chips. The top edge
+   carries the group, the dot the ticket's status. */
+button.acme-chip {
+  gap: 2px;
+  padding: 8px 12px 8px;
+  border: 1px solid var(--acme-line);
+  border-top: 3px solid var(--acme-ok);
+  border-radius: 10px;
+  background: var(--acme-panel);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+button.acme-chip[data-group="bad"] {
+  border-top-color: var(--acme-bad);
+}
+
+button.acme-chip[data-active="true"] {
+  border-left-color: var(--acme-accent);
+  border-right-color: var(--acme-accent);
+  border-bottom-color: var(--acme-accent);
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.14);
+}
+
+.acme-chip-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #c9ced8;
+}
+
+.acme-chip-dot[data-status="working"] { background: var(--acme-accent); }
+.acme-chip-dot[data-status="resolved"] { background: var(--acme-ok); }
+.acme-chip-dot[data-status="escalated"] { background: var(--acme-warn); }
+
+/* A smaller outage switch for the portrait status bar. */
+.acme-switch-small button.acme-switch {
+  width: 40px;
+  height: 22px;
+}
+
+.acme-switch-small button.acme-switch span {
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+}
+
+.acme-switch-small button.acme-switch[data-on="true"] span {
+  transform: translateX(18px);
+}
+
+/* Portrait thread: drop what repeats (avatars, bylines, source tags,
+   durations) and keep each step to one line. */
+[data-layout="tall"] .acme-console-thread [data-role="avatar"],
+[data-layout="tall"] .acme-console-thread [data-role="aside"],
+[data-layout="tall"] .acme-console-thread [data-role="byline"],
+[data-layout="tall"] .acme-console-thread [data-role="duration"],
+[data-layout="tall"] .acme-console-thread .acme-source {
+  display: none;
+}
+
+[data-layout="tall"] .acme-console-thread [data-role="row-line"] {
+  flex-wrap: nowrap;
+}
+
+[data-layout="tall"] .acme-console-thread [data-role="typing"] {
+  padding-left: 0;
+}

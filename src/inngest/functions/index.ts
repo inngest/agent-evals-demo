@@ -1,20 +1,24 @@
-import { researchAgent } from "@/inngest/functions/research-agent";
-import { researchScoreRun } from "@/inngest/functions/research-score-run";
-import { researchScoreHeartbeat } from "@/inngest/functions/research-score-heartbeat";
-import { researchExperimentBakeoff } from "@/inngest/functions/research-experiment-bakeoff";
-import { flowControlDemo } from "@/inngest/functions/flow-control-demo";
+import { supportAgent } from "@/inngest/functions/support-agent";
+import {
+  supportCsat,
+  supportScoreRun,
+} from "@/inngest/functions/support-score-run";
+import { supportFcr } from "@/inngest/functions/support-deferred";
+import { supportExperiment } from "@/inngest/functions/support-experiment";
 
 export const functions = [
-  researchAgent,
-  researchScoreRun,
-  researchScoreHeartbeat,
-  researchExperimentBakeoff,
-  flowControlDemo,
+  supportAgent,
+  supportScoreRun,
+  supportCsat,
+  supportFcr,
+  supportExperiment,
 ];
 
-export { researchAgent } from "@/inngest/functions/research-agent";
-export { researchScoreRun } from "@/inngest/functions/research-score-run";
-export { researchScoreHeartbeat } from "@/inngest/functions/research-score-heartbeat";
-export { researchExperimentBakeoff } from "@/inngest/functions/research-experiment-bakeoff";
-export { flowControlDemo } from "@/inngest/functions/flow-control-demo";
-export type { ResearchAgentResult } from "@/inngest/functions/research-agent";
+export { supportAgent } from "@/inngest/functions/support-agent";
+export {
+  supportCsat,
+  supportScoreRun,
+} from "@/inngest/functions/support-score-run";
+export { supportFcr } from "@/inngest/functions/support-deferred";
+export { supportExperiment } from "@/inngest/functions/support-experiment";
+export type { SupportAgentResult } from "@/inngest/functions/support-agent";

@@ -1,15 +1,39 @@
 import { codeToHtml, type ShikiTransformer } from "shiki";
-import { codeSnippets, type CodeSnippet } from "@/content/code-snippets";
+import { boothSnippets, type BoothSnippet } from "@/content/booth-snippets";
+import { refundScript } from "@/content/refund-sandbox";
 
-export type HighlightedCodeSnippet = CodeSnippet & {
+// Any snippet shape the CodeView can render.
+export type AnySnippet = {
+  id: string;
+  label: string;
+  eyebrow: string;
+  description: string;
+  code: string;
+};
+
+export type HighlightedBoothSnippet = BoothSnippet & {
   html: string;
 };
 
-export async function getHighlightedCodeSnippets(): Promise<
-  HighlightedCodeSnippet[]
+export async function getHighlightedBoothSnippets(): Promise<
+  HighlightedBoothSnippet[]
 > {
+  return highlightSnippets<BoothSnippet>(boothSnippets);
+}
+
+/** The sandbox panel's refund script, highlighted once on the server. */
+export async function getHighlightedRefundScript(): Promise<string> {
+  return codeToHtml(refundScript.trimEnd(), {
+    lang: "python",
+    theme: "github-dark",
+  });
+}
+
+async function highlightSnippets<T extends { code: string }>(
+  snippets: T[]
+): Promise<Array<T & { html: string }>> {
   return Promise.all(
-    codeSnippets.map(async (snippet) => ({
+    snippets.map(async (snippet) => ({
       ...snippet,
       html: await codeToHtml(snippet.code, {
         lang: "ts",
