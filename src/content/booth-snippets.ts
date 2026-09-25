@@ -38,13 +38,13 @@ const durableCode = `export const supportAgent = createFunction(
       orders.get(event.data.orderId)
     );
     // @demo-highlight-end
-    const reply = await step.run("draft-reply", () =>
-      llm.draftReply({ intent, customer, order })
-    );
     // Refund maths runs as code in a sandbox, not in the model's head.
     const box = await step.sandbox.create("create-refund-sandbox");
     const refund = await box.commands.run("compute-refund", refundScript);
     await box.destroy("destroy-refund-sandbox");
+    const reply = await step.run("draft-reply", () =>
+      llm.draftReply({ intent, customer, order, refund })
+    );
     const policy = await step.run("policy-check", () =>
       guardrails.check(reply, refund) // refunds over $200 need a human
     );

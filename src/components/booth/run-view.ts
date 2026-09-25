@@ -90,7 +90,7 @@ export function buildStepViews(
   const sandbox = sandboxView(timeline);
   if (sandbox) {
     views.splice(
-      views.findIndex((view) => view.def.id === "policy-check"),
+      views.findIndex((view) => view.def.id === REPLY_STEP_ID),
       0,
       sandbox,
     );

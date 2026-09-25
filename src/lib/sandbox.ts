@@ -46,8 +46,15 @@ export type SandboxRefundResult = {
 export const refundOrderLines: RefundLine[] = [
   {
     sku: "BLND-PRO",
-    description: "Pro blender",
-    unitUsd: 624,
+    description: "Pro blender base",
+    unitUsd: 575,
+    qty: 1,
+    damaged: false,
+  },
+  {
+    sku: "JAR-64OZ",
+    description: "64 oz glass jar",
+    unitUsd: 49,
     qty: 1,
     damaged: true,
   },

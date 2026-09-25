@@ -38,6 +38,12 @@ export const supportScoreRun = inngest.createFunction(
     );
     await attach(SCORE_STEPS.costPerTicket, SCORE.costPerTicket, data.costUsd, data);
     await attach(
+      SCORE_STEPS.replyQuality,
+      SCORE.replyQuality,
+      data.qualityScore,
+      data,
+    );
+    await attach(
       SCORE_STEPS.escalatedToHuman,
       SCORE.escalatedToHuman,
       data.escalated ? 1 : 0,
@@ -52,6 +58,7 @@ export const supportScoreRun = inngest.createFunction(
       policyCompliance: data.policyPassed ? 1 : 0,
       escalated: data.escalated,
       costUsd: data.costUsd,
+      replyQuality: data.qualityScore,
     };
   },
 );

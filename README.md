@@ -6,10 +6,11 @@ This repo holds the booth demo for [EVENT NAME] ([DATES], booth [BOOTH #]).
 Inngest function. Open a ticket and the agent's six durable steps appear in the
 thread as it works, including an order-API outage it survives (**durable
 execution**). Every run links straight to its real trace in the Inngest
-dashboard (**observability**). Two tickets go well and two go badly: a
-guardrail blocks an over-limit refund, and a customer follows up on a missed
-reply. Each run is scored on business metrics (first-contact resolution,
-policy compliance, cost, CSAT from the 👍/👎),
+dashboard (**observability**). Three tickets go well, one of them a refund
+the agent computes in a sandbox (**Sandboxes**), and one goes badly: the reply
+misses the point, which only its reply-quality score shows. Each run is
+scored on business metrics (first-contact resolution, policy compliance,
+cost, reply quality, CSAT from the 👍/👎),
 and "Split-test a model" routes tickets across two models as an Inngest
 experiment (**A/B testing**).
 
@@ -39,18 +40,18 @@ live. See `docs/booth-runbook.md` for the timing budget.
 - Printable card: `docs/driver-card.md`.
 - Booth ops: `docs/booth-runbook.md`.
 
-## Sandboxes (beta) are off by default
+## Sandboxes (beta)
 
-With `NEXT_PUBLIC_DEMO_SANDBOX=1`, the refund ticket (`3`) works out the
-refund by running a generated script in a sandbox (`src/lib/sandbox.ts`) instead
-of trusting the model's arithmetic. The policy check then judges that amount.
-In cloud mode these are real `step.sandbox` steps (create, `compute-refund`,
-destroy) and appear in the trace; locally a simulated `compute-refund` step
-stands in, labelled "simulated" in its output. The booth pipeline still draws
-six nodes; the sandbox steps show in the trace and in the Policy check output.
-A failed run destroys its sandbox in the agent's `onFailure`. The flag is off
-by default because the beta is gated per environment; `/api/demo/status`
-reports whether this one has it.
+The refund ticket (`3`) works out the refund by running a generated script
+in a sandbox (`src/lib/sandbox.ts`) instead of trusting the model's
+arithmetic: only the cracked $49 jar is owed, and the reply is drafted
+around that amount. The thread shows it as its own "Compute refund" row with a
+**Sandboxed** pill. In cloud mode these are real `step.sandbox` steps
+(create, `compute-refund`, destroy); they need the beta, which is gated per
+environment, so cloud runs them only with `NEXT_PUBLIC_DEMO_SANDBOX=1` and
+`/api/demo/status` reports whether this environment has it. Locally a
+simulated `compute-refund` step always runs, and its row says "simulated
+locally". A failed run destroys its sandbox in the agent's `onFailure`.
 
 ## Design System Source
 
@@ -110,7 +111,8 @@ in exactly one place, `src/lib/demo-target.ts`, which exports `DEMO_TARGET` and
 In `cloud` mode the app emits real primitives at these call sites:
 
 - **Business scores:** `src/inngest/functions/support-score-run.ts` attaches
-  `policy_compliance`, `cost_per_ticket` and `escalated_to_human` to the agent
+  `policy_compliance`, `cost_per_ticket`, `support_reply_quality` and
+  `escalated_to_human` to the agent
   run with `step.score(...)`. The scores known only later are deferred
   functions of the agent run (`createDefer`, `src/inngest/functions/support-deferred.ts`):
   `support-agent-csat` waits for the visitor's vote and

@@ -59,23 +59,18 @@ Point at these, in order:
 The app shows none of the scores; those live in Inngest.
 
 1. In the app, the visitor clicks 👍 (`G`) on the good reply.
-2. Run a ticket under **Goes badly**:
-   - **`3`, Refund a damaged item.** The draft offers a $649 refund, and the policy check flags it because anything over $200 needs a human. (With Sandboxes on, the refund is computed by a script the agent runs in a sandbox, not by the model's arithmetic: point at the sandbox steps in the trace.) The reply is **blocked**, not sent, and the ticket is escalated to Tier 2.
-   - **`4`, Cancel my subscription.** The agent misreads it as a billing question. Sam writes back "That's not what I asked", and the agent runs again and gets it right.
-3. The visitor can 👎 (`B`) either one.
-4. Switch to the Inngest dashboard and open the **Scores** view. Compare the good run with the bad ones:
-   - `first_contact_resolution`: 1 for the good run, 0 for the escalation and for the reply the customer followed up on.
-   - `policy_compliance`: 0 on the blocked refund.
-   - `escalated_to_human`.
-   - `cost_per_ticket`.
+2. **`3`, Refund a damaged item.** The agent doesn't do the refund maths in its head: it writes a script and runs it in a sandbox (the **Sandboxed** row). Only the $49 jar is owed, the reply is drafted around that, and it passes policy. In the trace, point at the create, `compute-refund` and destroy sandbox steps.
+3. **`4`, Cancel my subscription.** The agent reads it as a billing question and explains the charge instead of cancelling. Nothing on screen says it went badly; the visitor can 👎 (`B`) it.
+4. Switch to the Inngest dashboard and open the **Scores** view. Compare the good runs with ticket 4:
+   - `support_reply_quality`: low on ticket 4.
    - `csat`: from the vote.
+   - `first_contact_resolution`, `policy_compliance`, `escalated_to_human` and `cost_per_ticket` on every run.
 
 > Every run is scored in the terms your support lead uses. First-contact
 > resolution is Inngest waiting, durably, to see whether the customer comes
 > back (`support-agent-resolution`: 15s here, days in production). The
-> scores that come later are deferred functions of the run they judge. A
-> thumbs-down is the most honest eval you have, and the other two failures
-> needed no one to click anything.
+> scores that come later are deferred functions of the run they judge. The
+> UI looked fine on ticket 4; the score is how you find out it wasn't.
 
 For a business audience:
 

@@ -33,8 +33,11 @@ const POLL_INTERVAL_MS = 600;
 const POLL_TIMEOUT_MS = Number(process.env.DEMO_SMOKE_TIMEOUT_MS ?? 60_000);
 // Scorer step ids, mirrored from src/lib/score-names.ts.
 const SCORER = "support-agent-score-run,support-agent-resolution,support-agent-csat";
-const POLICY_SCORE_STEP = "attach-policy-compliance-score";
 const FCR_SCORE_STEP = "attach-first-contact-resolution";
+const QUALITY_SCORE_STEP = "attach-reply-quality-score";
+// The refund ticket's sandboxed step (src/lib/sandbox.ts): only the $49 jar.
+const SANDBOX_STEP = "compute-refund";
+const EXPECTED_REFUND_USD = 49;
 // The scorer's follow-up window (15s) plus slack.
 const FCR_TIMEOUT_MS = 25_000;
 
@@ -49,8 +52,8 @@ if (final) {
   // them side by side so the gate stays well under a minute.
   await Promise.all([
     checkGoodResolution(trigger),
-    checkPolicyEscalation(),
-    checkFollowUp(),
+    checkSandboxRefund(),
+    checkLowQuality(),
   ]);
   await checkSplitTest();
 }
@@ -193,62 +196,64 @@ async function checkGoodResolution(trigger) {
   );
 }
 
-/** Bad interaction: the guardrail blocks the draft and escalates. */
-async function checkPolicyEscalation() {
+/**
+ * The refund is computed by the agent's script in a sandbox, and the reply
+ * built on it passes policy. In cloud the sandbox is behind
+ * NEXT_PUBLIC_DEMO_SANDBOX, so a missing step there is a warning.
+ */
+async function checkSandboxRefund() {
   const run = await triggerAndWait({ ticketId: "damaged-item", failureStep: "none" });
-  const policy = run?.timeline?.steps.find((step) => step.displayName === "policy-check");
-  const flagged = parseOutput(policy)?.flagged === true;
+  const steps = run?.timeline?.steps ?? [];
+  const sandbox = steps.find((step) => step.displayName === SANDBOX_STEP);
+  const parsed = parseOutput(sandbox);
+  const refundUsd =
+    parsed?.refund?.refundUsd ?? parseStdout(parsed?.stdout)?.refundUsd;
 
   addCheck(
-    flagged ? "pass" : "fail",
-    "Policy check flags the over-limit refund",
-    run ? `policy-check flagged=${flagged}` : "damaged-item run did not complete",
+    refundUsd === EXPECTED_REFUND_USD ? "pass" : sandbox || !run ? "fail" : "warn",
+    "Refund computed in a sandbox",
+    !run
+      ? "damaged-item run did not complete"
+      : sandbox
+        ? `${SANDBOX_STEP} refundUsd=${refundUsd ?? "missing"} (expected ${EXPECTED_REFUND_USD})${parsed?.mode === "simulated" ? ", simulated" : ""}`
+        : `no ${SANDBOX_STEP} step; is NEXT_PUBLIC_DEMO_SANDBOX=1 on this deploy?`,
   );
 
   if (!run) return;
 
-  const [policyScore, fcr] = await Promise.all([
-    scorerValue(run.supportRunId, POLICY_SCORE_STEP, 10_000),
-    scorerValue(run.supportRunId, FCR_SCORE_STEP, 10_000),
-  ]);
-
+  const policy = steps.find((step) => step.displayName === "policy-check");
+  const flagged = parseOutput(policy)?.flagged === true;
   addCheck(
-    policyScore === 0 && fcr === 0 ? "pass" : "fail",
-    "Escalated ticket scored as a policy miss",
-    `policy_compliance=${policyScore ?? "missing"}, first_contact_resolution=${fcr ?? "missing"}`,
+    flagged ? "fail" : "pass",
+    "Refund reply passes policy",
+    `policy-check flagged=${flagged}`,
   );
 }
 
-/** Bad interaction: the customer follows up, so the first reply scores 0. */
-async function checkFollowUp() {
-  const first = await triggerAndWait({ ticketId: "cancel-subscription", failureStep: "none" });
+/** Bad interaction: the reply misses the point, and only its score says so. */
+async function checkLowQuality() {
+  const run = await triggerAndWait({ ticketId: "cancel-subscription", failureStep: "none" });
 
-  if (!first) {
-    addCheck("fail", "Customer follow-up runs as turn 2", "turn 1 did not complete");
+  if (!run) {
+    addCheck("fail", "Missed reply scored low quality", "cancel-subscription run did not complete");
     return;
   }
 
-  // A customer takes a moment to reply; the booth shows ~3s of typing.
-  await sleep(2_000);
-  const second = await triggerAndWait({
-    ticketId: "cancel-subscription",
-    turn: 2,
-    followUpOf: first.supportRunId,
-  });
+  const quality = await scorerValue(run.supportRunId, QUALITY_SCORE_STEP, 10_000);
 
   addCheck(
-    second ? "pass" : "fail",
-    "Customer follow-up runs as turn 2",
-    second ? `turn 2 supportRunId=${second.supportRunId}` : "turn 2 did not complete",
+    typeof quality === "number" && quality < 0.5 ? "pass" : "fail",
+    "Missed reply scored low quality",
+    `support_reply_quality=${quality ?? "missing"}`,
   );
+}
 
-  const fcr = await scorerValue(first.supportRunId, FCR_SCORE_STEP, FCR_TIMEOUT_MS);
-
-  addCheck(
-    fcr === 0 ? "pass" : "fail",
-    "Followed-up reply scored not resolved",
-    fcr === undefined ? `${FCR_SCORE_STEP} not observed on turn 1` : `first_contact_resolution=${fcr}`,
-  );
+function parseStdout(stdout) {
+  try {
+    return typeof stdout === "string" ? JSON.parse(stdout) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function triggerAndWait(payload) {

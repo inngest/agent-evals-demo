@@ -23,7 +23,7 @@
 | Scenario: tickets, steps, canned outputs | `src/content/support-demo.ts` |
 | Console copy | `src/content/booth-copy.ts` |
 | Agent function, `support-agent` | `src/inngest/functions/support-agent.ts` |
-| Business scores, `support-agent-score-run` (policy, cost, escalation) | `src/inngest/functions/support-score-run.ts` |
+| Business scores, `support-agent-score-run` (policy, cost, reply quality, escalation) | `src/inngest/functions/support-score-run.ts` |
 | CSAT, `support-agent-csat` (deferred; waits for the vote) | `src/inngest/functions/support-deferred.ts` |
 | First-contact resolution, `support-agent-resolution` (deferred; waits 15s for a follow-up) | `src/inngest/functions/support-deferred.ts` |
 | Score names | `src/lib/score-names.ts` |
@@ -68,8 +68,8 @@ It triggers a real ticket and fails unless all of the following hold:
 - `lookup-order` failed and recovered.
 - Finished steps were replayed rather than re-run.
 - The good ticket scored `first_contact_resolution = 1`.
-- The damaged-item refund was flagged, scoring `policy_compliance = 0` and `first_contact_resolution = 0`.
-- The cancel-subscription follow-up ran as turn 2, and turn 1 scored `first_contact_resolution = 0`.
+- The damaged-item refund was computed as $49 in a sandbox (a warning in cloud if `NEXT_PUBLIC_DEMO_SANDBOX` is off) and passed policy.
+- The cancel-subscription reply scored `support_reply_quality` below 0.5.
 - The drafted reply parses.
 - The vote reached Inngest.
 - All 8 split-test runs landed within 15s.
@@ -153,16 +153,16 @@ npx inngest-cli@latest api --prod sync-app \
 
 ## Sandboxes
 
-With `NEXT_PUBLIC_DEMO_SANDBOX=1`, the refund ticket (`3`) works out the
-refund by running a generated script in a sandbox (`src/lib/sandbox.ts`) instead
-of trusting the model's arithmetic. The policy check then judges that amount.
-In cloud mode these are real `step.sandbox` steps (create, `compute-refund`,
-destroy) and appear in the trace; locally a simulated `compute-refund` step
-stands in, labelled "simulated" in its output. The booth pipeline still draws
-six nodes; the sandbox steps show in the trace and in the Policy check output.
-A failed run destroys its sandbox in the agent's `onFailure`. The flag is off
-by default because the beta is gated per environment; `/api/demo/status`
-reports whether this one has it.
+The refund ticket (`3`) works out the refund by running a generated script
+in a sandbox (`src/lib/sandbox.ts`) instead of trusting the model's
+arithmetic: only the cracked $49 jar is owed, and the reply is drafted
+around that amount. The thread shows it as its own "Compute refund" row with a
+**Sandboxed** pill. In cloud mode these are real `step.sandbox` steps
+(create, `compute-refund`, destroy); they need the beta, which is gated per
+environment, so cloud runs them only with `NEXT_PUBLIC_DEMO_SANDBOX=1` and
+`/api/demo/status` reports whether this environment has it. Locally a
+simulated `compute-refund` step always runs, and its row says "simulated
+locally". A failed run destroys its sandbox in the agent's `onFailure`.
 
 ## Booth QA
 

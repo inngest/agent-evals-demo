@@ -8,11 +8,12 @@
  */
 
 /**
- * Sandboxes (beta) are OFF by default.
+ * Real Sandboxes (beta) in cloud mode are OFF by default.
  *
- * The beta is access-gated per environment, so an un-entitled deploy shows a
- * "simulated" beat that has to be explained mid-demo. Turning it on is a
- * deliberate choice for an environment where the entitlement is confirmed.
+ * The beta is access-gated per environment, and an un-entitled environment
+ * cannot create a sandbox. Turning it on is a deliberate choice for an
+ * environment where the entitlement is confirmed. Local mode ignores this:
+ * the refund ticket always runs its simulated sandbox step there.
  *
  * Set NEXT_PUBLIC_DEMO_SANDBOX=1 to enable. Any other value, or unset, is off.
  */

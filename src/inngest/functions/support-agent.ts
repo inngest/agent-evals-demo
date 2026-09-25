@@ -98,22 +98,25 @@ export const supportAgent = inngest.createFunction(
     const order = await step.run("lookup-order", () =>
       call("lookup-order", { customer: ticket.customer }),
     );
+    // A refund is money arithmetic: the agent writes a script for it and runs
+    // it in a sandbox, not in its head and not in this process. The reply is
+    // then drafted around the computed amount. The steps are durable like any
+    // other: every later re-entry replays the result instead of creating a
+    // new sandbox. Local mode always runs the simulated stand-in; cloud needs
+    // the beta, so it is behind the flag.
+    const refund: SandboxRefundResult | null =
+      ticket.id === "damaged-item" && turn === 1 && (SANDBOX_ENABLED || !isCloud)
+        ? await runSandboxRefund({ step, supportRunId })
+        : null;
     const reply = await step.run("call-llm-draft-reply", () =>
       call("call-llm-draft-reply", {
         model,
         intent: intent.output,
         customer: customer.output,
         order: order.output,
+        ...(refund ? { refundUsd: refund.refund.refundUsd } : {}),
       }),
     );
-    // A refund is money arithmetic: the agent writes a script for it and runs
-    // it in a sandbox, not in its head and not in this process. The steps are
-    // durable like any other: every later re-entry replays the result instead
-    // of creating a new sandbox.
-    const refund: SandboxRefundResult | null =
-      SANDBOX_ENABLED && ticket.id === "damaged-item" && turn === 1
-        ? await runSandboxRefund({ step, supportRunId })
-        : null;
     // The guardrail: a draft that breaks policy (a refund over the
     // auto-approve limit) is never sent. It goes to a human instead.
     const policy = await step.run("policy-check", async () => {

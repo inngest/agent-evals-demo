@@ -37,7 +37,7 @@ Record the device, resolution, browser, and date when each row is verified.
 
 Run these checks once normally, then again with `U` on.
 
-- [ ] **Empty state.** The inbox shows "Goes well" (2) and "Goes badly" (2), readable from 3m. The outage switch is on.
+- [ ] **Empty state.** The inbox shows "Goes well" (3) and "Goes badly" (1), readable from 3m. The outage switch is on.
 - [ ] **Run.**
   - [ ] Opening a ticket shows the customer message, then the activity rows one by one.
   - [ ] "Look up order" turns red with "Order API returned 503" and "Retrying in 3s".
@@ -48,11 +48,8 @@ Run these checks once normally, then again with `U` on.
 - [ ] **Trace.** **View trace in Inngest** appears mid-run and opens this exact run, with the 503 attempt, in a separate window.
 - [ ] **Vote.** 👍 shows "Recorded in Inngest". In the dashboard, `csat` = 1 is on that run.
 - [ ] **Scores in Inngest.** About 15s after a good run, `first_contact_resolution` = 1. `policy_compliance`, `cost_per_ticket` and `escalated_to_human` are on the run. The console shows no scores.
-- [ ] **Policy flag (`3`).** The Policy check row is amber, the reply reads "Blocked by policy", and the ticket shows "Escalated to Tier 2". The inbox says "Escalated". In Inngest, `policy_compliance` = 0 and `first_contact_resolution` = 0.
-- [ ] **Follow-up (`4`).**
-  - [ ] After the first reply, "Sam is typing…" appears, then the follow-up message, then a second agent run.
-  - [ ] The first run folds to one line with its own trace link.
-  - [ ] In Inngest, the first run has `first_contact_resolution` = 0, and the follow-up run has 1 about 15s later.
+- [ ] **Sandboxed refund (`3`).** A "Compute refund" row with a **Sandboxed** pill appears before Draft reply and shows "$49.00 refund" ("simulated locally" off Cloud). Policy passes and the reply is sent. In Cloud, the trace shows the create, `compute-refund` and destroy sandbox steps.
+- [ ] **Missed reply (`4`).** The reply explains the charge instead of cancelling, with no warning on screen. In Inngest, `support_reply_quality` = 0.38.
 - [ ] **Split test.**
   - [ ] `S` then `S` routes 8 tickets and reaches "8 of 8 tickets scored".
   - [ ] **Compare in Inngest** opens the experiment (Cloud).

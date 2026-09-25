@@ -14,7 +14,7 @@ export const SCORE = {
   costPerTicket: "cost_per_ticket",
   /** The customer's thumbs up (1) or down (0). */
   csat: "csat",
-  /** Scripted answer quality, used by the split test only. */
+  /** Scripted answer quality, per model and ticket. */
   replyQuality: "support_reply_quality",
 } as const;
 
@@ -34,4 +34,5 @@ export const SCORE_STEPS = {
   firstContactResolution: "attach-first-contact-resolution",
   waitForVote: "wait-for-customer-vote",
   csat: "attach-human-feedback-score",
+  replyQuality: "attach-reply-quality-score",
 } as const;

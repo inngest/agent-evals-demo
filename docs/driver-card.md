@@ -16,8 +16,8 @@ Event: [EVENT NAME], [DATES], booth [BOOTH #].
 
 | Key | Action |
 | --- | --- |
-| `1` `2` | Open a ticket that goes well |
-| `3` `4` | Open a ticket that goes badly (3: policy flag · 4: customer follows up) |
+| `1` `2` `3` | Open a ticket that goes well (3: refund computed in a sandbox) |
+| `4` | Open the ticket that goes badly (a missed reply; only its score shows it) |
 | `G` / `B` | Vote helpful / not helpful |
 | `S` | Open the split test; press again to start it |
 | `D` | Open the trace (or the experiment) in Inngest |
@@ -37,14 +37,14 @@ Everything is also clickable with the mouse.
    Show the failed attempt, the retry, the memoized steps, and the step I/O and tokens.
    "One click from the product to the answer."
 3. **App.** The visitor votes 👍 on the good reply.
-4. **App.** Press `3`: policy blocks the $649 refund and it's escalated. Press `4`: the customer follows up and the agent runs again.
-   **Inngest:** open Scores and compare the good and bad runs. First-contact resolution is a durable wait for the customer.
+4. **App.** Press `3`: the agent computes the $49 refund in a sandbox (the **Sandboxed** row) and replies. Press `4`: the reply misses the point, and the screen doesn't say so.
+   **Inngest:** open Scores. Ticket 4's `support_reply_quality` is low. First-contact resolution is a durable wait for the customer.
 5. **App, then Inngest.** **Split-test a model**, then **Start**, then at 8/8 **Compare in Inngest**. Talk ROI in the experiment view.
 6. **Close.** Point at the QR code, hand over the free-month card, and press `R`.
 
 Engineer? Press `U`. The drawer shows the code for whatever is on screen.
 
-Score names: `first_contact_resolution`, `policy_compliance`, `escalated_to_human`, `cost_per_ticket`, `csat`.
+Score names: `first_contact_resolution`, `policy_compliance`, `escalated_to_human`, `cost_per_ticket`, `support_reply_quality`, `csat`.
 
 ## Safe Claims
 

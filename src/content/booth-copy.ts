@@ -97,7 +97,7 @@ export const inngestLinks = {
 };
 
 export const keyHints: Array<{ keys: string; label: string }> = [
-  { keys: "1 2 3 4", label: "Open ticket (1–2 go well, 3–4 go badly)" },
+  { keys: "1 2 3 4", label: "Open ticket (1–3 go well, 4 goes badly)" },
   { keys: "G / B", label: "Vote helpful / not helpful" },
   { keys: "S", label: "Split-test a model" },
   { keys: "D", label: "Open in Inngest" },

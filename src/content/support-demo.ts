@@ -156,6 +156,11 @@ export type SupportTicket = {
   message: string;
   outputs: Record<SupportStepId, SupportStepOutput>;
   /**
+   * Scripted reply quality for this ticket, when it differs from the
+   * model's default. Attached to every run as support_reply_quality.
+   */
+  qualityScore?: number;
+  /**
    * The customer writes back after the first reply because it missed the
    * point. A second run (turn 2) answers the follow-up.
    */
@@ -165,7 +170,7 @@ export type SupportTicket = {
   };
 };
 
-/** Inbox order: the two that go well, then the two that go badly. */
+/** Inbox order: the three that go well, then the one that goes badly. */
 export const supportTickets: SupportTicket[] = [
   {
     id: "where-is-my-order",
@@ -243,13 +248,13 @@ export const supportTickets: SupportTicket[] = [
     tag: "Refund",
     number: "#9934",
     receivedAgo: "5m",
-    group: "bad",
+    group: "good",
     customer: "Marcus L.",
     message:
-      "My $649 blender arrived with a cracked jar. I want a full refund, today.",
+      "My new blender arrived with a cracked jar. Can I get a refund for it?",
     outputs: {
       "classify-ticket": {
-        output: "Intent: refund request · Urgency: high · Sentiment: angry",
+        output: "Intent: refund request · Urgency: medium · Sentiment: annoyed",
         tokens: 290,
       },
       "lookup-customer": {
@@ -262,18 +267,14 @@ export const supportTickets: SupportTicket[] = [
       },
       "call-llm-draft-reply": {
         output:
-          "Hi Marcus, I'm so sorry about the cracked jar! I've issued a full $649 refund to your card, and you're welcome to keep the blender.",
+          "Hi Marcus, sorry about the cracked jar! I've refunded the $49.00 jar to your card, and a replacement ships today at no charge.",
         tokens: 1760,
       },
       "policy-check": {
-        output: "Flagged: $649 refund exceeds the $200 auto-approve limit",
+        output: "Passed · $49 refund within the $200 auto-approve limit",
         tokens: 210,
-        flagged: true,
       },
-      "send-reply": {
-        output: "Escalated to Tier 2 · holding reply sent on ticket #9934",
-        tokens: 0,
-      },
+      "send-reply": { output: "Reply posted to ticket #9934", tokens: 0 },
     },
   },
   {
@@ -310,33 +311,9 @@ export const supportTickets: SupportTicket[] = [
       },
       "send-reply": { output: "Reply posted to ticket #9952", tokens: 0 },
     },
-    followUp: {
-      message: "That's not what I asked. I want to cancel it.",
-      outputs: {
-        "classify-ticket": {
-          output: "Intent: cancel subscription · Urgency: medium · Sentiment: frustrated",
-          tokens: 320,
-        },
-        "lookup-customer": {
-          output: "Sam R. · Plus plan ($29/mo) · member since 2023",
-          tokens: 0,
-        },
-        "lookup-order": {
-          output: "Subscription SUB-771 · Plus · renews Oct 1 · cancellable",
-          tokens: 0,
-        },
-        "call-llm-draft-reply": {
-          output:
-            "Sorry Sam, I misread that. I've cancelled your Plus subscription, so you won't be charged again, and you keep access until Sep 30.",
-          tokens: 1690,
-        },
-        "policy-check": {
-          output: "Passed · cancellation confirmed · no PII leaked",
-          tokens: 210,
-        },
-        "send-reply": { output: "Reply posted to ticket #9952", tokens: 0 },
-      },
-    },
+    // The reply answers a billing question the customer did not ask. Nothing
+    // on screen says so: it shows up only as a low reply-quality score.
+    qualityScore: 0.38,
   },
 ];
 
@@ -434,7 +411,9 @@ export function buildSupportRunSummary(args: {
     policyPassed,
     escalated: !policyPassed,
     qualityScore:
-      args.qualityScore ?? (modelRole(model) === "challenger" ? 0.91 : 0.84),
+      args.qualityScore ??
+      ticket.qualityScore ??
+      (modelRole(model) === "challenger" ? 0.91 : 0.84),
     tokenCount,
     costUsd: roundCost((tokenCount / 1000) * costPer1kTokens(model)),
     completedAt: args.completedAt ?? new Date().toISOString(),
