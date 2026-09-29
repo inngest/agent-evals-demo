@@ -9,6 +9,7 @@
  */
 
 import { challengerModel, currentModel, modelRole } from "@/lib/demo-models";
+import { suspiciousLinkUrl } from "@/content/link-sandbox";
 
 /** Any model name; the two the booth uses come from env (lib/demo-models.ts). */
 export type SupportModel = string;
@@ -53,11 +54,11 @@ export type SupportStep = {
 };
 
 /**
- * The refund ticket's sandboxed calculation (lib/sandbox.ts). Not one of the
- * six steps every ticket runs: it only exists when Sandboxes are enabled, so
- * the thread draws it only when the run's timeline has it.
+ * The suspicious-link ticket's sandboxed fetch (lib/sandbox.ts). Not one of
+ * the six steps every ticket runs: it only exists when Sandboxes are enabled,
+ * so the thread draws it only when the run's timeline has it.
  */
-export const SANDBOX_STEP_ID = "compute-refund";
+export const SANDBOX_STEP_ID = "inspect-link";
 
 export type ActivityStep = Omit<SupportStep, "id"> & {
   id: SupportStepId | typeof SANDBOX_STEP_ID;
@@ -65,10 +66,10 @@ export type ActivityStep = Omit<SupportStep, "id"> & {
 
 export const sandboxStep: ActivityStep = {
   id: SANDBOX_STEP_ID,
-  label: "Compute refund",
-  source: "Python",
+  label: "Inspect link",
+  source: "Sandbox",
   kind: "logic",
-  detail: "Run the agent's refund script in an isolated sandbox.",
+  detail: "Open the customer's link in an isolated sandbox, never from our servers.",
   latencyMs: 650,
 };
 
@@ -126,7 +127,7 @@ export const supportSteps: SupportStep[] = [
 export type SupportTicketId =
   | "where-is-my-order"
   | "change-address"
-  | "damaged-item"
+  | "suspicious-link"
   | "cancel-subscription";
 
 export type SupportStepOutput = {
@@ -243,35 +244,35 @@ export const supportTickets: SupportTicket[] = [
     },
   },
   {
-    id: "damaged-item",
-    title: "Refund a damaged item",
-    tag: "Refund",
+    id: "suspicious-link",
+    title: "Is this email really from you?",
+    tag: "Security",
     number: "#9934",
     receivedAgo: "5m",
     group: "good",
-    customer: "Marcus L.",
+    customer: "Jordan P.",
     message:
-      "My new blender arrived with a cracked jar. Can I get a refund for it?",
+      `I got an email saying my payment failed and to re-enter my card at ${suspiciousLinkUrl}. Is this legit?`,
     outputs: {
       "classify-ticket": {
-        output: "Intent: refund request · Urgency: medium · Sentiment: annoyed",
-        tokens: 290,
+        output: "Intent: suspicious link report · Urgency: high · Sentiment: worried",
+        tokens: 300,
       },
       "lookup-customer": {
-        output: "Marcus L. · Standard plan · 3 orders · first complaint",
+        output: "Jordan P. · Pro plan · 6 orders · no failed payments",
         tokens: 0,
       },
       "lookup-order": {
-        output: "Order #47790 · Pro blender · $649 · delivered 2 days ago",
+        output: "Last order #48102 · paid in full · nothing outstanding",
         tokens: 0,
       },
       "call-llm-draft-reply": {
         output:
-          "Hi Marcus, sorry about the cracked jar! I've refunded the $49.00 jar to your card, and a replacement ships today at no charge.",
-        tokens: 1760,
+          "Hi Jordan, thanks for checking with us first! That link goes to example.com, not acme.com, so the email didn't come from us. Please don't enter any details there. Your account is in good standing and nothing is owed.",
+        tokens: 1780,
       },
       "policy-check": {
-        output: "Passed · $49 refund within the $200 auto-approve limit",
+        output: "Passed · link not echoed as clickable · no PII leaked",
         tokens: 210,
       },
       "send-reply": { output: "Reply posted to ticket #9934", tokens: 0 },

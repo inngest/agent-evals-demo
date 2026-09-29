@@ -35,9 +35,10 @@ const POLL_TIMEOUT_MS = Number(process.env.DEMO_SMOKE_TIMEOUT_MS ?? 60_000);
 const SCORER = "support-agent-score-run,support-agent-resolution,support-agent-csat";
 const FCR_SCORE_STEP = "attach-first-contact-resolution";
 const QUALITY_SCORE_STEP = "attach-reply-quality-score";
-// The refund ticket's sandboxed step (src/lib/sandbox.ts): only the $49 jar.
-const SANDBOX_STEP = "compute-refund";
-const EXPECTED_REFUND_USD = 49;
+// The suspicious-link ticket's sandboxed fetch (src/lib/sandbox.ts): the
+// link resolves to example.com, which is not our domain.
+const SANDBOX_STEP = "inspect-link";
+const EXPECTED_LINK_HOST = "example.com";
 const CSAT_SCORE_STEP = "attach-human-feedback-score";
 const OBSERVED = "observed";
 // The scorer's follow-up window (15s) plus slack.
@@ -54,7 +55,7 @@ if (final) {
   // them side by side so the gate stays well under a minute.
   await Promise.all([
     checkGoodResolution(trigger),
-    checkSandboxRefund(),
+    checkSandboxLink(),
     checkLowQuality(),
   ]);
   await checkSplitTest();
@@ -216,25 +217,26 @@ async function checkGoodResolution(trigger) {
 }
 
 /**
- * The refund is computed by the agent's script in a sandbox, and the reply
- * built on it passes policy. In cloud the sandbox is behind
+ * The customer's link is fetched in a sandbox, not by the app, and the reply
+ * built on what it saw passes policy. In cloud the sandbox is behind
  * NEXT_PUBLIC_DEMO_SANDBOX, so a missing step there is a warning.
  */
-async function checkSandboxRefund() {
-  const run = await triggerAndWait({ ticketId: "damaged-item", failureStep: "none" });
+async function checkSandboxLink() {
+  const run = await triggerAndWait({ ticketId: "suspicious-link", failureStep: "none" });
   const steps = run?.timeline?.steps ?? [];
   const sandbox = steps.find((step) => step.displayName === SANDBOX_STEP);
   const parsed = parseOutput(sandbox);
-  const refundUsd =
-    parsed?.refund?.refundUsd ?? parseStdout(parsed?.result)?.refundUsd;
+  const check = parsed?.check ?? parseStdout(parsed?.result);
+  const host = hostOf(check?.finalUrl);
+  const ok = host === EXPECTED_LINK_HOST && check?.status === 200;
 
   addCheck(
-    refundUsd === EXPECTED_REFUND_USD ? "pass" : sandbox || !run ? "fail" : "warn",
-    "Refund computed in a sandbox",
+    ok ? "pass" : sandbox || !run ? "fail" : "warn",
+    "Link inspected in a sandbox",
     !run
-      ? "damaged-item run did not complete"
+      ? "suspicious-link run did not complete"
       : sandbox
-        ? `${SANDBOX_STEP} refundUsd=${refundUsd ?? "missing"} (expected ${EXPECTED_REFUND_USD})${parsed?.mode === "simulated" ? ", simulated" : ""}`
+        ? `${SANDBOX_STEP} host=${host ?? "missing"} status=${check?.status ?? "missing"} (expected ${EXPECTED_LINK_HOST} 200)${parsed?.mode === "simulated" ? ", simulated" : ""}`
         : `no ${SANDBOX_STEP} step; is NEXT_PUBLIC_DEMO_SANDBOX=1 on this deploy?`,
   );
 
@@ -244,7 +246,7 @@ async function checkSandboxRefund() {
   const flagged = parseOutput(policy)?.flagged === true;
   addCheck(
     flagged ? "fail" : "pass",
-    "Refund reply passes policy",
+    "Link reply passes policy",
     `policy-check flagged=${flagged}`,
   );
 }
@@ -271,6 +273,14 @@ async function checkLowQuality() {
       ? `${QUALITY_SCORE_STEP} ran; check the value in Inngest Scores`
       : `support_reply_quality=${quality ?? "missing"}`,
   );
+}
+
+function hostOf(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The sandbox command's JSON stdout; cloud sends it base64-encoded. */

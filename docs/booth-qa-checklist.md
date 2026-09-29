@@ -48,7 +48,7 @@ Run these checks once normally, then again with `U` on.
 - [ ] **Trace.** **View trace in Inngest** appears mid-run and opens this exact run, with the 503 attempt, in a separate window.
 - [ ] **Vote.** 👍 shows "Recorded in Inngest". In the dashboard, `csat` = 1 is on that run.
 - [ ] **Scores in Inngest.** About 15s after a good run, `first_contact_resolution` = 1. `policy_compliance`, `cost_per_ticket` and `escalated_to_human` are on the run. The console shows no scores.
-- [ ] **Sandboxed refund (`3`).** A "Compute refund" row with a **Sandboxed** pill appears before Draft reply and shows "$49.00 refund" ("simulated locally" off Cloud). Policy passes and the reply is sent. In Cloud, the trace shows the create, `compute-refund` and destroy sandbox steps.
+- [ ] **Sandboxed link check (`3`).** An "Inspect link" row with a **Sandboxed** pill appears before Draft reply and shows "example.com · 200 · not our domain" ("simulated locally" off Cloud). The reply says the email was not from us, policy passes, and the reply is sent. In Cloud, the trace shows the create, `inspect-link` and destroy sandbox steps.
 - [ ] **Missed reply (`4`).** The reply explains the charge instead of cancelling, with no warning on screen. In Inngest, `support_reply_quality` = 0.38.
 - [ ] **Split test.**
   - [ ] `S` then `S` routes 8 tickets and reaches "8 of 8 tickets scored".

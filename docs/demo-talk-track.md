@@ -59,7 +59,7 @@ Point at these, in order:
 The app shows none of the scores; those live in Inngest.
 
 1. In the app, the visitor clicks 👍 (`G`) on the good reply.
-2. **`3`, Refund a damaged item.** The agent doesn't do the refund maths in its head: it runs a refund script in a sandbox (the **Sandboxed** row; its panel shows the script, the sandbox being created, run and destroyed, and the JSON it printed). The script is canned for the booth; in a real agent the model would write it. Only the $49 jar is owed, the reply is drafted around that, and it passes policy. In the trace, point at the create, `compute-refund` and destroy sandbox steps.
+2. **`3`, Is this email really from you?** The customer forwards a link from a phishing-style email. It's an unknown link from a customer, so the agent opens it in a throwaway sandbox, not on our servers, and replies based on what it found (the **Sandboxed** row; its panel shows the curl script, the sandbox being created, run and destroyed, and what it saw). The link lands on example.com, not acme.com, so the reply tells the customer not to enter anything, and it passes policy. In the trace, point at the create, `inspect-link` and destroy sandbox steps.
 3. **`4`, Cancel my subscription.** The agent reads it as a billing question and explains the charge instead of cancelling. Nothing on screen says it went badly; the visitor can 👎 (`B`) it.
 4. Switch to the Inngest dashboard and open the **Scores** view. Compare the good runs with ticket 4:
    - `support_reply_quality`: low on ticket 4.

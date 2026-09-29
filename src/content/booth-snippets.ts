@@ -38,15 +38,15 @@ const durableCode = `export const supportAgent = createFunction(
       orders.get(event.data.orderId)
     );
     // @demo-highlight-end
-    // Refund maths runs as code in a sandbox, not in the model's head.
-    const box = await step.sandbox.create("create-refund-sandbox");
-    const refund = await box.commands.run("compute-refund", refundScript);
-    await box.destroy("destroy-refund-sandbox");
+    // Untrusted links are opened in a sandbox, never from our servers.
+    const box = await step.sandbox.create("create-link-sandbox");
+    const link = await box.commands.run("inspect-link", linkCheck(url));
+    await box.destroy("destroy-link-sandbox");
     const reply = await step.run("draft-reply", () =>
-      llm.draftReply({ intent, customer, order, refund })
+      llm.draftReply({ intent, customer, order, link })
     );
     const policy = await step.run("policy-check", () =>
-      guardrails.check(reply, refund) // refunds over $200 need a human
+      guardrails.check(reply) // refunds over $200 need a human
     );
     await step.run("send-reply", () =>
       policy.passed ? helpdesk.reply(reply) : helpdesk.escalate(reply)

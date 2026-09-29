@@ -65,7 +65,7 @@ export function Thread({
   followUpStage,
   feedback,
   onVote,
-  refundScriptHtml,
+  linkScriptHtml,
   tall = false,
 }: {
   ticket: SupportTicket | null;
@@ -73,8 +73,8 @@ export function Thread({
   followUpStage: FollowUpStage;
   feedback: Feedback | null;
   onVote: (signal: "good" | "bad") => void;
-  /** The sandbox panel's refund script, highlighted on the server. */
-  refundScriptHtml: string;
+  /** The sandbox panel's link check script, highlighted on the server. */
+  linkScriptHtml: string;
   /** Portrait console: the reply's status and vote share one line. */
   tall?: boolean;
 }) {
@@ -150,7 +150,7 @@ export function Thread({
               votable={votable && turns.length === 1}
               feedback={feedback}
               onVote={onVote}
-              refundScriptHtml={refundScriptHtml}
+              linkScriptHtml={linkScriptHtml}
               tall={tall}
             />
           ) : null}
@@ -182,7 +182,7 @@ export function Thread({
               votable={votable}
               feedback={feedback}
               onVote={onVote}
-              refundScriptHtml={refundScriptHtml}
+              linkScriptHtml={linkScriptHtml}
               tall={tall}
             />
           ) : null}
@@ -200,7 +200,7 @@ function RunBlock({
   votable,
   feedback,
   onVote,
-  refundScriptHtml,
+  linkScriptHtml,
   tall,
 }: {
   turn: TurnView;
@@ -211,7 +211,7 @@ function RunBlock({
   votable: boolean;
   feedback: Feedback | null;
   onVote: (signal: "good" | "bad") => void;
-  refundScriptHtml: string;
+  linkScriptHtml: string;
 }) {
   const { run, views, traceUrl } = turn;
   const complete = run.phase === "complete";
@@ -252,7 +252,7 @@ function RunBlock({
                   view={view}
                   sandbox={view.sandbox}
                   complete={complete}
-                  scriptHtml={refundScriptHtml}
+                  scriptHtml={linkScriptHtml}
                 />
               ) : (
                 <ActivityRow key={view.def.id} view={view} model={run.model} />
@@ -409,7 +409,7 @@ function RowHeader({
 }
 
 /**
- * The sandboxed refund: the row, plus a panel with the script, the sandbox's
+ * The sandboxed link check: the row, plus a panel with the script, the sandbox's
  * lifecycle and what the script printed. Open while the agent works, folded
  * to the row once the run completes; a click overrides either.
  */

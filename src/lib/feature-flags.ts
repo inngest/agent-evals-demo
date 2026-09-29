@@ -13,7 +13,7 @@
  * The beta is access-gated per environment, and an un-entitled environment
  * cannot create a sandbox. Turning it on is a deliberate choice for an
  * environment where the entitlement is confirmed. Local mode ignores this:
- * the refund ticket always runs its simulated sandbox step there.
+ * the suspicious-link ticket always runs its simulated sandbox step there.
  *
  * Set NEXT_PUBLIC_DEMO_SANDBOX=1 to enable. Any other value, or unset, is off.
  */

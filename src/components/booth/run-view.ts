@@ -7,7 +7,12 @@ import {
   supportSteps,
   type ActivityStep,
 } from "@/content/support-demo";
-import type { RefundCalculation } from "@/content/refund-sandbox";
+import {
+  linkVerdict,
+  parseLinkCheckStdout,
+  suspiciousLinkUrl,
+  type LinkCheck,
+} from "@/content/link-sandbox";
 import type {
   FailedAttempt,
   RunTimeline,
@@ -39,7 +44,7 @@ export type StepView = {
   flagged: boolean;
   tokens: number;
   costUsd: number;
-  /** The sandboxed refund's lifecycle and output (that row only). */
+  /** The sandboxed link check's lifecycle and output (that row only). */
   sandbox?: SandboxDetail;
 };
 
@@ -114,20 +119,20 @@ export type SandboxDetail = {
   /** Local mode: one step.run stands in for create, run and destroy. */
   simulated: boolean;
   stages: SandboxStage[];
-  /** What the script printed, once it has run. */
-  output: RefundCalculation | null;
+  /** What the sandbox saw at the link, once the script has run. */
+  output: LinkCheck | null;
 };
 
 const SANDBOX_STAGES = [
-  { id: "create-refund-sandbox", label: "Create sandbox" },
-  { id: SANDBOX_STEP_ID, label: "Run refund script" },
-  { id: "destroy-refund-sandbox", label: "Destroy sandbox" },
+  { id: "create-link-sandbox", label: "Create sandbox" },
+  { id: SANDBOX_STEP_ID, label: "Fetch link" },
+  { id: "destroy-link-sandbox", label: "Destroy sandbox" },
 ] as const;
 
 /**
- * The sandboxed refund, when this run has one. In cloud it is three durable
- * steps (create, run the script, destroy); the command step's output carries
- * the script's JSON on stdout, base64 on the wire. Locally it is one
+ * The sandboxed link check, when this run has one. In cloud it is three
+ * durable steps (create, fetch the link, destroy); the command step's output
+ * carries the script's JSON on stdout, base64 on the wire. Locally it is one
  * simulated step.run.
  */
 function sandboxView(timeline: RunTimeline | null): StepView | null {
@@ -147,7 +152,7 @@ function sandboxView(timeline: RunTimeline | null): StepView | null {
     durationMs: stage.step?.durationMs,
   }));
   const last = stages[stages.length - 1]!;
-  const output = parseRefund(run?.output);
+  const output = parseLinkCheck(run?.output);
   const first = seen[0]!.step!;
   const failedAttempts = seen.flatMap((stage) => stage.step?.failedAttempts ?? []);
   const failed = seen.find(
@@ -169,7 +174,7 @@ function sandboxView(timeline: RunTimeline | null): StepView | null {
     output:
       output === null
         ? undefined
-        : `$${output.refundUsd.toFixed(2)} refund${simulated ? " · simulated locally" : ""}`,
+        : `${output.finalHost} · ${output.status} · ${linkVerdict(output)}${simulated ? " · simulated locally" : ""}`,
     input: run?.input,
     flagged: false,
     tokens: 0,
@@ -178,12 +183,13 @@ function sandboxView(timeline: RunTimeline | null): StepView | null {
   };
 }
 
-function parseRefund(output: string | undefined): RefundCalculation | null {
+function parseLinkCheck(output: string | undefined): LinkCheck | null {
   const parsed = parseJson(output);
-  const refund = parsed?.refund ?? parseJson(commandStdout(parsed?.result));
-  return typeof refund?.refundUsd === "number" && Array.isArray(refund.lines)
-    ? (refund as RefundCalculation)
-    : null;
+  if (parsed?.check) return parsed.check as LinkCheck;
+
+  // Cloud: the command step's raw result. A failed fetch prints no JSON.
+  const stdout = commandStdout(parsed?.result);
+  return stdout ? parseLinkCheckStdout(stdout, suspiciousLinkUrl) : null;
 }
 
 function commandStdout(

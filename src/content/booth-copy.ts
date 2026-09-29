@@ -60,14 +60,14 @@ export const consoleCopy = {
     sandbox: {
       show: "Show sandbox",
       hide: "Hide sandbox",
-      script: "Refund script",
+      script: "Link check script",
       lifecycle: "Lifecycle",
-      output: "Output",
-      waiting: "Waiting for the script…",
+      output: "What the sandbox saw",
+      waiting: "Fetching the link in the sandbox…",
       noOutput:
-        "The script printed no valid refund, so the agent used the audited local calculation.",
+        "The sandbox couldn't fetch the link, so the agent treats it as unverified.",
       simulated:
-        "Simulated locally: no sandbox is created. Cloud mode runs this script in an Inngest sandbox.",
+        "Simulated locally: no sandbox is created. Cloud mode fetches this link from an Inngest sandbox.",
     },
     flagged: "Escalated to a human",
     reply: (model: string, tokens: number) =>
