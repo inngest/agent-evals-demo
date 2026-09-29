@@ -175,6 +175,7 @@ export const supportAgent = inngest.createFunction(
           ...summary,
           parentRunId: isCloud ? runId : supportRunId,
           sessionId,
+          ...(data.synthetic ? { synthetic: true as const } : {}),
           source: "booth-demo",
         },
         {

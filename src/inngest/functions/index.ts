@@ -5,6 +5,7 @@ import {
 } from "@/inngest/functions/support-score-run";
 import { supportFcr } from "@/inngest/functions/support-deferred";
 import { supportExperiment } from "@/inngest/functions/support-experiment";
+import { populateScoresFunctions } from "@/inngest/functions/populate-scores";
 
 export const functions = [
   supportAgent,
@@ -12,6 +13,8 @@ export const functions = [
   supportCsat,
   supportFcr,
   supportExperiment,
+  // Registered only when POPULATE_SCORES_CRON is set.
+  ...populateScoresFunctions,
 ];
 
 export { supportAgent } from "@/inngest/functions/support-agent";

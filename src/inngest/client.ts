@@ -94,6 +94,8 @@ export type SupportTicketReceivedData = {
    * waits for this: a follow-up means that reply did not resolve the ticket.
    */
   followUpOf?: string;
+  /** Sent by the populate-scores cron, not a visitor: gets an automatic vote. */
+  synthetic?: true;
   requestedAt: string;
   source: "booth-demo";
 };
@@ -113,6 +115,7 @@ export type SupportRunCompletedData = {
   tokenCount: number;
   costUsd: number;
   completedAt: string;
+  synthetic?: true;
   source: "booth-demo";
 };
 

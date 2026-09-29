@@ -38,6 +38,10 @@ services:
         sync: false
       - key: OPENROUTER_BASE_URL
         sync: false
+      # Populate-scores cron (off unless set), e.g. "0 * * * *". Skips itself
+      # whenever OPENROUTER_API_KEY is set, so it never spends model tokens.
+      - key: POPULATE_SCORES_CRON
+        sync: false
       # Sandboxes (beta) are off unless explicitly enabled. Only set this to
       # "1" for an environment confirmed to have the beta entitlement.
       - key: NEXT_PUBLIC_DEMO_SANDBOX
