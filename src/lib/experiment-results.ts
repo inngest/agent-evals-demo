@@ -4,6 +4,9 @@ import {
   currentSupportModel,
   getSupportTicket,
   supportTickets,
+  QUALITY_SPREAD,
+  TOKEN_SPREAD,
+  runJitter,
   ticketTokenCount,
   type SupportTicketId,
 } from "@/content/support-demo";
@@ -108,16 +111,27 @@ function outcomeFor(role: ModelRole, ticketId: SupportTicketId) {
 export function scoreVariant(
   model: ExperimentModel,
   ticketId: SupportTicketId,
+  /** Seeds the per-run jitter; omit for the ticket's fixed baseline. */
+  runId?: string,
 ): VariantResult {
   const ticket = getSupportTicket(ticketId);
   const role = modelRole(model);
-  const tokenCount = Math.round(ticketTokenCount(ticket) * TOKEN_FACTOR[role]);
+  const jitter = (metric: string, spread: number) =>
+    runId ? runJitter(runId, metric, spread) : 0;
+  const tokenCount = Math.round(
+    ticketTokenCount(ticket) * TOKEN_FACTOR[role] * (1 + jitter("tokens", TOKEN_SPREAD)),
+  );
 
   return {
     model,
     ticketId: ticket.id,
     ...outcomeFor(role, ticket.id),
-    qualityScore: clamp01(round(BASE_QUALITY[role] + TICKET_JITTER[ticket.id], 3)),
+    qualityScore: clamp01(
+      round(
+        BASE_QUALITY[role] + TICKET_JITTER[ticket.id] + jitter("quality", QUALITY_SPREAD),
+        3,
+      ),
+    ),
     tokenCount,
     costUsd: round((tokenCount / 1000) * costPer1kTokens(model), 4),
   };

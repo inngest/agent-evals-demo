@@ -400,7 +400,9 @@ export function buildSupportRunSummary(args: {
   const ticket = getSupportTicket(args.ticketId);
   const model = args.model ?? currentSupportModel;
   const turn = args.turn ?? 1;
-  const tokenCount = ticketTokenCount(ticket, turn);
+  const tokenCount = Math.round(
+    ticketTokenCount(ticket, turn) * (1 + runJitter(args.supportRunId, "tokens", TOKEN_SPREAD)),
+  );
   const policyPassed = !getTicketOutputs(ticket, turn)["policy-check"].flagged;
 
   return {
@@ -413,12 +415,36 @@ export function buildSupportRunSummary(args: {
     escalated: !policyPassed,
     qualityScore:
       args.qualityScore ??
-      ticket.qualityScore ??
-      (modelRole(model) === "challenger" ? 0.91 : 0.84),
+      roundScore(
+        (ticket.qualityScore ?? (modelRole(model) === "challenger" ? 0.91 : 0.84)) +
+          runJitter(args.supportRunId, "quality", QUALITY_SPREAD),
+      ),
     tokenCount,
     costUsd: roundCost((tokenCount / 1000) * costPer1kTokens(model)),
     completedAt: args.completedAt ?? new Date().toISOString(),
   };
+}
+
+/**
+ * Light per-run variation so the scores dashboard shows a spread rather
+ * than one flat value per ticket. Small enough that no story flips: the bad
+ * ticket stays bad and the challenger stays ahead. Seeded by run id, so a
+ * run replays with the same numbers.
+ */
+export const QUALITY_SPREAD = 0.02;
+export const TOKEN_SPREAD = 0.12;
+
+/** A stable value in [-spread, spread] for this seed and metric. */
+export function runJitter(seed: string, metric: string, spread: number): number {
+  let hash = 0x811c9dc5;
+  for (const char of `${seed}:${metric}`) {
+    hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193);
+  }
+  return ((hash >>> 0) / 0xffffffff) * 2 * spread - spread;
+}
+
+function roundScore(value: number): number {
+  return Math.max(0, Math.min(1, Math.round(value * 1000) / 1000));
 }
 
 function roundCost(value: number): number {

@@ -30,7 +30,7 @@ export const supportExperiment = inngest.createFunction(
     const answerWith = (model: string) => () =>
       step.run(variantStepName(model), async () => {
         await new Promise((resolve) => setTimeout(resolve, VARIANT_LATENCY_MS));
-        return scoreVariant(model, ticketId);
+        return scoreVariant(model, ticketId, event.data.experimentRunId);
       });
 
     const { result, variant, experimentRef } = await group.experiment(
