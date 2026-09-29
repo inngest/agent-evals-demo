@@ -20,10 +20,11 @@ import { isCloud } from "@/lib/demo-target";
 import { SANDBOX_ENABLED } from "@/lib/feature-flags";
 import {
   destroySandboxesNamed,
-  runSandboxRefund,
+  runSandboxLinkCheck,
   sandboxNameForRun,
-  type SandboxRefundResult,
+  type SandboxLinkCheckResult,
 } from "@/lib/sandbox";
+import { suspiciousLinkUrl } from "@/content/link-sandbox";
 import { isOpenRouterConfigured, OPENROUTER_MODEL } from "@/lib/openrouter";
 import {
   supportSessionKey,
@@ -98,32 +99,40 @@ export const supportAgent = inngest.createFunction(
     const order = await step.run("lookup-order", () =>
       call("lookup-order", { customer: ticket.customer }),
     );
-    // A refund is money arithmetic: the agent writes a script for it and runs
-    // it in a sandbox, not in its head and not in this process. The reply is
-    // then drafted around the computed amount. The steps are durable like any
-    // other: every later re-entry replays the result instead of creating a
-    // new sandbox. Local mode always runs the simulated stand-in; cloud needs
-    // the beta, so it is behind the flag.
-    const refund: SandboxRefundResult | null =
-      ticket.id === "damaged-item" && turn === 1 && (SANDBOX_ENABLED || !isCloud)
-        ? await runSandboxRefund({ step, supportRunId })
+    // The customer forwarded a link nobody has vetted. The agent never
+    // fetches it from this process: it opens it in a throwaway sandbox with
+    // no secrets and no route into our network, then destroys the sandbox.
+    // The reply is drafted around what the sandbox saw. The steps are durable
+    // like any other: every later re-entry replays the result instead of
+    // creating a new sandbox. Local mode always runs the simulated stand-in;
+    // cloud needs the beta, so it is behind the flag.
+    const link: SandboxLinkCheckResult | null =
+      ticket.id === "suspicious-link" && turn === 1 && (SANDBOX_ENABLED || !isCloud)
+        ? await runSandboxLinkCheck({ step, supportRunId, url: suspiciousLinkUrl })
         : null;
+    const linkCheck = link
+      ? link.check
+        ? {
+            finalHost: link.check.finalHost,
+            status: link.check.status,
+            title: link.check.title,
+            ourDomain: link.check.ourDomain,
+          }
+        : "the link could not be fetched; treat it as unverified"
+      : undefined;
     const reply = await step.run("call-llm-draft-reply", () =>
       call("call-llm-draft-reply", {
         model,
         intent: intent.output,
         customer: customer.output,
         order: order.output,
-        ...(refund ? { refundUsd: refund.refund.refundUsd } : {}),
+        ...(linkCheck ? { linkCheck } : {}),
       }),
     );
     // The guardrail: a draft that breaks policy (a refund over the
     // auto-approve limit) is never sent. It goes to a human instead.
     const policy = await step.run("policy-check", async () => {
-      const result = await call("policy-check", {
-        reply: reply.output,
-        ...(refund ? { refundUsd: refund.refund.refundUsd } : {}),
-      });
+      const result = await call("policy-check", { reply: reply.output });
       return { ...result, passed: !result.flagged };
     });
     await step.run("send-reply", () =>

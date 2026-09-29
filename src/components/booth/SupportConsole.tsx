@@ -43,12 +43,12 @@ const FOLLOW_UP_AFTER_MS = 3_200;
  */
 export function SupportConsole({
   snippets,
-  refundScriptHtml,
+  linkScriptHtml,
   qrSvg,
 }: {
   snippets: HighlightedBoothSnippet[];
-  /** The sandbox panel's refund script, highlighted on the server. */
-  refundScriptHtml: string;
+  /** The sandbox panel's link check script, highlighted on the server. */
+  linkScriptHtml: string;
   qrSvg: string;
 }) {
   const [depth, setDepth] = React.useState(false);
@@ -289,7 +289,7 @@ export function SupportConsole({
             followUpStage={followUpStage}
             feedback={feedback}
             onVote={castVote}
-            refundScriptHtml={refundScriptHtml}
+            linkScriptHtml={linkScriptHtml}
             tall={stage.tall}
           />
           {drawer ? <UnderTheHood snippet={snippet} compact={stage.tall} /> : null}

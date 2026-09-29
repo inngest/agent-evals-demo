@@ -1,10 +1,10 @@
 // Seam between the booth demo and Inngest Sandboxes (beta).
 //
-// Cloud mode runs the REAL durable sandbox steps: create, run the
-// model-generated analysis script, destroy. Local mode (dev server, offline
-// booth fallback) runs a deterministic simulated result inside a normal
-// step.run so the local trace still shows the beat. The faked path is always
-// the fallback, matching the repo-wide DEMO_TARGET pattern.
+// Cloud mode runs the REAL durable sandbox steps: create, fetch the
+// customer's untrusted link with curl, destroy. Local mode (dev server,
+// offline booth fallback) runs a deterministic simulated result inside a
+// normal step.run so the local trace still shows the beat. The faked path is
+// always the fallback, matching the repo-wide DEMO_TARGET pattern.
 //
 // Sandbox API requires inngest >= 4.20.0 and sandboxMiddleware() on the
 // client (registered unconditionally in src/inngest/client.ts).
@@ -13,42 +13,39 @@ import type { GetStepTools } from "inngest";
 import { inngest } from "@/inngest/client";
 import { isCloud } from "@/lib/demo-target";
 import {
-  computeRefundLocal,
-  parseRefundStdout,
-  refundOrderLines,
-  refundScript,
-  type RefundCalculation,
-} from "@/content/refund-sandbox";
+  linkCheckScript,
+  parseLinkCheckStdout,
+  simulatedLinkCheck,
+  type LinkCheck,
+} from "@/content/link-sandbox";
 
-export type { RefundCalculation } from "@/content/refund-sandbox";
+export type { LinkCheck } from "@/content/link-sandbox";
 
 export type SandboxRunMode = "sandbox" | "simulated";
 
-export type SandboxRefundResult = {
+export type SandboxLinkCheckResult = {
   mode: SandboxRunMode;
   sandboxId: string;
   exitCode: number;
   stdout: string;
   stderr: string;
   truncated: boolean;
-  refund: RefundCalculation;
+  /** Null when the fetch failed: the link stays unverified. */
+  check: LinkCheck | null;
 };
 
 export function sandboxNameForRun(supportRunId: string): string {
-  return `refund-${supportRunId}`;
+  return `link-${supportRunId}`;
 }
 
-// One captured command: write the script + input via heredocs, then run it.
-// File upload is direct-client only, so durable steps embed both inline.
-export function buildRefundCommand(): string {
+// One captured command: write the script via a heredoc, then run it on the
+// link. File upload is direct-client only, so durable steps embed it inline.
+export function buildLinkCheckCommand(url: string): string {
   return [
-    "cat > /tmp/refund.py <<'PY'",
-    refundScript.trimEnd(),
-    "PY",
-    "cat > /tmp/order.json <<'JSON'",
-    JSON.stringify(refundOrderLines),
-    "JSON",
-    "python3 /tmp/refund.py /tmp/order.json",
+    "cat > /tmp/check.sh <<'SH'",
+    linkCheckScript.trimEnd(),
+    "SH",
+    `sh /tmp/check.sh ${shellQuote(url)}`,
   ].join("\n");
 }
 
@@ -60,14 +57,15 @@ type SandboxStepContext = GetStepTools<typeof inngest>;
 // sandbox steps; local simulates inside a normal step so the trace keeps the
 // beat. Sandbox destroy stays on the success path as a normal step, per beta
 // guidance; leaked-sandbox cleanup lives in the function's onFailure handler.
-export async function runSandboxRefund(args: {
+export async function runSandboxLinkCheck(args: {
   step: SandboxStepContext;
   supportRunId: string;
-}): Promise<SandboxRefundResult> {
+  url: string;
+}): Promise<SandboxLinkCheckResult> {
   const name = sandboxNameForRun(args.supportRunId);
 
   if (isCloud) {
-    const sandbox = await args.step.sandbox.create("create-refund-sandbox", {
+    const sandbox = await args.step.sandbox.create("create-link-sandbox", {
       name,
       vcpu: 1,
       memoryMb: 1024,
@@ -75,18 +73,15 @@ export async function runSandboxRefund(args: {
     });
 
     const result = await sandbox.commands.run(
-      "compute-refund",
-      buildRefundCommand(),
-      { cwd: "/tmp", timeout: "45s" }
+      "inspect-link",
+      buildLinkCheckCommand(args.url),
+      { cwd: "/tmp", timeout: "20s" }
     );
 
-    await sandbox.destroy("destroy-refund-sandbox");
+    await sandbox.destroy("destroy-link-sandbox");
 
-    // A script that fails or prints garbage must not invent a refund: fall
-    // back to the audited local mirror, and the trace shows the bad exit.
-    const refund =
-      parseRefundStdout(result.stdout) ?? computeRefundLocal(refundOrderLines);
-
+    // No fallback: a link the sandbox could not fetch is reported as
+    // unverified, never filled in with a guess. The trace shows the exit.
     return {
       mode: "sandbox",
       sandboxId: sandbox.id,
@@ -94,25 +89,31 @@ export async function runSandboxRefund(args: {
       stdout: result.stdout,
       stderr: result.stderr,
       truncated: result.output.truncated,
-      refund,
+      check:
+        result.exitCode === 0
+          ? parseLinkCheckStdout(result.stdout, args.url)
+          : null,
     };
   }
 
-  return args.step.run("compute-refund", async () => {
+  return args.step.run("inspect-link", async () => {
     await sleep(650);
-    const refund = computeRefundLocal(refundOrderLines);
-    const stdout = `${JSON.stringify(refund)}\n`;
+    const check = simulatedLinkCheck(args.url);
 
     return {
       mode: "simulated",
       sandboxId: `sbx-simulated-${args.supportRunId.slice(0, 8)}`,
       exitCode: 0,
-      stdout,
+      stdout: `${JSON.stringify(check)}\n`,
       stderr: "",
       truncated: false,
-      refund,
-    } satisfies SandboxRefundResult;
+      check,
+    } satisfies SandboxLinkCheckResult;
   });
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 // Best-effort cleanup for the agent's onFailure handler: find any sandbox

@@ -86,7 +86,7 @@ const TOKEN_FACTOR: Record<ModelRole, number> = {
 const TICKET_JITTER: Record<SupportTicketId, number> = {
   "where-is-my-order": 0.01,
   "change-address": 0.005,
-  "damaged-item": -0.015,
+  "suspicious-link": -0.015,
   "cancel-subscription": -0.01,
 };
 

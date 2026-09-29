@@ -6,8 +6,8 @@ This repo holds the booth demo for [EVENT NAME] ([DATES], booth [BOOTH #]).
 Inngest function. Open a ticket and the agent's six durable steps appear in the
 thread as it works, including an order-API outage it survives (**durable
 execution**). Every run links straight to its real trace in the Inngest
-dashboard (**observability**). Three tickets go well, one of them a refund
-the agent computes in a sandbox (**Sandboxes**), and one goes badly: the reply
+dashboard (**observability**). Three tickets go well, one of them a suspicious
+link the agent opens in a sandbox (**Sandboxes**), and one goes badly: the reply
 misses the point, which only its reply-quality score shows. Each run is
 scored on business metrics (first-contact resolution, policy compliance,
 cost, reply quality, CSAT from the 👍/👎),
@@ -29,10 +29,10 @@ the layout is identical on a TV, laptop, or projector.
 - in cloud mode, `step.score` and run metadata.
 
 **What's canned:** the tickets, the customer and order data, the reply
-(unless OpenRouter is configured), the per-model quality scores, the
-model pricing, and the refund script on ticket 3 (a real agent would write
-it; in cloud mode it really runs in an Inngest sandbox, locally the run is
-simulated and labelled so).
+(unless OpenRouter is configured), the per-model quality scores, and the
+model pricing. The link check on ticket 3 is live in cloud mode (a
+real Inngest sandbox fetches example.com); locally it is simulated and
+labelled so.
 
 **When a live run can't make the booth budget**, the UI switches to a
 labelled replay and shows a "Replay" chip; it never passes a replay off as
@@ -44,16 +44,21 @@ live. See `docs/booth-runbook.md` for the timing budget.
 
 ## Sandboxes (beta)
 
-The refund ticket (`3`) works out the refund by running a generated script
-in a sandbox (`src/lib/sandbox.ts`) instead of trusting the model's
-arithmetic: only the cracked $49 jar is owed, and the reply is drafted
-around that amount. The thread shows it as its own "Compute refund" row with a
-**Sandboxed** pill. In cloud mode these are real `step.sandbox` steps
-(create, `compute-refund`, destroy); they need the beta, which is gated per
+The suspicious-link ticket (`3`) forwards a link from a "payment failed"
+email. The agent never fetches an unknown URL from the app: it `curl`s it
+from a throwaway sandbox (`src/lib/sandbox.ts`) with no secrets and no route
+into our network, reads back only metadata (status, final URL after
+redirects, content type, title), and destroys the sandbox. The verdict
+(the link lands on example.com, not acme.com) is derived in app code, and the
+reply is drafted around it. The thread shows it as its own "Inspect link" row
+with a **Sandboxed** pill. In cloud mode these are real `step.sandbox` steps
+(create, `inspect-link`, destroy); they need the beta, which is gated per
 environment, so cloud runs them only with `NEXT_PUBLIC_DEMO_SANDBOX=1` and
 `/api/demo/status` reports whether this environment has it. Locally a
-simulated `compute-refund` step always runs, and its row says "simulated
-locally". A failed run destroys its sandbox in the agent's `onFailure`.
+simulated `inspect-link` step always runs, and its row says "simulated
+locally". If the sandbox can't fetch the link, the row says so and the link
+is treated as unverified; nothing is filled in. A failed run destroys its
+sandbox in the agent's `onFailure`.
 
 ## Design System Source
 

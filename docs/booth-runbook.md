@@ -68,7 +68,7 @@ It triggers a real ticket and fails unless all of the following hold:
 - `lookup-order` failed and recovered.
 - Finished steps were replayed rather than re-run.
 - The good ticket scored `first_contact_resolution = 1`.
-- The damaged-item refund was computed as $49 in a sandbox (a warning in cloud if `NEXT_PUBLIC_DEMO_SANDBOX` is off) and passed policy.
+- The suspicious-link ticket's link was fetched in a sandbox and resolved to example.com with a 200 (a warning in cloud if `NEXT_PUBLIC_DEMO_SANDBOX` is off), and the reply passed policy.
 - The cancel-subscription reply scored `support_reply_quality` below 0.5.
 - The drafted reply parses.
 - The vote reached Inngest.
@@ -153,16 +153,21 @@ npx inngest-cli@latest api --prod sync-app \
 
 ## Sandboxes
 
-The refund ticket (`3`) works out the refund by running a generated script
-in a sandbox (`src/lib/sandbox.ts`) instead of trusting the model's
-arithmetic: only the cracked $49 jar is owed, and the reply is drafted
-around that amount. The thread shows it as its own "Compute refund" row with a
-**Sandboxed** pill. In cloud mode these are real `step.sandbox` steps
-(create, `compute-refund`, destroy); they need the beta, which is gated per
+The suspicious-link ticket (`3`) forwards a link from a "payment failed"
+email. The agent never fetches an unknown URL from the app: it `curl`s it
+from a throwaway sandbox (`src/lib/sandbox.ts`) with no secrets and no route
+into our network, reads back only metadata (status, final URL after
+redirects, content type, title), and destroys the sandbox. The verdict
+(the link lands on example.com, not acme.com) is derived in app code, and the
+reply is drafted around it. The thread shows it as its own "Inspect link" row
+with a **Sandboxed** pill. In cloud mode these are real `step.sandbox` steps
+(create, `inspect-link`, destroy); they need the beta, which is gated per
 environment, so cloud runs them only with `NEXT_PUBLIC_DEMO_SANDBOX=1` and
 `/api/demo/status` reports whether this environment has it. Locally a
-simulated `compute-refund` step always runs, and its row says "simulated
-locally". A failed run destroys its sandbox in the agent's `onFailure`.
+simulated `inspect-link` step always runs, and its row says "simulated
+locally". If the sandbox can't fetch the link, the row says so and the link
+is treated as unverified; nothing is filled in. A failed run destroys its
+sandbox in the agent's `onFailure`.
 
 ## Booth QA
 

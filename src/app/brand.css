@@ -511,7 +511,7 @@ button.acme-switch[data-on="true"] span {
   font-weight: 600;
 }
 
-/* The sandboxed refund's panel: script | lifecycle and output. */
+/* The sandboxed link check's panel: script | lifecycle and output. */
 .acme-sandbox-toggle {
   display: grid;
   place-items: center;
