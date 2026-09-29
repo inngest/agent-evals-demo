@@ -1,5 +1,9 @@
 # Booth Demo App — Codex-Ready PRD
 
+> **Historical.** Written when the third loop stage was called *Evaluate*;
+> it is now **A/B Test**. Inngest SDK names in this file (createScorer,
+> step.score, group.experiment, defer) are unchanged and still correct.
+
 **Date:** 2026-06-01
 **For:** AI Engineer World's Fair booth (June 30 launch), reusable as YouTube + sales demo.
 **Working doc:** `~/personal/marvin/content/agent-evals-launch/2026-06-01-booth-demo-storyboard.md`
